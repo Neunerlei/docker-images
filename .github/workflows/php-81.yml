@@ -1,4 +1,4 @@
-name: Deploy to docker host
+name: 8.1
 on:
   push:
     branches: [ "main" ]

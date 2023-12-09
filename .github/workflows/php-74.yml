@@ -1,0 +1,19 @@
+name: Deploy to docker host
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - src/7.4/**
+  workflow_dispatch:
+
+jobs:
+  buildAndPush:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Login to DockerHub Registry
+        run: echo ${{ secrets.DOCKERHUB_PASSWORD }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
+
+      - name: Build and push fpm-alpine
+        run: src/7.4/build.sh 7.4 fpm-alpine --push

@@ -1,0 +1,19 @@
+name: 8.3
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - src/8.3/**
+  workflow_dispatch:
+
+jobs:
+  buildAndPush:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Login to DockerHub Registry
+        run: echo ${{ secrets.DOCKERHUB_PASSWORD }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
+
+      - name: Build and push fpm-alpine
+        run: bin/build.sh 8.3 fpm-alpine --push

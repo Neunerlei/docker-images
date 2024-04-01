@@ -23,7 +23,8 @@ RUN --mount=type=cache,id=apk-cache,target=/var/cache/apk rm -rf /etc/apk/cache 
     openntpd \
     libedit-dev \
     libzip-dev \
-    supervisor
+    supervisor \
+    libwebp-dev
 
 # Install fcgi for healthcheck
 RUN --mount=type=cache,id=apk-cache,target=/var/cache/apk rm -rf /etc/apk/cache && ln -s /var/cache/apk /etc/apk/cache && \

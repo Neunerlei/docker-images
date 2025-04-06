@@ -8,8 +8,8 @@ ENV APP_ENV=prod
 
 WORKDIR /var/www/html
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lib,target=/var/lib/apt,sharing=locked\
     apt-get update && apt-get upgrade -y && apt-get install -y \
     bash \
     curl \
@@ -30,8 +30,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libfcgi-bin \
     && apt-get clean
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lib,target=/var/lib/apt,sharing=locked\
     --mount=type=bind,from=mlocati/php-extension-installer:1.5,source=/usr/bin/install-php-extensions,target=/usr/local/bin/install-php-extensions \
     install-php-extensions \
         apcu \

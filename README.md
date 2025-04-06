@@ -1,4 +1,4 @@
-# PHP docker images
+# Docker images
 
 A list of docker images I use in my personal projects
 

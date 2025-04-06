@@ -3,11 +3,13 @@ on:
   push:
     branches: [ "main" ]
     paths:
-      - src/8.4/**
+      - src/php/8.4/**
+  schedule:
+    - cron: '0 6 * * 0,3'
   workflow_dispatch:
 
 jobs:
-  buildAndPush:
+  buildAndPushAlpine:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
@@ -15,5 +17,24 @@ jobs:
       - name: Login to DockerHub Registry
         run: echo ${{ secrets.DOCKERHUB_PASSWORD }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
 
-      - name: Build and push fpm-alpine
-        run: bin/build.sh 8.4 fpm-alpine --push
+      - name: Build and push
+        run: bin/build.sh php 8.4 fpm-alpine --push
+
+  buildAndPushDebian:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Login to DockerHub Registry
+        run: echo ${{ secrets.DOCKERHUB_PASSWORD }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
+
+      - name: Build and push
+        run: bin/build.sh php 8.4 fpm-debian --push
+
+  workflow-keepalive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - uses: liskin/gh-workflow-keepalive@v1

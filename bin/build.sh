@@ -1,23 +1,37 @@
 #!/bin/bash
-TAG_BASE="neunerlei/php"
+TAG_BASE="neunerlei/"
 
-VERSION=$1
+IMAGE_NAME=$1
+VERSION=$2
+TYPE=$3
+
+# fail if image is not given
+if [[ -z "${IMAGE_NAME}" ]]; then
+  echo "Please provide an image name (e.g. php) as the first parameter!"
+  exit 1
+fi
 
 # fail if version was not given
 if [[ -z "${VERSION}" ]]; then
-  echo "Please provide a version as the first parameter!"
+  echo "Please provide a version (e.g. 8.4) as the second parameter!"
   exit 1
 fi
 
-TYPE=$2
 if [[ -z "${TYPE}" ]]; then
-  echo "Please provide the image type as second parameter!"
+  echo "Please provide the image type (e.g. fpm-debian) as third parameter!"
   exit 1
 fi
 
-cd ${BASH_SOURCE%/*}/../src/${VERSION}/${TYPE}
+BUILD_DIRECTORY="${BASH_SOURCE%/*}/../src/${IMAGE_NAME}/${VERSION}/${TYPE}"
 
-TAG="${TAG_BASE}:${VERSION}-${TYPE}"
+if [[ ! -d "${BUILD_DIRECTORY}" ]]; then
+  echo "The build directory ${BUILD_DIRECTORY} does not exist!"
+  exit 1
+fi
+
+cd ${BUILD_DIRECTORY}
+
+TAG="${TAG_BASE}${IMAGE_NAME}:${VERSION}-${TYPE}"
 TAG_ARG="--tag ${TAG}"
 
 docker build . --file Dockerfile ${TAG_ARG}

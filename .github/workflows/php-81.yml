@@ -1,9 +1,9 @@
-name: 8.1
+name: PHP 8.1
 on:
   push:
     branches: [ "main" ]
     paths:
-      - src/8.1/**
+      - src/php/8.1/**
   workflow_dispatch:
 
 jobs:
@@ -16,4 +16,4 @@ jobs:
         run: echo ${{ secrets.DOCKERHUB_PASSWORD }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
 
       - name: Build and push fpm-alpine
-        run: bin/build.sh 8.1 fpm-alpine --push
+        run: bin/build.sh php 8.1 fpm-alpine --push

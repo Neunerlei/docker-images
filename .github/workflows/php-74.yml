@@ -1,9 +1,9 @@
-name: 7.4
+name: PHP 7.4
 on:
   push:
     branches: [ "main" ]
     paths:
-      - src/7.4/**
+      - src/php/7.4/**
   workflow_dispatch:
 
 jobs:
@@ -16,4 +16,4 @@ jobs:
         run: echo ${{ secrets.DOCKERHUB_PASSWORD }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
 
       - name: Build and push fpm-alpine
-        run: bin/build.sh 7.4 fpm-alpine --push
+        run: bin/build.sh php 7.4 fpm-alpine --push

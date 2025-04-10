@@ -50,7 +50,7 @@ COPY config/php.common.ini /usr/local/etc/php/conf.d/zzz.app.common.ini
 COPY config/php.prod.ini /usr/local/etc/php/conf.d/zzz.app.prod.ini
 COPY config/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-COPY --chown=1000:1000 --chmod=+x docker/php/bin /user/bin/app
+COPY --chown=1000:1000 --chmod=+x bin /user/bin/app
 
 ENTRYPOINT ["/user/bin/app/entrypoint.sh"]
 CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

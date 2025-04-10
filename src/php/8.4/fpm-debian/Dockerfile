@@ -48,10 +48,9 @@ RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
 COPY config/fpm-pool.conf /usr/local/etc/php-fpm.d/www.conf
 COPY config/php.common.ini /usr/local/etc/php/conf.d/zzz.app.common.ini
 COPY config/php.prod.ini /usr/local/etc/php/conf.d/zzz.app.prod.ini
-
 COPY config/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-COPY --chown=1000:1000 bin /user/bin/app
-RUN find /user/bin/app -type f -iname "*.sh" -exec chmod +x {} \;
+COPY --chown=1000:1000 --chmod=+x docker/php/bin /user/bin/app
 
-CMD ["/user/bin/app/boot.sh"]
+ENTRYPOINT ["/user/bin/app/entrypoint.sh"]
+CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

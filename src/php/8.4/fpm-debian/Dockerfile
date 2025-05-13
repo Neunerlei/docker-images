@@ -51,6 +51,7 @@ COPY config/php.prod.ini /usr/local/etc/php/conf.d/zzz.app.prod.ini
 COPY config/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 COPY --chown=1000:1000 --chmod=+x bin /user/bin/app
+RUN chmod 755 /user/bin/app/entrypoint.sh
 
 ENTRYPOINT ["/user/bin/app/entrypoint.sh"]
 CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

@@ -4,13 +4,11 @@ A collection of Docker images; optimized for production use with common extensio
 
 ## Important Notice
 
-These images are for personal use only. I try to keep them updated and secure and promise not to include any breaking 
+These images are in general for my private/professional projects. I try to keep them updated and secure and promise not to include any breaking 
 changes without notice. However, I cannot guarantee the same level of support and stability as official images. Use at your own risk.
 All images are automatically build via GitHub Actions on Sunday and Wednesday to ensure they are up-to-date.
 
 ## PHP
-
-The images are available on Docker Hub: [neunerlei/php](https://hub.docker.com/r/neunerlei/php)
 
 The images are organized under `src/php/` by PHP version and type:
 
@@ -24,6 +22,8 @@ Each image includes:
 - Supervisor for process management
 - Config files for PHP, FPM, and Supervisor
 - Entrypoint script for customization
+
+The images are available on Docker Hub: [neunerlei/php](https://hub.docker.com/r/neunerlei/php)
 
 ### PHP 8.4 and Future Versions
 

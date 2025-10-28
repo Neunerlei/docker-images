@@ -26,7 +26,6 @@ RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
     libzip-dev \
     supervisor \
     libwebp-dev \
-    # Install fcgi for healthcheck
     libfcgi-bin \
     && apt-get clean
 
@@ -45,16 +44,15 @@ RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
         xmlrpc \
         zip
 
-COPY config/fpm-pool.conf /usr/local/etc/php-fpm.d/www.conf
+COPY config/www.conf /usr/local/etc/php-fpm.d/www.conf
 COPY config/php.common.ini /usr/local/etc/php/conf.d/zzz.app.common.ini
 COPY config/php.prod.ini /usr/local/etc/php/conf.d/zzz.app.prod.ini
 COPY config/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-COPY --chown=1000:1000 --chmod=+x bin /user/bin/app
-RUN chmod 755 /user/bin/app/entrypoint.sh
 COPY --chown=1000:1000 --chmod=+x bin /usr/bin/app
 RUN chmod 755 /usr/bin/app/entrypoint.sh
 
+RUN mkdir -p /run/supervisord && chmod 777 /run/supervisord
 
 # Legacy support, we had a typo in the filename before
 # @todo remove this in php 8.5

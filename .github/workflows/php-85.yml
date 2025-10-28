@@ -1,15 +1,15 @@
-name: PHP 8.4
+name: PHP 8.5
 on:
   push:
     branches: [ "main" ]
     paths:
-      - src/php/8.4/**
+      - src/php/8.5/**
   schedule:
     - cron: '0 6 * * 0,3'
   workflow_dispatch:
 
 jobs:
-  buildAndPushAlpine:
+  buildAndPush:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
@@ -18,18 +18,7 @@ jobs:
         run: echo ${{ secrets.DOCKERHUB_PASSWORD }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
 
       - name: Build and push
-        run: bin/build.sh php 8.4 fpm-alpine --push
-
-  buildAndPushDebian:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v1
-
-      - name: Login to DockerHub Registry
-        run: echo ${{ secrets.DOCKERHUB_PASSWORD }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
-
-      - name: Build and push
-        run: bin/build.sh php 8.4 fpm-debian --push
+        run: bin/build.sh php 8.5 fpm-debian --push
 
   workflow-keepalive:
     if: github.event_name == 'schedule'

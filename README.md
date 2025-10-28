@@ -12,7 +12,7 @@ All images are automatically build via GitHub Actions on Sunday and Wednesday to
 
 The images are organized under `src/php/` by PHP version and type:
 
-- **Versions**: 7.4, 8.1, 8.2, 8.3, 8.4
+- **Versions**: 7.4, 8.1, 8.2, 8.3, 8.4, 8.5 _(This is currently 8.5-rc, will be stable when PHP 8.5 is officially released)_
 - **Types**:
   - `fpm-alpine`: Based on Alpine Linux (for versions < 8.4)
   - `fpm-debian`: Based on Debian (introduced in 8.4, will be the default for future versions)

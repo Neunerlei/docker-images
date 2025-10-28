@@ -34,7 +34,16 @@ cd ${BUILD_DIRECTORY}
 TAG="${TAG_BASE}${IMAGE_NAME}:${VERSION}-${TYPE}"
 TAG_ARG="--tag ${TAG}"
 
-docker build . --file Dockerfile ${TAG_ARG}
+# Parse the --plain flag
+PLAIN_FLAG=""
+for arg in "$@"; do
+  if [[ "$arg" == "--plain" ]]; then
+    PLAIN_FLAG="--progress=plain"
+    break
+  fi
+done
+
+docker build . ${PLAIN_FLAG} --file Dockerfile ${TAG_ARG}
 
 if [[ "$*" == *--push* ]]; then
   docker push ${TAG}

@@ -52,6 +52,14 @@ COPY config/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 COPY --chown=1000:1000 --chmod=+x bin /user/bin/app
 RUN chmod 755 /user/bin/app/entrypoint.sh
+COPY --chown=1000:1000 --chmod=+x bin /usr/bin/app
+RUN chmod 755 /usr/bin/app/entrypoint.sh
 
-ENTRYPOINT ["/user/bin/app/entrypoint.sh"]
+
+# Legacy support, we had a typo in the filename before
+# @todo remove this in php 8.5
+RUN mkdir -p /user/bin/app && \
+    ln -s /usr/bin/app/entrypoint.sh /user/bin/app/entrypoint.sh
+
+ENTRYPOINT ["/usr/bin/app/entrypoint.sh"]
 CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

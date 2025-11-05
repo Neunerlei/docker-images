@@ -49,7 +49,7 @@ COPY config/php.common.ini /usr/local/etc/php/conf.d/zzz.app.common.ini
 COPY config/php.prod.ini /usr/local/etc/php/conf.d/zzz.app.prod.ini
 COPY config/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-COPY --chown=1000:1000 --chmod=+x bin /usr/bin/app
+COPY --chown=www-data:www-data --chmod=+x bin /usr/bin/app
 RUN chmod 755 /usr/bin/app/entrypoint.sh
 
 RUN mkdir -p /run/supervisord && chmod 777 /run/supervisord

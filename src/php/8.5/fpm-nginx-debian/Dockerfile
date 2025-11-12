@@ -63,6 +63,10 @@ RUN rm -rf /usr/local/etc/php-fpm.d/zz-docker.conf
 # Make sure files/folders needed by the processes are accessable when they run under the nobody user
 RUN chown -R www-data:www-data /var/www/html /run /var/lib/nginx /var/log/nginx
 
+# Copy initial soruces
+COPY --chown=www-data:www-data ./src /var/www/html
+
+# Copy entrypoint
 COPY --chown=www-data:www-data --chmod=+x bin /usr/bin/app
 RUN chmod 755 /usr/bin/app/entrypoint.sh
 

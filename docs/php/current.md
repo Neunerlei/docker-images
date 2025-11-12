@@ -8,15 +8,6 @@ Think of this image as a "service-in-a-box". You put your code in, configure it 
 
 For older PHP versions (<= 8.4) without NGINX, please refer to the [legacy PHP documentation](legacy.md).
 
-## Structure
-
-The images are organized under `src/php/` by PHP version and type:
-
-- **Versions**: 7.4, 8.1, 8.2, 8.3, 8.4
-- **Types**:
-    - `fpm-alpine`: Based on Alpine Linux (for versions < 8.4)
-    - `fpm-debian`: Based on Debian (introduced in 8.4, will be the default for future versions)
-
 ## Quick Start
 
 The quickest way to get started is with a `docker-compose.yml` file. This example runs your application in "web" mode, mounts your code, and exposes it on port 8080.
@@ -52,31 +43,32 @@ The "brain" of this image is its entrypoint script. When the container starts, t
 
 This image is configured almost entirely through environment variables. This allows you to use the same image for different purposes (web vs. worker, dev vs. prod) without rebuilding it.
 
-| Variable                          | Description                                                                                 | Default Value             |
-|-----------------------------------|---------------------------------------------------------------------------------------------|---------------------------|
-| **General**                       |                                                                                             |                           |
-| `CONTAINER_MODE`                  | Read-only. Automatically set to `web` or `worker`.                                          | `web`                     |
-| `DOCKER_PROJECT_INSTALLED`        | If set to `"true"`, enables HTTPS mode for local dev.                                       | `"false"`                 |
-| `MAX_UPLOAD_SIZE`                 | A convenient variable to set NGINX, `upload_max_filesize`, and `post_max_size` all at once. | `100M`                    |
-| **NGINX**                         |                                                                                             |                           |
-| `NGINX_CLIENT_MAX_BODY_SIZE`      | Overrides `client_max_body_size` in NGINX.                                                  | Matches `MAX_UPLOAD_SIZE` |
-| **PHP**                           |                                                                                             |                           |
-| `PHP_UPLOAD_MAX_FILESIZE`         | Overrides PHP's `upload_max_filesize` directly.                                             | Matches `MAX_UPLOAD_SIZE` |
-| `PHP_POST_MAX_SIZE`               | Overrides PHP's `post_max_size` directly.                                                   | Matches `MAX_UPLOAD_SIZE` |
-| `PHP_MEMORY_LIMIT`                | Overrides PHP's `memory_limit`.                                                             | `1024M`                   |
-| `PHP_TIMEZONE`                    | Sets the default timezone for `date()` functions.                                           | `UTC`                     |
-| `PHP_PROD_DISPLAY_ERRORS`         | Overrides `display_errors` in `php.prod.ini`.                                               | `Off`                     |
-| `PHP_PROD_DISPLAY_STARTUP_ERRORS` | Overrides `display_startup_errors` in `php.prod.ini`.                                       | `Off`                     |
-| **PHP-FPM**                       |                                                                                             |                           |
-| `PHP_FPM_MAX_CHILDREN`            | `pm.max_children`                                                                           | `20`                      |
-| `PHP_FPM_START_SERVERS`           | `pm.start_servers`                                                                          | `2`                       |
-| `PHP_FPM_MIN_SPARE_SERVERS`       | `pm.min_spare_servers`                                                                      | `1`                       |
-| `PHP_FPM_MAX_SPARE_SERVERS`       | `pm.max_spare_servers`                                                                      | `4`                       |
-| `PHP_FPM_MAX_REQUESTS`            | `pm.max_requests`                                                                           | `500`                     |
-| **Worker Mode**                   |                                                                                             |                           |
-| `PHP_WORKER_COMMAND`              | The command to execute in worker mode. **Setting this enables worker mode.**                | (unset)                   |
-| `PHP_WORKER_PROCESS_COUNT`        | The number of worker processes to run (`numprocs` in Supervisor).                           | `1`                       |
-
+| Variable                          | Description                                                                                 | Default Value                                                                        |
+|-----------------------------------|---------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
+| **General**                       |                                                                                             |                                                                                      |
+| `PUID`                            |                                                                                             | The user ID to run PHP-FPM and NGINX as. Useful for matching host file permissions.  | `33`                    |
+| `PGID`                            |                                                                                             | The group ID to run PHP-FPM and NGINX as. Useful for matching host file permissions. | `33`                    |
+| `CONTAINER_MODE`                  | Read-only. Automatically set to `web` or `worker`.                                          | `web`                                                                                |
+| `DOCKER_PROJECT_INSTALLED`        | If set to `"true"`, enables HTTPS mode for local dev.                                       | `"false"`                                                                            |
+| `MAX_UPLOAD_SIZE`                 | A convenient variable to set NGINX, `upload_max_filesize`, and `post_max_size` all at once. | `100M`                                                                               |
+| **NGINX**                         |                                                                                             |                                                                                      |
+| `NGINX_CLIENT_MAX_BODY_SIZE`      | Overrides `client_max_body_size` in NGINX.                                                  | Matches `MAX_UPLOAD_SIZE`                                                            |
+| **PHP**                           |                                                                                             |                                                                                      |
+| `PHP_UPLOAD_MAX_FILESIZE`         | Overrides PHP's `upload_max_filesize` directly.                                             | Matches `MAX_UPLOAD_SIZE`                                                            |
+| `PHP_POST_MAX_SIZE`               | Overrides PHP's `post_max_size` directly.                                                   | Matches `MAX_UPLOAD_SIZE`                                                            |
+| `PHP_MEMORY_LIMIT`                | Overrides PHP's `memory_limit`.                                                             | `1024M`                                                                              |
+| `PHP_TIMEZONE`                    | Sets the default timezone for `date()` functions.                                           | `UTC`                                                                                |
+| `PHP_PROD_DISPLAY_ERRORS`         | Overrides `display_errors` in `php.prod.ini`.                                               | `Off`                                                                                |
+| `PHP_PROD_DISPLAY_STARTUP_ERRORS` | Overrides `display_startup_errors` in `php.prod.ini`.                                       | `Off`                                                                                |
+| **PHP-FPM**                       |                                                                                             |                                                                                      |
+| `PHP_FPM_MAX_CHILDREN`            | `pm.max_children`                                                                           | `20`                                                                                 |
+| `PHP_FPM_START_SERVERS`           | `pm.start_servers`                                                                          | `2`                                                                                  |
+| `PHP_FPM_MIN_SPARE_SERVERS`       | `pm.min_spare_servers`                                                                      | `1`                                                                                  |
+| `PHP_FPM_MAX_SPARE_SERVERS`       | `pm.max_spare_servers`                                                                      | `4`                                                                                  |
+| `PHP_FPM_MAX_REQUESTS`            | `pm.max_requests`                                                                           | `500`                                                                                |
+| **Worker Mode**                   |                                                                                             |                                                                                      |
+| `PHP_WORKER_COMMAND`              | The command to execute in worker mode. **Setting this enables worker mode.**                | (unset)                                                                              |
+| `PHP_WORKER_PROCESS_COUNT`        | The number of worker processes to run (`numprocs` in Supervisor).                           | `1`                                                                                  |
 
 ## Web Mode In-Depth
 
@@ -156,5 +148,5 @@ services:
 
 The entrypoint provides two script hooks for advanced customization.
 
-* `/usr/bin/app/entrypoint.user-setup.sh`: This script is executed early in the startup process. It's the ideal place to put the run-time user mapping logic for local development to solve UID/GID file permission issues.
+* `/usr/bin/app/entrypoint.user-setup.sh`: This script is executed early in the startup process. It's the ideal place to put the run-time user mapping logic for local development to solve UID/GID file permission issues. **IMPORTANT** This script is ONLY executed if the `PUID` and `PGID` environment variables are set to values different from the defaults. If you want to modify permissions unconditionally, use the `entrypoint.local.sh` hook instead.
 * `/usr/bin/app/entrypoint.local.sh`: This script is executed just before the main command. It's a general-purpose hook for any other custom setup commands you might need.

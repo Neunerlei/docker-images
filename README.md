@@ -21,7 +21,6 @@ From PHP 8.5 onwards, I only provide a debian based image including nginx. Pleas
 > - `fpm-debian`: Based on Debian (NO NGINX) (ONLY for 8.5, to ease the transition)
 > - `fpm-nginx-debian`: Based on Debian with NGINX included
 
-
 ### Legacy PHP images (<= PHP 8.4)
 
 Older PHP versions (<= PHP 8.4) do not include NGINX by default. Please refer to the [legacy PHP documentation](docs/php/legacy.md) for details.
@@ -32,6 +31,15 @@ Older PHP versions (<= PHP 8.4) do not include NGINX by default. Please refer to
 > - `fpm-alpine`: Based on Alpine Linux (for versions <= 8.4)
 > - `fpm-debian`: Based on Debian (NO NGINX) (ONLY for 8.4, to ease the transition)
 > - `fpm-nginx-debian`: Based on Debian with NGINX (introduced in 8.4, will be the default for future versions)
+
+## Nginx 
+
+A minimal NGINX image based on Debian, highly opinionated to be used as a simple web server or reverse proxy,
+based on the [official NGINX image](https://hub.docker.com/_/nginx).
+Available on Docker Hub: [neunerlei/nginx](https://hub.docker.com/r/neunerlei/nginx). 
+Please refer to the [NGINX documentation](docs/nginx/current.md) for details.
+
+> **Versions**: Actively maintained are the three latest NGINX versions on dockerhub.
 
 ## Build Process
 
@@ -44,7 +52,7 @@ Use the `bin/build.sh` script to build images:
 Parameters:
 - `IMAGE_NAME`: e.g., `php`
 - `VERSION`: e.g., `8.4`
-- `TYPE`: e.g., `fpm-debian`
+- `TYPE`: e.g., `fpm-debian` (the type is optional)
 
 To build and push:
 
@@ -52,17 +60,14 @@ To build and push:
 ./bin/build.sh php 8.5 fpm-debian --push
 ```
 
-The script navigates to `src/${IMAGE_NAME}/${VERSION}/${TYPE}`, builds the Docker image with tag `neunerlei/${IMAGE_NAME}:${VERSION}-${TYPE}`, and pushes if `--push` is specified.
+The script navigates to `src/${IMAGE_NAME}/${VERSION}/${TYPE}`, builds the Docker image with tag `neunerlei/${IMAGE_NAME}:${VERSION}-${TYPE}`, and pushes if `--push` is specified. If the `TYPE` is omitted, it assumes, that the directory is `src/${IMAGE_NAME}/${VERSION}/`.
 
-## Usage Example
+### Automatic version tagging
 
-To run a container:
+We use `bin/discover-and-build.sh` to build images that rely on a specific base image, that will be updated frequently.
+This is for example the case for node and nginx based images. The Idea is to query the docker hub api for the latest tags of the base image and automatically build the n latest versions based on that. 
 
-```bash
-docker run -d -p 9000:9000 neunerlei/php:8.5-fpm-nginx-debian
-```
-
-Mount your application code to `/var/www/html` and configure your web server to proxy to `127.0.0.1:9000`.
+The system has an automatic "cascading fallback" mechanism for our local source files. This is a powerful pattern. You define a "base" configuration (e.g., for version 1.27) and it is used for all subsequent versions (1.28, 1.29, etc.) until you encounter a breaking change. At that point, you create a new directory for the new version (e.g., 1.29) and it becomes the new base for future versions.
 
 ## License
 

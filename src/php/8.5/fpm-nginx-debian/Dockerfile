@@ -1,10 +1,14 @@
 # syntax = docker/dockerfile:1.2
-FROM php:8.5-rc-fpm-bookworm AS app_php
+FROM php:8.5-rc-fpm-bookworm
 
 LABEL org.opencontainers.image.authors="Martin Neundorfer <code@neunerlei.eu>"
 LABEL org.opencontainers.image.description="Lean PHP FPM image with an nginx server based on debian"
 
 ENV APP_ENV=prod
+ENV TZ=UTC
+ENV DOCKER_PROJECT_PROTOCOL=http
+ENV DOCKER_PROJECT_HOST=localhost
+ENV DOCKER_PROJECT_PATH=/
 
 WORKDIR /var/www/html
 
@@ -27,7 +31,6 @@ RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
     libzip-dev \
     supervisor \
     libwebp-dev \
-    gettext \
     && apt-get clean
 
 RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
@@ -48,7 +51,9 @@ RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
 # Create additional config directories
 RUN mkdir -p /etc/app/config.tpl && chmod 755 /etc/app/config.tpl && \
     mkdir -p /etc/nginx/snippets/before.d && chmod 755 /etc/nginx/snippets/before.d && \
-    mkdir -p /etc/nginx/snippets/after.d && chmod 755 /etc/nginx/snippets/after.d
+    mkdir -p /etc/nginx/snippets/after.d && chmod 755 /etc/nginx/snippets/after.d && \
+    mkdir -p /etc/nginx/snippets/before.https.d && chmod 755 /etc/nginx/snippets/before.https.d && \
+    mkdir -p /etc/nginx/snippets/after.https.d && chmod 755 /etc/nginx/snippets/after.https.d
 
 # Copy configuration tempaltes
 COPY --chown=www-data:www-data config/templates /etc/app/config.tpl

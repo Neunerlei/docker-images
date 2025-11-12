@@ -14,8 +14,7 @@ if [ "${CONTAINER_MODE}" == "web" ]; then
 else
   echo "[ENTRYPOINT.supervisor] Configuring Supervisor for worker mode";
 
-  VARS_TO_SUBSTITUTE='$PHP_WORKER_COMMAND $PHP_WORKER_PROCESS_COUNT'
-  envsubst "$VARS_TO_SUBSTITUTE" < /etc/app/config.tpl/worker.service.template.conf > /etc/supervisor/conf.d/zzz-php-worker.conf
+  render_template 'PHP_WORKER_COMMAND PHP_WORKER_PROCESS_COUNT' /etc/app/config.tpl/worker.service.template.conf /etc/supervisor/conf.d/zzz-php-worker.conf
 
   echo "[ENTRYPOINT.supervisor] Supervisor configuration completed for worker mode";
 fi

@@ -1,5 +1,5 @@
 # syntax = docker/dockerfile:1.2
-FROM php:8.5-rc-fpm-bookworm AS app_php
+FROM php:8.5-rc-fpm-bookworm
 
 LABEL org.opencontainers.image.authors="Martin Neundorfer <code@neunerlei.eu>"
 LABEL org.opencontainers.image.description="Lean PHP FPM image based on debian"

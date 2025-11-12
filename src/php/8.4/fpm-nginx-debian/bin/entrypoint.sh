@@ -4,6 +4,8 @@ set -e
 echo "[ENTRYPOINT] Starting bootstrapping process...";
 
 # Configurable default values
+DEFAULT_NGINX_CERT_PATH="/var/www/certs/cert.pem"
+DEFAULT_NGINX_KEY_PATH="/var/www/certs/key.pem"
 DEFAULT_MAX_UPLOAD_SIZE="100M"
 DEFAULT_MEMORY_LIMIT="1024M"
 DEFAULT_PHP_PROD_DISPLAY_ERRORS="Off"
@@ -20,6 +22,8 @@ MAX_UPLOAD_SIZE_EFFECTIVE="${MAX_UPLOAD_SIZE:-$DEFAULT_MAX_UPLOAD_SIZE}"
 
 # Load environment variables
 export NGINX_CLIENT_MAX_BODY_SIZE="${NGINX_CLIENT_MAX_BODY_SIZE:-$MAX_UPLOAD_SIZE_EFFECTIVE}"
+export NGINX_CERT_PATH="${NGINX_CERT_PATH:-$DEFAULT_NGINX_CERT_PATH}"
+export NGINX_KEY_PATH="${NGINX_KEY_PATH:-$DEFAULT_NGINX_KEY_PATH}"
 export PHP_TIMEZONE="${PHP_TIMEZONE:-${TZ}}" # TZ is by default UTC
 export PHP_UPLOAD_MAX_FILESIZE="${PHP_UPLOAD_MAX_FILESIZE:-$MAX_UPLOAD_SIZE_EFFECTIVE}"
 export PHP_POST_MAX_SIZE="${PHP_POST_MAX_SIZE:-$MAX_UPLOAD_SIZE_EFFECTIVE}"
@@ -41,9 +45,10 @@ else
 fi
 
 # Configure services
-echo "[ENTRYPOINT] Configuring services...";
+echo "[ENTRYPOINT] Configuring services in mode: ${CONTAINER_MODE}...";
 
-ENTRYPOINT_DIR="$(dirname "$0")/entrypoint"
+ENTRYPOINT_DIR="$(dirname $(realpath "${BASH_SOURCE[0]}"))/entrypoint"
+source "${ENTRYPOINT_DIR}/util/render-template.sh"
 source "${ENTRYPOINT_DIR}/user-setup.sh"
 source "${ENTRYPOINT_DIR}/php.sh"
 source "${ENTRYPOINT_DIR}/nginx.sh"

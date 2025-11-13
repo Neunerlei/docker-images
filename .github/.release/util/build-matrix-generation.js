@@ -100,7 +100,7 @@ function generateBuildMatrix(options) {
             const greatestDiscoveredVersion = sortVersionList(versionsToBuild)[0];
 
             if(isVersionGte(lastVersion, greatestDiscoveredVersion)) {
-                core.info(`[DISCOVER AND BUILD] The specified last version ${lastVersion} is greater than or equal to the greatest discovered version ${greatestDiscoveredVersion}. All discovered versions will be built.`);
+                core.info(`The specified last version ${lastVersion} is greater than or equal to the greatest discovered version ${greatestDiscoveredVersion}. All discovered versions will be built.`);
                 // No filtering needed
             } else {
                 // No matching last version found, no build will be performed

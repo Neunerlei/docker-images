@@ -1,0 +1,101 @@
+const path = require('node:path');
+const fs = require('node:fs');
+const yaml = require('yaml');
+const constants = require('./util/constants');
+const {getAllTags, parseVersionTags} = require('./util/docker-version-utils');
+const {generateBuildMatrix} = require('./util/build-matrix-generation');
+const child_process = require('node:child_process');
+
+/* =============================
+ * IMPORTANT!
+ *
+ * This is a development helper script, to locally build a specific image version
+ * See the /bin/build.sh script for how to use it. It will internally call this script.
+ * ============================= */
+
+(async () => {
+    const imageName = process.argv[2] || '';
+    const sourceVersion = process.argv[3] || '';
+
+    if (!imageName || !sourceVersion) {
+        console.error('Image name and source version are required arguments.');
+        process.exit(1);
+    }
+
+    const workflowFilePath = path.join(__dirname, '..', 'workflows', imageName + '.yml');
+
+    if (!fs.existsSync(workflowFilePath)) {
+        console.error(`Workflow file for image "${imageName}" does not exist at path: ${workflowFilePath}`);
+        process.exit(1);
+    }
+
+    const workflowContent = fs.readFileSync(workflowFilePath, 'utf-8');
+    const workflowData = yaml.parse(workflowContent);
+    const workflowEnv = workflowData.env || {};
+    if (workflowEnv['image-name'] !== imageName) {
+        console.error(`The "image-name" in the workflow file does not match the provided image name.`);
+        process.exit(1);
+    }
+
+    const imageType = workflowEnv['image-type'] || '';
+    const sourceImageNamespace = workflowEnv['source-image-namespace'] || '';
+    const sourceImageName = workflowEnv['source-image-name'] || '';
+
+    if (!sourceImageNamespace || !sourceImageName) {
+        console.error('Source image namespace and name must be defined in the workflow file.');
+        process.exit(1);
+    }
+
+    const sourceImageType = workflowEnv['source-image-type'] || '';
+    const trackedVersions = parseInt(workflowEnv['tracked-versions'] || '3', 10);
+    const deprecatedVersion = workflowEnv['deprecated'] || '';
+    const versionPrecision = parseInt(workflowEnv['version-precision'] || '3', 10);
+    const detectLatestVersion = typeof workflowEnv['latest-tag'] === 'boolean'
+        ? workflowEnv['latest-tag']
+        : (workflowEnv['latest-tag'] || 'false').toLowerCase() === 'true';
+
+    const sourceImage = `${sourceImageNamespace}/${sourceImageName}`;
+    const targetImage = `${constants.IMAGE_NAMESPACE}/${imageName}`;
+
+    console.log('Building image:', targetImage);
+    console.log('Using source image:', sourceImage);
+    console.log('Source version to build:', sourceVersion);
+    console.log('Image type:', imageType);
+    console.log('Tracked versions:', trackedVersions);
+    console.log('Deprecated version:', deprecatedVersion);
+    console.log('Version precision:', versionPrecision);
+    console.log('Detect latest version:', detectLatestVersion);
+
+    const allSourceTags = await getAllTags(sourceImage);
+    const sourceVersions = parseVersionTags(allSourceTags, versionPrecision, sourceImageType);
+
+    if (!sourceVersions.has(sourceVersion)) {
+        console.error(`Source version "${sourceVersion}" not found among available source image tags.`);
+        console.log('Available source versions:', Array.from(sourceVersions.keys()));
+        process.exit(1);
+    }
+
+    const buildMatrix = generateBuildMatrix({
+        sourceImage,
+        sourceVersions: new Map([[sourceVersion, sourceVersions.get(sourceVersion)]]),
+        targetImageName: imageName,
+        targetImageType: imageType,
+        detectLatestVersion: false,
+        trackedVersions: 1
+    });
+
+    if(buildMatrix === null){
+        console.error('No build matrix could be generated for the specified source version.');
+        process.exit(1);
+    }
+
+    const buildEntry = buildMatrix.include[0];
+    console.log('Build Entry:');
+    console.log(` - Version: ${buildEntry.version}`);
+    console.log(` - Tag: ${buildEntry.tag}`);
+    console.log(` - Source Image with Tag: ${buildEntry.sourceImageWithTag}`);
+    console.log(` - Build Path: ${buildEntry.buildPath}`);
+
+    const dockerBuildCommand = `cd "${buildEntry.buildPath}" && docker build -t ${targetImage}:${buildEntry.tag} --progress=plain --build-arg SOURCE_IMAGE=${buildEntry.sourceImageWithTag} .`;
+    child_process.execSync(dockerBuildCommand, {stdio: 'inherit'});
+})();

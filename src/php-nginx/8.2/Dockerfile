@@ -1,6 +1,6 @@
 # syntax = docker/dockerfile:1.2
-ARG SOURCE_IMAGE_TAG=latest
-FROM php:${SOURCE_IMAGE_TAG}
+ARG SOURCE_IMAGE
+FROM ${SOURCE_IMAGE}
 
 LABEL org.opencontainers.image.authors="Martin Neundorfer <code@neunerlei.eu>"
 LABEL org.opencontainers.image.description="Lean PHP FPM image with an nginx server based on debian"

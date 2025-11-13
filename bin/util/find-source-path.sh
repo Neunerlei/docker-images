@@ -1,6 +1,6 @@
 # Helper function for Semver-aware directory selection
 # Returns an empty string if no suitable directory is found
-# Usage: find_dockerfile_path "./nginx" "1.29.1"
+# Usage: find_source_path "./nginx" "1.29.1"
 find_source_path() {
     local source_base_dir="$1"
     local target_version="$2"
@@ -18,5 +18,10 @@ find_source_path() {
         fi
     done
 
-    echo "$best_match_dir"
+    if [ -z "$best_match_dir" ]; then
+        echo ""
+        return
+    fi
+
+    echo "$source_base_dir/$best_match_dir"
 }

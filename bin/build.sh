@@ -10,6 +10,12 @@ set -e
 #  --push                 Push the built image to the Docker registry
 #  --push-with-latest     Additionally tag the built image as "latest" and push it
 #  --plain                Use plain output for the docker build process
+#  --cascading-fallback   If this flag is set, the build will attempt to use a cascading fallback mechanism for the source directories, based on the given version number.
+#  --source-image-tag=tag When using --cascading-fallback, this flag can be used to specify the source images tag to pass as "SOURCE_IMAGE_TAG" build-arg to the Docker build process.
+#                         If omitted, the source tag will be ${version}-${type} or just ${version} if type was not set.
+#  --source-image-type=type Basically the same as --source-image-tag, but defines only the type part of the tag. The version part is always taken from the given version parameter.
+#                           If both --source-image-tag and --source-image-type are given, --source-image-tag takes precedence.
+#  --build-arg=KEY=VALUE  Pass additional build arguments to the docker build process. Can be used multiple times.
 # Examples:
 #   bin/build.sh "php" "8.4" "fpm-debian"
 
@@ -43,11 +49,24 @@ fi
 BUILD_DIRECTORY=""
 BUILD_TAG=""
 if [[ -z "${TYPE}" ]]; then
-  BUILD_DIRECTORY="${BIN_DIR}/../src/${IMAGE_NAME}/${VERSION}"
+  BUILD_DIRECTORY="${BIN_DIR}/../src/${IMAGE_NAME}"
   BUILD_TAG="${VERSION}"
 else
-  BUILD_DIRECTORY="${BIN_DIR}/../src/${IMAGE_NAME}/${VERSION}/${TYPE}"
+  BUILD_DIRECTORY="${BIN_DIR}/../src/${IMAGE_NAME}/${TYPE}"
   BUILD_TAG="${VERSION}-${TYPE}"
+fi
+
+if [[ "$*" == *--cascading-fallback* ]]; then
+  source "${BIN_DIR}/util/find-source-path.sh"
+  echo "  - Looking for source path with cascading fallback for version: ${VERSION}"
+  BUILD_DIRECTORY="$(find_source_path "${BUILD_DIRECTORY}" "${VERSION}")"
+
+  if [[ -z "${BUILD_DIRECTORY}" ]]; then
+    echo "  - Could not find a valid source directory for version ${VERSION}"
+    exit 44
+  fi
+else
+  BUILD_DIRECTORY="${BUILD_DIRECTORY}/${VERSION}"
 fi
 
 if [[ ! -d "${BUILD_DIRECTORY}" ]]; then
@@ -55,12 +74,13 @@ if [[ ! -d "${BUILD_DIRECTORY}" ]]; then
   exit 1
 fi
 
-cd ${BUILD_DIRECTORY}
+cd "${BUILD_DIRECTORY}"
 
 TAG="${TAG_BASE}${IMAGE_NAME}:${BUILD_TAG}"
-TAG_LATEST="${TAG_BASE}${IMAGE_NAME}:latest"
+TAG_LATEST=""
 TAG_ARG="--tag ${TAG}"
 if [[ "$*" == *--push-with-latest* ]]; then
+  TAG_LATEST="${TAG_BASE}${IMAGE_NAME}:latest"
   TAG_ARG="--tag ${TAG} --tag ${TAG_LATEST}"
 fi
 
@@ -77,21 +97,61 @@ done
 BUILD_ARGS=()
 for arg in "$@"; do
   if [[ "$arg" == --build-arg* ]]; then
-    BUILD_ARGS+=("$arg")
+    BUILD_ARG_VALUE=$(echo "$arg" | cut -d'=' -f2-)
+    BUILD_ARGS+=("--build-arg" "${BUILD_ARG_VALUE}")
   fi
 done
 
-echo "[BUILD] Building Docker image with tag(s): ${TAG}${TAG_LATEST:+, ${TAG_LATEST}}"
+# Add SOURCE_IMAGE_TAG build-arg if cascading-fallback is used
+if [[ "$*" == *--cascading-fallback* ]]; then
+  SOURCE_IMAGE_TAG=""
+  if [[ "$*" == *--source-image-tag* ]]; then
+    for arg in "$@"; do
+      if [[ "$arg" == --source-image-tag* ]]; then
+        SOURCE_IMAGE_TAG_VALUE=$(echo "$arg" | cut -d'=' -f2)
+        SOURCE_IMAGE_TAG="${SOURCE_IMAGE_TAG_VALUE}"
+        break
+      fi
+    done
+  elif [[ "$*" == *--source-image-type* ]]; then
+    SOURCE_IMAGE_TYPE_VALUE=""
+    for arg in "$@"; do
+      if [[ "$arg" == --source-image-type* ]]; then
+        SOURCE_IMAGE_TYPE_VALUE=$(echo "$arg" | cut -d'=' -f2)
+        break
+      fi
+    done
+    if [[ -z "${SOURCE_IMAGE_TYPE_VALUE}" ]]; then
+      SOURCE_IMAGE_TAG="${VERSION}"
+    else
+      SOURCE_IMAGE_TAG="${VERSION}-${SOURCE_IMAGE_TYPE_VALUE}"
+    fi
+  else
+    if [[ -z "${TYPE}" ]]; then
+      SOURCE_IMAGE_TAG="${VERSION}"
+    else
+      SOURCE_IMAGE_TAG="${VERSION}-${TYPE}"
+    fi
+  fi
+  BUILD_ARGS+=("--build-arg" "SOURCE_IMAGE_TAG=${SOURCE_IMAGE_TAG}")
+fi
+
+echo "[BUILD] Building Docker image"
+echo "  - Image Name: ${IMAGE_NAME}"
+echo "  - Version: ${VERSION}"
+echo "  - Tags: ${TAG}${TAG_LATEST:+, ${TAG_LATEST}}"
+echo "  - Build directory: ${BUILD_DIRECTORY}"
 
 if [ ${#BUILD_ARGS[@]} -gt 0 ]; then
-  echo "[BUILD] Using build arguments: ${BUILD_ARGS[*]}"
+  echo "  - Build arguments: ${BUILD_ARGS[*]}"
 fi
 
-docker build . ${PLAIN_FLAG} --file Dockerfile ${TAG_ARG} "${BUILD_ARGS[@]}"
+echo "CMD > docker build . ${PLAIN_FLAG} --file Dockerfile ${TAG_ARG} ${BUILD_ARGS[*]}"
+docker build . ${PLAIN_FLAG} --file Dockerfile ${TAG_ARG} ${BUILD_ARGS[@]}
 
 if [[ "$*" == *--push* ]]; then
-  docker push ${TAG}
+  docker push "${TAG}"
 fi
 if [[ "$*" == *--push-with-latest* ]]; then
-  docker push ${TAG_LATEST}
+  docker push "${TAG_LATEST}"
 fi

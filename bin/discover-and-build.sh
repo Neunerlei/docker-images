@@ -148,8 +148,9 @@ for VERSION in $VERSIONS_TO_BUILD; do
   fi
 
   # The latest tag should be pushed and this is the latest version of those we found -> tell the build script
-  if [[ "$*" == *--push-with-latest* && $(is_latest_version "$VERSION" "$VERSIONS_TO_BUILD") ]]; then
-    BUILD_PARAMS+=("--push-with-latest")
+  if [[ "$*" == *--push-with-latest* ]] && is_latest_version "$VERSION" "${VERSIONS_TO_BUILD[*]}"; then
+      echo "  - Marking version ${VERSION} to be additionally tagged and pushed as 'latest'"
+      BUILD_PARAMS+=("--push-with-latest")
   fi
 
   BUILD_PARAMS+=("--cascading-fallback")

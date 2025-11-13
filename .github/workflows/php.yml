@@ -29,7 +29,7 @@ jobs:
         run: echo ${{ secrets.DOCKERHUB_PASSWORD }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
 
       - name: Build and push
-        run: bin/discover-and-build.sh php library php --type=fpm-alpine --precision=2 --last-version=8.4 --push
+        run: bin/discover-and-build.sh php library php --type=fpm-alpine --source-image-type=fpm-alpine --precision=2 --last-version=8.4 --push
 
   workflow-keepalive:
     if: github.event_name == 'schedule'

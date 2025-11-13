@@ -87,10 +87,11 @@ get_latest_versions() {
 # Usage is_latest_tag "version" "latest_versions" (The output of get_latest_versions)
 is_latest_version() {
   local version="$1"
-  local latest_versions="$3"
-  if echo "$latest_versions" | grep -q "^${version}$"; then
-    return 0  # true
+  local latest_versions="$2"
+  local latest_version=$(echo "$latest_versions" | tail -n 1)
+  if [ "$version" = "$latest_version" ]; then
+    return 0
   else
-    return 1  # false
+    return 1
   fi
 }

@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  buildAndPushDebian:
+  buildAndPush:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
@@ -18,7 +18,7 @@ jobs:
         run: echo ${{ secrets.DOCKERHUB_PASSWORD }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
 
       - name: Build and push
-        run: bin/discover-and-build.sh nginx library nginx --push-with-latest
+        run: bin/discover-and-build.sh nginx library nginx --push-with-latest --precision=2
 
   workflow-keepalive:
     if: github.event_name == 'schedule'

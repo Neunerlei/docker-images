@@ -1,8 +1,6 @@
 # This workflow is designed to be called by other workflows.
 name: Reusable Build Engine
 
-# The `workflow_call` trigger makes this a reusable workflow.
-# It also defines the inputs and secrets it can accept.
 on:
   workflow_call:
     inputs:
@@ -56,12 +54,7 @@ on:
         required: true
       DOCKERHUB_PASSWORD:
         required: true
-      # You would also pass the token for JamesIves/github-pages-deploy-action here
-      # DEPLOY_KEY:
-      #   required: true
 
-# The entire jobs block is copied here.
-# The only change is how it accesses the variables.
 jobs:
   discover:
     runs-on: ubuntu-latest
@@ -173,4 +166,5 @@ jobs:
       - name: Publish tag list
         uses: JamesIves/github-pages-deploy-action@v4
         with:
+          clean: false
           folder: ${{ steps.build-tag-list.outputs.tag-list-output-dir }}

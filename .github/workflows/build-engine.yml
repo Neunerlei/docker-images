@@ -162,7 +162,7 @@ jobs:
           INPUT_DEPRECATED: ${{ needs.discover.outputs.deprecated }}
           INPUT_MAINTAINED-TAGS: ${{ needs.discover.outputs.tag-list-maintained }}
           INPUT_ALL-TAGS: ${{ needs.discover.outputs.tag-list-all }}
-          INPUT_LATEST_TAG_BUILT: ${{ needs.discover.outputs.tag-list-latest-built }}
+          INPUT_LATEST-TAG-BUILT: ${{ needs.discover.outputs.tag-list-latest-built }}
         run: node build-tag-list.js
 
       - name: Publish tag list

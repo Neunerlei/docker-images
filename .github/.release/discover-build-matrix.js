@@ -103,12 +103,16 @@ const constants = require('.//util/constants');
     const allTags = new Set(Array.from(targetVersions.keys()));
 
     const buildNeeded = buildMatrix !== null;
+    let buildLatestTag = false;
     if (buildNeeded) {
         core.info(`Build matrix generated with ${buildMatrix.include.length} entries:`);
         for (const entry of buildMatrix.include) {
             core.info(` - Version: ${entry.version}, Tag: ${entry.tag}, Source Image: ${entry.sourceImageWithTag}, Build Path: ${entry.buildPath}, Is Latest: ${entry.isLatest}`);
             allTags.add(entry.tag);
             maintainedTags.push(entry.tag);
+            if(entry.isLatest){
+                buildLatestTag = true;
+            }
         }
     } else {
         core.info('No builds needed based on the discovered versions and deprecation settings.');
@@ -139,6 +143,10 @@ const constants = require('.//util/constants');
      * A comma-separated list of all discovered tags, this is required for the build-tag-list.js file
      */
     core.setOutput('tag-list-all', Array.from(allTags).join(','));
+    /**
+     * Indicates if the latest tag should be built, this is required for the build-tag-list.js file
+     */
+    core.setOutput('tag-list-latest-built', buildLatestTag);
     /**
      * Indicates if the image is deprecated, this is required for the build-tag-list.js file
      */

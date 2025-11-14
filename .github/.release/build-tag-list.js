@@ -30,6 +30,11 @@ const maintainedTagsInput = core.getInput('maintained-tags').split(',').filter(t
  * @type {string[]}
  */
 const allTagsInput = core.getInput('all-tags').split(',').filter(t => t);
+/**
+ * Expects the OUTPUT<tag-list-latest-built> of discover-build-matrix.js, which indicates if the latest tag is built
+ * @type {boolean}
+ */
+const latestTagBuiltInput = core.getBooleanInput('latest-tag-built');
 
 core.info('Generating tag list HTML file');
 
@@ -46,6 +51,10 @@ const deprecated = deprecatedInput;
 // Sort tag lists, so the newest version comes first
 const maintainedTags = sortVersionList(maintainedTagsInput);
 const availableTags = sortVersionList(allTagsInput).filter(tag => !maintainedTags.includes(tag));
+
+if(latestTagBuiltInput){
+    maintainedTags.unshift('latest');
+}
 
 core.info(`Maintained Tags (${maintainedTags.length}): ${maintainedTags.join(', ')}`);
 core.info(`Available Tags (${availableTags.length}): ${availableTags.join(', ')}`);

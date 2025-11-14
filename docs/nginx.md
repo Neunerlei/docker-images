@@ -8,7 +8,7 @@ Think of this image as an "orchestrator-in-a-box" for your project. You define w
 
 ## Tags
 
-Here you can find [all available tags](https://docker.neunerlei.eu/neunerlei-nginx.html) of this image.
+Here you can find [all available tags](https://docker.neunerlei.eu/neunerlei-nginx-tags.html) of this image.
 
 ## Quick Start
 

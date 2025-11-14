@@ -1,8 +1,8 @@
-# PHP Images - with nginx (>= 8.4)
+# PHP Images - with nginx (>= 8.2)
 
 Welcome to the new generation of `neunerlei/php-nginx` images!
 
-Starting with PHP 8.4, these images are designed as self-contained, high-performance services. The philosophy has shifted from providing only PHP-FPM to providing a complete, production-ready PHP application runtime that includes a pre-configured NGINX web server.
+Starting with PHP 8.2, these images are designed as self-contained, high-performance services. The philosophy has shifted from providing only PHP-FPM to providing a complete, production-ready PHP application runtime that includes a pre-configured NGINX web server.
 
 Think of this image as a "service-in-a-box". You put your code in, configure it with environment variables, and it just works—whether in local development or behind a production reverse proxy.
 

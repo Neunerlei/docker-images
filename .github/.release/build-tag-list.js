@@ -24,17 +24,17 @@ const deprecatedInput = core.getBooleanInput('deprecated');
  * Expects the OUTPUT<tag-list-maintained> of discover-build-matrix.js, which contains a comma-separated list of maintained tags
  * @type {string[]}
  */
-const maintainedTagsInput = core.getInput('maintained-tags').split(',').filter(t => t);
+const maintainedTagsInput = core.getInput('maintained-tags', {required: true}).split(',').filter(t => t);
 /**
  * Expects the OUTPUT<tag-list-all> of discover-build-matrix.js, which contains a comma-separated list of all discovered tags
  * @type {string[]}
  */
-const allTagsInput = core.getInput('all-tags').split(',').filter(t => t);
+const allTagsInput = core.getInput('all-tags', {required: true}).split(',').filter(t => t);
 /**
  * Expects the OUTPUT<tag-list-latest-built> of discover-build-matrix.js, which indicates if the latest tag is built
  * @type {boolean}
  */
-const latestTagBuiltInput = core.getBooleanInput('latest-tag-built');
+const latestTagBuiltInput = core.getBooleanInput('latest-tag-built', {required: true});
 
 core.info('Generating tag list HTML file');
 

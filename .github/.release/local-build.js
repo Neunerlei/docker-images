@@ -16,6 +16,7 @@ const child_process = require('node:child_process');
 (async () => {
     const imageName = process.argv[2] || '';
     const sourceVersion = process.argv[3] || '';
+    const imageTypeInput = process.argv[4] || '';
 
     if (!imageName || !sourceVersion) {
         console.error('Image name and source version are required arguments.');
@@ -31,28 +32,49 @@ const child_process = require('node:child_process');
 
     const workflowContent = fs.readFileSync(workflowFilePath, 'utf-8');
     const workflowData = yaml.parse(workflowContent);
-    const workflowEnv = workflowData.env || {};
-    if (workflowEnv['image-name'] !== imageName) {
-        console.error(`The "image-name" in the workflow file does not match the provided image name.`);
+    const workflowJobs = workflowData.jobs || {};
+
+    const targetJobCandidates = ['call-build-engine'];
+    if(imageTypeInput){
+        targetJobCandidates.push(`call-build-engine-${imageTypeInput}`);
+        targetJobCandidates.push(`call-${imageTypeInput}`);
+    }
+
+    let targetJob = null;
+    for(const candidate of targetJobCandidates){
+        if(workflowJobs[candidate]){
+            targetJob = workflowJobs[candidate];
+            break;
+        }
+    }
+
+    if (!targetJob) {
+        console.error(`No suitable job found in the workflow file for image "${imageName}". Checked candidates: "${targetJobCandidates.join('", "')}" against available jobs: "${Object.keys(workflowJobs).join('", "')}"`);
         process.exit(1);
     }
 
-    const imageType = workflowEnv['image-type'] || '';
-    const sourceImageNamespace = workflowEnv['source-image-namespace'] || '';
-    const sourceImageName = workflowEnv['source-image-name'] || '';
+    const jobWith = targetJob ? targetJob.with || {} : {};
+    if (jobWith['image-name'] && jobWith['image-name'] !== imageName) {
+        console.error(`The "image-name" in the job definition does not match the provided image name.`);
+        process.exit(1);
+    }
+
+    const imageType = jobWith['image-type'] || '';
+    const sourceImageNamespace = jobWith['source-image-namespace'] || '';
+    const sourceImageName = jobWith['source-image-name'] || '';
 
     if (!sourceImageNamespace || !sourceImageName) {
         console.error('Source image namespace and name must be defined in the workflow file.');
         process.exit(1);
     }
 
-    const sourceImageType = workflowEnv['source-image-type'] || '';
-    const trackedVersions = parseInt(workflowEnv['tracked-versions'] || '3', 10);
-    const deprecatedVersion = workflowEnv['deprecated'] || '';
-    const versionPrecision = parseInt(workflowEnv['version-precision'] || '3', 10);
-    const detectLatestVersion = typeof workflowEnv['latest-tag'] === 'boolean'
-        ? workflowEnv['latest-tag']
-        : (workflowEnv['latest-tag'] || 'false').toLowerCase() === 'true';
+    const sourceImageType = jobWith['source-image-type'] || '';
+    const trackedVersions = parseInt(jobWith['tracked-versions'] || '3', 10);
+    const deprecatedVersion = jobWith['deprecated'] || '';
+    const versionPrecision = parseInt(jobWith['version-precision'] || '3', 10);
+    const detectLatestVersion = typeof jobWith['latest-tag'] === 'boolean'
+        ? jobWith['latest-tag']
+        : (jobWith['latest-tag'] || 'false').toLowerCase() === 'true';
 
     const sourceImage = `${sourceImageNamespace}/${sourceImageName}`;
     const targetImage = `${constants.IMAGE_NAMESPACE}/${imageName}`;

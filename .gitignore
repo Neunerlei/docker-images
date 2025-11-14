@@ -1,14 +1,8 @@
 .settings/
 .DS_Store
 .env
-.env.app
-.unison*
-perms.set
-src/vendor
-src/tmp
-src/logs
-src/diskfiles
-src/node_modules
+
+node_modules
 
 # IDEA Code Style
 .idea/*
@@ -16,11 +10,3 @@ src/node_modules
 !.idea/copyright/*
 !.idea/codeStyles/
 !.idea/codeStyles/*
-
-# Vendor dev directory
-src/vendor-dev/*
-!src/vendor-dev/.keep
-
-# Work dir
-src/work/*
-!src/work/.keep

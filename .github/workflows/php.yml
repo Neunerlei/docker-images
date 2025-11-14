@@ -3,9 +3,9 @@ on:
   push:
     branches: [ "main" ]
     paths:
-      - src/php-nginx/**
+      - src/php/**
   schedule:
-    - cron: '0 2 * * 2,5'
+    - cron: '0 2 * * 0,3'
   workflow_dispatch:
 
 permissions:
@@ -16,18 +16,33 @@ permissions:
   attestations: write
 
 jobs:
-  call-build-engine:
+  call-fpm-alpine:
     uses: ./.github/workflows/build-engine.yml
     with:
-      image-name: 'php-nginx'
-      image-type: ''
+      image-name: 'php'
+      image-type: 'fpm-alpine'
+      source-image-namespace: 'library'
+      source-image-name: 'php'
+      source-image-type: 'fpm-alpine'
+      tracked-versions: '3'
+      deprecated: '8.4'
+      version-precision: '2'
+      latest-tag: 'false'
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+  call-fpm-debian:
+    uses: ./.github/workflows/build-engine.yml
+    with:
+      image-name: 'php'
+      image-type: 'fpm-debian'
       source-image-namespace: 'library'
       source-image-name: 'php'
       source-image-type: 'fpm'
       tracked-versions: '4'
-      deprecated: ''
+      deprecated: '8.5'
       version-precision: '2'
-      latest-tag: 'true'
+      latest-tag: 'false'
     secrets:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}

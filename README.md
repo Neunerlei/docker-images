@@ -6,42 +6,35 @@ A collection of Docker images; optimized for production use with common extensio
 
 These images are in general for my private/professional projects. I try to keep them updated and secure and promise not to include any breaking changes without notice. However, I cannot guarantee the same level of support and stability as official images. Use at your own risk. All images are automatically build via GitHub Actions on Sunday and Wednesday to ensure they are up-to-date.
 
-## PHP
+## Available Images 
 
-The images are organized under `src/php/` by PHP version and type, they are available on Docker Hub: [neunerlei/php](https://hub.docker.com/r/neunerlei/php)
+ - **[PHP-nginx](docs/php-nginx.md)**: PHP with NGINX included (from PHP 8.5 onwards, and PHP 8.4 as legacy)
+ - **[PHP (deprecated)](docs/php.md)**: PHP-FPM only (without NGINX) (legacy, deprecated since PHP 8.4)
+ - **[Nginx](docs/nginx.md)**: Minimal NGINX web server / reverse proxy
 
-### Newer Versions (>= PHP 8.5)
-From PHP 8.5 onwards, I only provide a debian based image including nginx. Please refer to the [current PHP documentation](docs/php/current.md) for details.
+## Automated Image Build Process
 
-> Currently, PHP 8.5 is not yet released, so we work with the RC versions for now.
-> 
-> **Versions**: 8.5
-> 
-> **Types**:
-> - `fpm-debian`: Based on Debian (NO NGINX) (ONLY for 8.5, to ease the transition)
-> - `fpm-nginx-debian`: Based on Debian with NGINX included
+Our Docker images are built and updated automatically using a smart GitHub Actions pipeline. This process ensures our images stay up-to-date with the latest security patches from their official base images (like `php`, `nginx`, or `node`).
 
-### Legacy PHP images (<= PHP 8.4)
+### How It Works
 
-Older PHP versions (<= PHP 8.4) do not include NGINX by default. Please refer to the [legacy PHP documentation](docs/php/legacy.md) for details.
+1.  **Discovery:** On a regular schedule, our pipeline queries the Docker Hub API to find the newest official tags for a base image (e.g., it finds that `php:8.4` has been released).
+2.  **Matrix Generation:** Based on a configuration in the workflow file, it decides which versions to build. For example, it might be configured to always build the 3 latest minor versions.
+3.  **Cascading Source Selection:** For each version to be built (e.g., `php:8.4`), the pipeline intelligently finds the right set of source files from our `src/` directory. It looks for a directory matching the version number. If it can't find `src/php-nginx/8.4`, it looks for the next closest one, like `src/php-nginx/8.3`, and uses that as a template. This allows us to support new versions automatically without duplicating files.
+4.  **Build & Publish:** The pipeline uses the selected source files to build, test, and push the new image (e.g., `neunerlei/php-nginx:8.4`) to Docker Hub. It also generates security attestations for supply chain integrity.
+5.  **Documentation:** Finally, the pipeline automatically updates the HTML tag list for the image, providing a clear, user-facing view of all available and maintained versions.
 
-> **Versions**: 7.4, 8.1, 8.2, 8.3, 8.4
-> 
-> **Types**:
-> - `fpm-alpine`: Based on Alpine Linux (for versions <= 8.4)
-> - `fpm-debian`: Based on Debian (NO NGINX) (ONLY for 8.4, to ease the transition)
-> - `fpm-nginx-debian`: Based on Debian with NGINX (introduced in 8.4, will be the default for future versions)
+### How to Support a New Version
 
-## Nginx 
+Because of the "cascading" logic, most new base image releases (e.g., NGINX `1.28` when we support `1.27`) will build correctly with no changes required.
 
-A minimal NGINX image based on Debian, highly opinionated to be used as a simple web server or reverse proxy,
-based on the [official NGINX image](https://hub.docker.com/_/nginx).
-Available on Docker Hub: [neunerlei/nginx](https://hub.docker.com/r/neunerlei/nginx). 
-Please refer to the [NGINX documentation](docs/nginx/current.md) for details.
+If a new version introduces a **breaking change**, you simply need to:
+1.  Copy the last working version's source directory (e.g., `cp -r src/nginx/1.27 src/nginx/1.29`).
+2.  Make the necessary fixes inside the new `src/nginx/1.29` directory.
+3.  Commit the change. The pipeline will automatically pick up and use this new directory for all future `1.29.x` builds.
 
-> **Versions**: Actively maintained are the three latest NGINX versions on dockerhub.
 
-## Build Process
+## Local Build Process
 
 Use the `bin/build.sh` script to build images:
 
@@ -57,17 +50,11 @@ Parameters:
 To build and push:
 
 ```bash
-./bin/build.sh php 8.5 fpm-debian --push
+./bin/build.sh php 8.5 fpm-debian 
 ```
 
-The script navigates to `src/${IMAGE_NAME}/${VERSION}/${TYPE}`, builds the Docker image with tag `neunerlei/${IMAGE_NAME}:${VERSION}-${TYPE}`, and pushes if `--push` is specified. If the `TYPE` is omitted, it assumes, that the directory is `src/${IMAGE_NAME}/${VERSION}/`.
+The script navigates to `src/${IMAGE_NAME}/${VERSION}/${TYPE}`, builds the Docker image with tag `neunerlei/${IMAGE_NAME}:${VERSION}-${TYPE}`. If the `TYPE` is omitted, it assumes, that the directory is `src/${IMAGE_NAME}/${VERSION}/`.
 
-### Automatic version tagging
-
-We use `bin/discover-and-build.sh` to build images that rely on a specific base image, that will be updated frequently.
-This is for example the case for node and nginx based images. The Idea is to query the docker hub api for the latest tags of the base image and automatically build the n latest versions based on that. 
-
-The system has an automatic "cascading fallback" mechanism for our local source files. This is a powerful pattern. You define a "base" configuration (e.g., for version 1.27) and it is used for all subsequent versions (1.28, 1.29, etc.) until you encounter a breaking change. At that point, you create a new directory for the new version (e.g., 1.29) and it becomes the new base for future versions.
 
 ## License
 

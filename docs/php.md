@@ -1,13 +1,21 @@
 # Legacy PHP images (<= PHP 8.4)
 
+> **DEPRECATION NOTICE**
+>
+> Everything you read below, is ONLY true for PHP versions **8.4 and below WITHOUT nginx**
+> The newer images (from PHP 8.2 onwards) include nginx by default and are described in the [PHP-NGINX documentation](php-nginx.md).
+
+## A brief history
+
 Originally the images would only contain PHP-FPM itself without any web server. This made it necessary to always run a separate web server container (e.g., Nginx or Apache) alongside the PHP-FPM container to serve PHP applications. However, this setup can be cumbersome for simple use cases or development environments.
 
-Starting in [PHP 8.5](current.md), the images have been updated to include a built-in web server (using PHP's built-in server capabilities) alongside PHP-FPM. This allows you to run PHP applications directly within the container without needing a separate web server container. To get the same features for the PHP 8.4 image, you can now use the `fpm-nginx-debian` variant, which includes Nginx pre-configured to work with PHP-FPM, starting from PHP 8.5 this will be the default behavior for all images.
+Also, the PHP images were originally based on Alpine Linux to keep them as small as possible. But over time, it became clear that for production use, stability, security, and compatibility are more important than having the smallest possible image size. Therefore, the images were switched to Debian as the base OS.
 
-Also, starting with PHP 8.4, the base image switches from Alpine to Debian for better compatibility and stability. Debian will be the only base image for newer PHP versions. As an intermediate step, the PHP 8.4 images still offer an Alpine variant (`fpm-alpine`), together with a migration version of the Debian-based image (`fpm-debian`) and the new standard nginx variant (`fpm-nginx-debian`).
+We officially deprecated these legacy PHP-FPM-only images with PHP 8.4 and recommend using the newer [PHP-NGINX images](php-nginx.md) instead, which include both PHP and NGINX in a single container for easier setup and use.
 
-> Everything you read below, is ONLY true for PHP versions **8.4 and below WITHOUT nginx**
-> For the `8.4-fpm-nginx-debian` image, as well as all images `>= 8.5`, please refer to the [current PHP documentation](current.md).
+## Tags
+
+Here you can find [all available tags](https://docker.neunerlei.eu/neunerlei-php-tags.html) of this image.
 
 ## Structure
 

@@ -1,4 +1,4 @@
-# PHP Images (>= 8.4)
+# PHP Images - with nginx (>= 8.4)
 
 Welcome to the new generation of `neunerlei/php-nginx` images!
 
@@ -6,7 +6,11 @@ Starting with PHP 8.4, these images are designed as self-contained, high-perform
 
 Think of this image as a "service-in-a-box". You put your code in, configure it with environment variables, and it just works—whether in local development or behind a production reverse proxy.
 
-For older PHP versions (<= 8.4) without NGINX, please refer to the [legacy PHP documentation](legacy.md).
+For older PHP versions (<= 8.4) without NGINX, please refer to the [legacy PHP documentation](php.md).
+
+## Tags
+
+Here you can find [all available tags](https://docker.neunerlei.eu/neunerlei-php-nginx-tags.html) of this image.
 
 ## Quick Start
 

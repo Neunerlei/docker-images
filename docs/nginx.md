@@ -6,6 +6,10 @@ This is not just another NGINX container. It's a smart, self-configuring reverse
 
 Think of this image as an "orchestrator-in-a-box" for your project. You define which services live at which paths, and the proxy automatically builds the correct routing configuration for you.
 
+## Tags
+
+Here you can find [all available tags](https://docker.neunerlei.eu/neunerlei-nginx.html) of this image.
+
 ## Quick Start
 
 The quickest way to get started is with a `docker-compose.yml` file. This example sets up the proxy to route traffic to two backend services: a frontend application at `/` and a backend API at `/api`.
@@ -17,7 +21,7 @@ version: '3.8'
 services:
   # 1. The Smart Proxy Service
   proxy:
-    image: neunerlei/nginx-proxy:latest
+    image: neunerlei/nginx:latest
     ports:
       - "80:80"   # Expose standard HTTP port
     environment:
@@ -114,7 +118,7 @@ This image is designed to be extensible. The NGINX configuration includes severa
    ```yaml
    services:
      proxy:
-       image: neunerlei/nginx-proxy:latest
+       image: neunerlei/nginx:latest
        environment:
          - PROXY_API_CONTAINER=my-api-service
          - PROXY_API_PATH=/api

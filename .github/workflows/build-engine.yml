@@ -1,0 +1,176 @@
+# This workflow is designed to be called by other workflows.
+name: Reusable Build Engine
+
+# The `workflow_call` trigger makes this a reusable workflow.
+# It also defines the inputs and secrets it can accept.
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        description: The name of the image to build (e.g. nginx) (This relates to the folder structure in src/)
+        required: true
+        type: string
+      image-type:
+        description: The type of the image to build (e.g. fpm-debian) (This relates to the sub-folder structure in src/your-image/)
+        type: string
+        default: ''
+      source-image-namespace:
+        description: The namespace of the source image to discover versions from (e.g. library)
+        required: true
+        type: string
+      source-image-name:
+        description: The name of the source image to discover versions from (e.g. nginx)
+        required: true
+        type: string
+      source-image-type:
+        description: |
+          Allows for filtering the tags for a certain type (e.g. "alpine" to get only alpine variants)When using this,
+          we assume the image tags are structured like: "1.23.4-alpine", "1.23.4-fpm-alpine", etc.
+        type: string
+        default: ''
+      tracked-versions:
+        description: "Number of most recent versions to track/build (default: 3)"
+        type: string
+        default: '3'
+      deprecated:
+        description: |
+          If this flag is set, it is expected that it is set to the last version to build before deprecating the image.
+          While the version set in this flag is present in the "tracked-versions", it will be built as usual.
+          Once the version is no longer in the tracked versions (because newer versions exist),
+          there will no longer any build performed. This allows for a graceful deprecation of images.
+          As soon as the flag is set, the deprecation notice will be shown in the generated tags list.
+        type: string
+        default: ''
+      version-precision:
+        description: |
+          Number of version segments to consider when discovering versions (e.g., 2 for major.minor), default is 3 (major.minor.patch)
+          This allows you to decide if you want to build every patch version or just the latest patch of each minor version.
+        type: string
+        default: '3'
+      latest-tag:
+        description: If set to true, the image built for the latest version in the "tracked-versions" will also be tagged as "latest" and pushed.
+        type: string
+        default: 'true'
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_PASSWORD:
+        required: true
+      # You would also pass the token for JamesIves/github-pages-deploy-action here
+      # DEPLOY_KEY:
+      #   required: true
+
+# The entire jobs block is copied here.
+# The only change is how it accesses the variables.
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      build-matrix: ${{ steps.discover.outputs.build-matrix }}
+      build-needed: ${{ steps.discover.outputs.build-needed }}
+      image: ${{ steps.discover.outputs.image }}
+      image-name: ${{ steps.discover.outputs.image-name }}
+      tag-list-maintained: ${{ steps.discover.outputs.tag-list-maintained }}
+      tag-list-all: ${{ steps.discover.outputs.tag-list-all }}
+      deprecated: ${{ steps.discover.outputs.deprecated }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup release environment
+        uses: ./.github/actions/setup-release-environment
+      - name: Discover build matrix
+        id: discover
+        working-directory: .github/.release
+        run: node discover-build-matrix.js
+        env:
+          INPUT_IMAGE-NAME: ${{ inputs.image-name }}
+          INPUT_IMAGE-TYPE: ${{ inputs.image-type }}
+          INPUT_SOURCE-IMAGE-NAMESPACE: ${{ inputs.source-image-namespace }}
+          INPUT_SOURCE-IMAGE-NAME: ${{ inputs.source-image-name }}
+          INPUT_SOURCE-IMAGE-TYPE: ${{ inputs.source-image-type }}
+          INPUT_TRACKED-VERSIONS: ${{ inputs.tracked-versions }}
+          INPUT_VERSION-PRECISION: ${{ inputs.version-precision }}
+          INPUT_DEPRECATED: ${{ inputs.deprecated }}
+          INPUT_LATEST-TAG: ${{ inputs.latest-tag }}
+
+  build-and-attest:
+    needs: discover
+    if: needs.discover.outputs.build-needed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+      attestations: write
+      id-token: write
+    strategy:
+      matrix: ${{ fromJson(needs.discover.outputs.build-matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Generate weekly cache key
+        id: cache-key
+        run: echo "DATE=$(date +'%Y-%W')" >> $GITHUB_ENV
+
+      - name: Generate tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ needs.discover.outputs.image }}
+          tags: |
+            type=raw,value=${{ matrix.tag }}
+            type=raw,value=latest,enable=${{ matrix.isLatest }}
+
+      - name: Build, Push, and Cache
+        id: push
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.buildPath }}
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          pull: 'true'
+          build-args: |
+            SOURCE_IMAGE=${{ matrix.sourceImageWithTag }}
+          cache-from: type=gha,scope=${{ github.ref_name }}-${{ matrix.tag }}-${{ env.DATE }}
+          cache-to: type=gha,mode=max,scope=${{ github.ref_name }}-${{ matrix.tag }}-${{ env.DATE }}
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: index.docker.io/${{ needs.discover.outputs.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+  publish-tag-list:
+    needs: [ discover, build-and-attest ]
+    if: >
+      needs.discover.result == 'success' && 
+      (needs.build-and-attest.result == 'success' || needs.build-and-attest.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup release environment
+        uses: ./.github/actions/setup-release-environment
+
+      - name: Build tag list
+        id: build-tag-list
+        working-directory: .github/.release
+        env:
+          INPUT_IMAGE: ${{ needs.discover.outputs.image }}
+          INPUT_IMAGE-NAME: ${{ needs.discover.outputs.image-name }}
+          INPUT_DEPRECATED: ${{ needs.discover.outputs.deprecated }}
+          INPUT_MAINTAINED-TAGS: ${{ needs.discover.outputs.tag-list-maintained }}
+          INPUT_ALL-TAGS: ${{ needs.discover.outputs.tag-list-all }}
+        run: node build-tag-list.js
+
+      - name: Publish tag list
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: ${{ steps.build-tag-list.outputs.tag-list-output-dir }}

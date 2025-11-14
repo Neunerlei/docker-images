@@ -15,7 +15,11 @@ We officially deprecated these legacy PHP-FPM-only images with PHP 8.4 and recom
 
 ## Tags
 
-Here you can find [all available tags](https://docker.neunerlei.eu/neunerlei-php-tags.html) of this image.
+You can the images on Docker Hub under the `neunerlei/php` repository.
+The images are available in two variants:
+
+- **fpm-alpine**: [all available tags](https://docker.neunerlei.eu/neunerlei-php-fpm-alpine-tags.html)
+- **fpm-debian**: [all available tags](https://docker.neunerlei.eu/neunerlei-php-fpm-debian-tags.html)
 
 ## Structure
 

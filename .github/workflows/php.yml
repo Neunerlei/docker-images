@@ -24,7 +24,7 @@ jobs:
       source-image-namespace: 'library'
       source-image-name: 'php'
       source-image-type: 'fpm-alpine'
-      tracked-versions: '3'
+      tracked-versions: '2'
       deprecated: '8.4'
       version-precision: '2'
       latest-tag: 'false'

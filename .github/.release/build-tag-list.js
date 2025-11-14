@@ -124,7 +124,18 @@ const index = renderTemplate('taglist/index.html.tpl', {
     AVAILABLE_SECTION: deprecated ? '' : renderSection(availableTags, 'taglist/section.available.html.tpl')
 });
 
-const fileName = `${imageName.replace('/', '-')}-tags.html`;
+function imageNameToFilename(imageName) {
+    // Everything that is not a-z, A-Z, 0-9, -, _ is replaced with -
+    // Replace duplicated - with a single -
+    // Remove leading and trailing -
+    return imageName
+        .replace(/[^a-zA-Z0-9-_]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-/, '')
+        .replace(/-$/, '');
+}
+
+const fileName = `${imageNameToFilename(imageName)}-tags.html`;
 const outputDir = path.join(constants.BUILD_OUTPUT_DIR, 'tag-lists');
 if(!fs.existsSync(outputDir)){
     fs.mkdirSync(outputDir, {recursive: true});

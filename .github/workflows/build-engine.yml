@@ -65,7 +65,7 @@ jobs:
       image-name: ${{ steps.discover.outputs.image-name }}
       tag-list-maintained: ${{ steps.discover.outputs.tag-list-maintained }}
       tag-list-all: ${{ steps.discover.outputs.tag-list-all }}
-      tag-list-latest-built: ${{ steps.discover.outputs.tag-list-latest-built }}
+      tag-list-latest-tag-built: ${{ steps.discover.outputs.tag-list-latest-tag-built }}
       deprecated: ${{ steps.discover.outputs.deprecated }}
     steps:
       - uses: actions/checkout@v4
@@ -162,7 +162,7 @@ jobs:
           INPUT_DEPRECATED: ${{ needs.discover.outputs.deprecated }}
           INPUT_MAINTAINED-TAGS: ${{ needs.discover.outputs.tag-list-maintained }}
           INPUT_ALL-TAGS: ${{ needs.discover.outputs.tag-list-all }}
-          INPUT_LATEST-TAG-BUILT: ${{ needs.discover.outputs.tag-list-latest-built }}
+          INPUT_LATEST-TAG-BUILT: ${{ needs.discover.outputs.tag-list-latest-tag-built }}
         run: node build-tag-list.js
 
       - name: Publish tag list

@@ -1,11 +1,11 @@
-name: PHP Nginx
+name: PHP (deprecated)
 on:
   push:
     branches: [ "main" ]
     paths:
       - src/php/**
   schedule:
-    - cron: '0 2 * * 0,3'
+    - cron: '0 22 1,14 * *' # decreased frequency due to deprecation to twice a month
   workflow_dispatch:
 
 permissions:
@@ -39,7 +39,7 @@ jobs:
       source-image-namespace: 'library'
       source-image-name: 'php'
       source-image-type: 'fpm'
-      tracked-versions: '4'
+      tracked-versions: '2'
       deprecated: '8.5'
       version-precision: '2'
       latest-tag: 'false'

@@ -1,4 +1,4 @@
-name: PHP Nginx
+name: Nginx
 on:
   push:
     branches: [ "main" ]

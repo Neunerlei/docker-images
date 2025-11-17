@@ -1,0 +1,11 @@
+{
+  "image": "neunerlei/node-nginx",
+  "imageName": "neunerlei/node-nginx",
+  "deprecated": false,
+  "maintainedTags": [
+    "latest",
+    "25",
+    "24"
+  ],
+  "availableTags": []
+}

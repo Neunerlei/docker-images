@@ -5,8 +5,8 @@ echo "[ENTRYPOINT] Starting bootstrapping process...";
 
 # Configurable default values
 DEFAULT_MAX_UPLOAD_SIZE="100M"
-DEFAULT_NGINX_CERT_PATH="/var/www/certs/cert.pem"
-DEFAULT_NGINX_KEY_PATH="/var/www/certs/key.pem"
+DEFAULT_NGINX_CERT_PATH="/etc/ssl/certs/cert.pem"
+DEFAULT_NGINX_KEY_PATH="/etc/ssl/certs/key.pem"
 
 # Determine effective max upload size
 MAX_UPLOAD_SIZE_EFFECTIVE="${MAX_UPLOAD_SIZE:-$DEFAULT_MAX_UPLOAD_SIZE}"
@@ -26,7 +26,7 @@ fi
 # Configure services
 echo "[ENTRYPOINT] Configuring services in mode: ${CONTAINER_MODE}...";
 
-ENTRYPOINT_DIR="$(dirname $(realpath "${BASH_SOURCE[0]}"))/entrypoint"
+ENTRYPOINT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/entrypoint"
 source "${ENTRYPOINT_DIR}/util/render-template.sh"
 source "${ENTRYPOINT_DIR}/nginx.sh"
 source "${ENTRYPOINT_DIR}/nginx-proxy.sh"

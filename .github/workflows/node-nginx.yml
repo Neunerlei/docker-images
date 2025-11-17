@@ -1,0 +1,39 @@
+name: Node.js Nginx
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - src/node-nginx/**
+  schedule:
+    - cron: '0 2 * * 2,5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+  id-token: write
+  packages: write
+  attestations: write
+
+jobs:
+  call-build-engine:
+    uses: ./.github/workflows/build-engine.yml
+    with:
+      image-name: 'node-nginx'
+      image-type: ''
+      source-image-namespace: 'library'
+      source-image-name: 'node'
+      source-image-type: ''
+      tracked-versions: '3'
+      deprecated: ''
+      version-precision: '1'
+      latest-tag: 'true'
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+  workflow-keepalive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: liskin/gh-workflow-keepalive@v1

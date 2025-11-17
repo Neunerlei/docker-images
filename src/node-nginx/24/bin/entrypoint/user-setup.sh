@@ -51,10 +51,8 @@ chown -R www-data:www-data "/etc/nginx/snippets/before.d"
 chown -R www-data:www-data "/etc/nginx/snippets/after.d"
 chown -R www-data:www-data "/etc/nginx/snippets/before.https.d"
 chown -R www-data:www-data "/etc/nginx/snippets/after.https.d"
-chown -R www-data:www-data "/usr/local/etc/php-fpm.d"
-chown -R www-data:www-data "/usr/local/etc/php/conf.d"
-chown -R www-data:www-data "/etc/supervisor"
 chown -R www-data:www-data "/etc/ssl/certs"
+chown -R www-data:www-data "/etc/supervisor"
 
 # This allows the final image to set up a custom user setup script
 if [ -f /usr/bin/app/entrypoint.user-setup.sh ]; then

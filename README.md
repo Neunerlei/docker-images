@@ -2,15 +2,14 @@
 
 A collection of Docker images; optimized for production use with common extensions and configurations.
 
-## Important Notice
-
-These images are in general for my private/professional projects. I try to keep them updated and secure and promise not to include any breaking changes without notice. However, I cannot guarantee the same level of support and stability as official images. Use at your own risk. All images are automatically build via GitHub Actions on Sunday and Wednesday to ensure they are up-to-date.
+> These images are in general for my private/professional projects. I try to keep them updated and secure and promise not to include any breaking changes without notice. However, I cannot guarantee the same level of support and stability as official images. Use at your own risk. All images are automatically build via GitHub Actions regularly to include the latest security patches from the base images.
 
 ## Available Images 
 
  - **[PHP-nginx](docs/php-nginx.md)**: PHP with NGINX included (from PHP 8.5 onwards, and PHP 8.4 as legacy)
  - **[PHP (deprecated)](docs/php.md)**: PHP-FPM only (without NGINX) (legacy, deprecated since PHP 8.4)
  - **[Nginx](docs/nginx.md)**: Minimal NGINX web server / reverse proxy
+ - **[Node.js](docs/node-nginx.md)**: Node.js in a box with NGINX as reverse proxy
 
 ## Automated Image Build Process
 
@@ -36,7 +35,8 @@ If a new version introduces a **breaking change**, you simply need to:
 
 ## Local Build Process
 
-Use the `bin/build.sh` script to build images:
+For development and testing, you can also build the images locally using the `bin/build.sh` script to build images.
+It utilizes the same logic as the automated build system (see: [.github/.release/local-build.js](.github/.release/local-build.js)), reading the pipeline configuration and finding the correct source directories. For local development, however, you need to provide the exact version and type to build.
 
 ```bash
 ./bin/build.sh php 8.4 fpm-debian
@@ -52,9 +52,6 @@ To build and push:
 ```bash
 ./bin/build.sh php 8.5 fpm-debian 
 ```
-
-The script navigates to `src/${IMAGE_NAME}/${VERSION}/${TYPE}`, builds the Docker image with tag `neunerlei/${IMAGE_NAME}:${VERSION}-${TYPE}`. If the `TYPE` is omitted, it assumes, that the directory is `src/${IMAGE_NAME}/${VERSION}/`.
-
 
 ## License
 

@@ -1,12 +1,11 @@
 #!/bin/bash
+if [ "${CONTAINER_MODE}" == "web" ]; then
+  echo "[ENTRYPOINT.nginx] Configuring nginx for web mode";
 
-echo "[ENTRYPOINT.nginx] Starting Nginx configuration process...";
+  render_template 'NGINX_CLIENT_MAX_BODY_SIZE NGINX_DOC_ROOT NODE_SERVICE_PORT' /etc/app/config.tpl/nginx/service.snippet.tpl.nginx.conf /etc/nginx/snippets/service.nginx.conf
 
-mkdir -p /etc/nginx/sites-available
-chown nginx:nginx /etc/nginx/sites-available
-
-if [ "${DOCKER_PROJECT_PROTOCOL}" == "https" ]; then
-  echo "[ENTRYPOINT.nginx] Configuring for HTTPS.";
+  if [ "${DOCKER_PROJECT_PROTOCOL}" == "https" ]; then
+    echo "[ENTRYPOINT.nginx] Configuring for HTTPS.";
 
     LEGACY_NGINX_CERT_PATH="/var/www/certs/cert.pem"
     LEGACY_NGINX_KEY_PATH="/var/www/certs/key.pem"
@@ -31,13 +30,14 @@ if [ "${DOCKER_PROJECT_PROTOCOL}" == "https" ]; then
       fi
     fi
 
-  render_template 'NGINX_CERT_PATH NGINX_KEY_PATH' /etc/app/config.tpl/nginx/default.https.tpl.nginx.conf /etc/nginx/sites-available/default
-else
-  echo "[ENTRYPOINT.nginx] Configuring for plain HTTP.";
-  cat /etc/app/config.tpl/nginx/default.tpl.nginx.conf > /etc/nginx/sites-available/default
+    render_template 'NGINX_CERT_PATH NGINX_KEY_PATH' /etc/app/config.tpl/nginx/default.https.tpl.nginx.conf /etc/nginx/sites-available/default
+  else
+    echo "[ENTRYPOINT.nginx] Configuring for plain HTTP.";
+    cat /etc/app/config.tpl/nginx/default.tpl.nginx.conf > /etc/nginx/sites-available/default
+  fi
+
+  # Enable the default site
+  ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default;
+
+  echo "[ENTRYPOINT.nginx] Nginx configuration completed";
 fi
-
-# Enable the default site
-ln -sf /etc/nginx/sites-available/default /etc/nginx/conf.d/default.conf;
-
-echo "[ENTRYPOINT.nginx] Nginx configuration completed";

@@ -23,7 +23,10 @@ RUN mkdir -p /etc/app/config.tpl && chmod 755 /etc/app/config.tpl && \
 # Copy configuration tempaltes
 COPY --chown=nginx:nginx config/templates /etc/app/config.tpl
 
-# Copy initial soruces
+# Ensure ssl folder exists
+RUN mkdir -p /etc/ssl/certs && chmod 755 /etc/ssl/certs && chown -R nginx:nginx /etc/ssl/certs
+
+# Copy initial sources
 COPY --chown=nginx:nginx ./src /var/www/html/public
 
 # Copy entrypoint (uses the base image extension mechanism)

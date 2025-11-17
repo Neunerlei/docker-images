@@ -18,8 +18,6 @@ The quickest way to get started is with a `docker-compose.yml` file. This exampl
 
 ```yaml
 # docker-compose.yml
-version: '3.8'
-
 services:
   app:
     image: neunerlei/php-nginx:latest # Or your desired version
@@ -54,14 +52,16 @@ This image is configured almost entirely through environment variables. This all
 | `PGID`                            | The group ID to run PHP-FPM and NGINX as. Useful for matching host file permissions.                                | `33`                      |
 | `CONTAINER_MODE`                  | Read-only. Automatically set to `web` or `worker`.                                                                  | `web`                     |
 | `MAX_UPLOAD_SIZE`                 | A convenient variable to set NGINX, `upload_max_filesize`, and `post_max_size` all at once.                         | `100M`                    |
+| `APP_ENV`                         | Usage optional, can be used by your application to determine the environment. Suggested: `prod`, `dev`, `stage`     | `prod`                    |
 | **PROJECT**                       |                                                                                                                     |                           |
 | `DOCKER_PROJECT_HOST`             | The hostname your application (for the application URL generation, etc.).                                           | `localhost`               |
 | `DOCKER_PROJECT_PATH`             | The web root when accessing the pages. For example, if your app is at `http://example.com/app`, set this to `/app`. | `/`                       |
-| `DOCKER_PROJECT_PROTOCOL`         | Can be either `http` or `https`, to determine how nginx should listen for connections.                              | `"false"`                 |
+| `DOCKER_PROJECT_PROTOCOL`         | Can be either `http` or `https`, to determine how nginx should listen for connections.                              | `"http"`                  |
 | **NGINX**                         |                                                                                                                     |                           |
+| `NGINX_DOC_ROOT`                  | The document root NGINX should use.                                                                                 | `/var/www/html/public`    |
 | `NGINX_CLIENT_MAX_BODY_SIZE`      | Overrides `client_max_body_size` in NGINX.                                                                          | Matches `MAX_UPLOAD_SIZE` |
-| `NGINX_KEY_PATH`                  | Path to the SSL key file (only used if `DOCKER_PROJECT_PROTOCOL="https"`).                                          | `/var/www/certs/key.pem`  |
-| `NGINX_CERT_PATH`                 | Path to the SSL certificate file (only used if `DOCKER_PROJECT_PROTOCOL="https"`).                                  | `/var/www/certs/cert.pem` |
+| `NGINX_KEY_PATH`                  | Path to the SSL key file (only used if `DOCKER_PROJECT_PROTOCOL="https"`).                                          | `/etc/ssl/certs/key.pem`  |
+| `NGINX_CERT_PATH`                 | Path to the SSL certificate file (only used if `DOCKER_PROJECT_PROTOCOL="https"`).                                  | `/etc/ssl/certs/cert.pem` |
 | **PHP**                           |                                                                                                                     |                           |
 | `PHP_UPLOAD_MAX_FILESIZE`         | Overrides PHP's `upload_max_filesize` directly.                                                                     | Matches `MAX_UPLOAD_SIZE` |
 | `PHP_POST_MAX_SIZE`               | Overrides PHP's `post_max_size` directly.                                                                           | Matches `MAX_UPLOAD_SIZE` |
@@ -81,30 +81,35 @@ This image is configured almost entirely through environment variables. This all
 
 ## Web Mode In-Depth
 
-In the default `web` mode, the entrypoint script dynamically generates the NGINX configuration.
+In the default `web` mode, the entrypoint script dynamically generates the NGINX configuration to act as a reverse proxy for your PHP application.
 
 ### HTTP vs. HTTPS
 
-The image supports a convenient way to run SSL locally using tools like `mkcert`.
+The image supports a simple way to enable SSL. This is fundamental for modern web applications and NGINX handles this process, known as SSL Termination, very efficiently [docs.nginx.com](https://docs.nginx.com/nginx/admin-guide/security-controls/terminating-ssl-http/).
 
-* **By default (`DOCKER_PROJECT_PROTOCOL="https"` op missing `DOCKER_PROJECT_PROTOCOL`):** NGINX is configured to listen for plain HTTP on port 80.
-* **When `DOCKER_PROJECT_PROTOCOL="http"`:** NGINX is configured to listen on port 443 with SSL, using certificates it expects to find at `/var/www/certs/cert.pem` and `/var/www/certs/key.pem`. It also sets up an automatic redirect from HTTP (port 80) to HTTPS. You can mount your certificates to this path. You can use this setup in local development to simulate HTTPS; but the general setup is also suitable for production if you provide valid certificates. You can learn more about customizing SSL in the next section.
+* **By default (`DOCKER_PROJECT_PROTOCOL="http"`):** NGINX listens for plain HTTP on port 80.
+* **When `DOCKER_PROJECT_PROTOCOL="https"`:** NGINX is configured to listen on port 443 with SSL, using certificates it expects to find at the paths specified by `NGINX_CERT_PATH` and `NGINX_KEY_PATH`. It also sets up an automatic redirect from HTTP (port 80) to HTTPS. You must mount your certificates to these paths.
+
+This setup is great for local development with tools like `mkcert` or for production if you provide valid certificates.
+
+> For a more automated approach to SSL, especially in production with Let's Encrypt certificates, you might consider a dedicated reverse proxy gateway like [linuxserver.io/swag](https://docs.linuxserver.io/images/docker-swag/) in front of this container (running in plain HTTP mode). Another good alternative is [nginx-proxy](https://github.com/nginx-proxy/nginx-proxy) with the [acme-companion](https://github.com/nginx-proxy/acme-companion).
+> This allows you to centralize SSL management and offload that responsibility from your application containers.
 
 ### Customizing NGINX with Snippets
 
-This image is designed to be extensible without being modified. The NGINX configuration includes two "hook" directories:
+This image is designed to be extensible without being modified. The NGINX configuration includes several "hook" directories:
 
 * `/etc/nginx/snippets/before.d/`
 * `/etc/nginx/snippets/after.d/`
 
-Any `.conf` file you place in these directories will be included at the beginning or end of the main server logic, respectively. This is the perfect way to add custom headers, caching rules, or other specific directives. `before.d` is included before the main location blocks, while `after.d` is included at the end of the server block.
+Any `.conf` file you mount into these directories will be included in the `server` block. `before.d` is included before the primary `location` block and proxy configuration, while `after.d` is included at the very end of the `server` block.
 
 **Example: Adding a custom security header**
 
 1. Create a file, e.g., `my-headers.conf`:
    ```nginx
    # my-headers.conf
-   add_header X-My-Custom-Header "Hello from my project!";
+   add_header X-Content-Type-Options "nosniff";
    ```
 2. Mount this file into the `before.d` directory in your `docker-compose.yml`:
    ```yaml
@@ -123,22 +128,27 @@ NGINX will now automatically include this header in its responses.
 
 #### SSL Customization
 
-When the container is configured to run in HTTPS mode, it expects to find the SSL certificate and key at `/var/www/certs/cert.pem` and `/var/www/certs/key.pem`. You can mount your own certificates to this path. Additionally, to the config options described above, you have additional hooks that only apply when HTTPS is enabled:
+When running in HTTPS mode, two additional hook directories are available that only apply to the SSL `server` block:
 
 * `/etc/nginx/snippets/before.https.d/`
 * `/etc/nginx/snippets/after.https.d/`
 
 Any `.conf` files placed in these directories will be included in the SSL server block, allowing you to customize SSL settings further.
 In general, the SSL configuration is included AFTER the main server configuration, so you can override settings as needed. The `before.https`
+and `after.https` hooks are included before and after the SSL-specific settings, respectively.
 
 The order of the hooks is as follows:
 
 1. `/etc/nginx/snippets/before.d/`
-2. Set up the main service + locations
+2. The main service configuration (root, proxy pass, etc.).
 3. `/etc/nginx/snippets/before.https.d/`
-4. SSL-specific settings, like certificates and hardening
+4. SSL-specific settings (`ssl_certificate`, hardening options).
 5. `/etc/nginx/snippets/after.https.d/`
 6. `/etc/nginx/snippets/after.d/`
+
+> Feel free to name your certificate and key files anything you like; just make sure to adjust either the mount paths or `NGINX_KEY_PATH` and `NGINX_CERT_PATH` environment variables accordingly.
+>
+> For backward compatibility, if the specified certificate or key files are not found, it will also look at `/var/www/certs/cert.pem` and `/var/www/certs/key.pem` locations respectively; however a warning will be logged.
 
 ## Worker Mode In-Depth
 
@@ -178,3 +188,7 @@ The entrypoint provides two script hooks for advanced customization.
 
 * `/usr/bin/app/entrypoint.user-setup.sh`: This script is executed early in the startup process. It's the ideal place to put the run-time user mapping logic for local development to solve UID/GID file permission issues. **IMPORTANT** This script is ONLY executed if the `PUID` and `PGID` environment variables are set to values different from the defaults. If you want to modify permissions unconditionally, use the `entrypoint.local.sh` hook instead.
 * `/usr/bin/app/entrypoint.local.sh`: This script is executed just before the main command. It's a general-purpose hook for any other custom setup commands you might need.
+
+### Default Script (index.php)
+
+To get you started quickly, the image includes a simple default `index.php` file located at `/var/www/html/public/index.php`. This file displays a welcome message and some basic PHP configuration information. You can replace this file with your own application code by mounting your project into `/var/www/html`.

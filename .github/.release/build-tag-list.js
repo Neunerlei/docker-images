@@ -135,20 +135,37 @@ function imageNameToFilename(imageName) {
         .replace(/-$/, '');
 }
 
-const fileName = `${imageNameToFilename(imageName)}-tags.html`;
+const htmlFileName = `${imageNameToFilename(imageName)}-tags.html`;
 const outputDir = path.join(constants.BUILD_OUTPUT_DIR, 'tag-lists');
 if(!fs.existsSync(outputDir)){
     fs.mkdirSync(outputDir, {recursive: true});
 }
-const outputPath = path.join(outputDir, fileName);
-core.info(`Writing tag list HTML file to: ${outputPath}`);
 
-fs.writeFileSync(outputPath, index);
+// HTML output
+const htmlOutputFilename = path.join(outputDir, htmlFileName);
+core.info(`Writing tag list HTML file to: ${htmlOutputFilename}`);
+fs.writeFileSync(htmlOutputFilename, index);
+
+// JSON output
+const jsonOutputFilename = path.join(outputDir, `${imageNameToFilename(imageName)}-tags.json`);
+core.info(`Writing tag list JSON file to: ${jsonOutputFilename}`);
+const jsonOutput = {
+    image: image,
+    imageName: imageName,
+    deprecated: deprecated,
+    maintainedTags: maintainedTags,
+    availableTags: availableTags,
+};
+fs.writeFileSync(jsonOutputFilename, JSON.stringify(jsonOutput, null, 2));
 
 /**
  * The path to the generated tag list HTML file
  */
-core.setOutput('tag-list-file', outputPath);
+core.setOutput('tag-list-html-file', htmlOutputFilename);
+/**
+ * The path to the generated tag list JSON file
+ */
+core.setOutput('tag-list-json-file', jsonOutputFilename);
 /**
  * The output directory containing the tag list HTML file
  * This can be used to upload the directory as an artifact, e.g. for later publishing

@@ -1,3 +1,4 @@
+# syntax = docker/dockerfile:1.2
 ARG SOURCE_IMAGE
 FROM ${SOURCE_IMAGE}
 

@@ -1,4 +1,4 @@
-# Documentation for `neunerlei/nginx-proxy`
+# Documentation for `neunerlei/nginx`
 
 Welcome to the `neunerlei/nginx` image!
 

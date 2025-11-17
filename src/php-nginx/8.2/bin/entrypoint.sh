@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "[ENTRYPOINT] Starting bootstrapping process...";
+echo "[ENTRYPOINT] Starting PHP bootstrapping process...";
 
 # Configurable default values
 DEFAULT_NGINX_DOC_ROOT="/var/www/html/public"

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "[ENTRYPOINT] Starting bootstrapping process...";
+echo "[ENTRYPOINT] Starting Node.js bootstrapping process...";
 
 # Configurable default values
 DEFAULT_NGINX_DOC_ROOT="/var/www/html/public"
@@ -10,7 +10,13 @@ DEFAULT_NGINX_KEY_PATH="/etc/ssl/certs/key.pem"
 DEFAULT_MAX_UPLOAD_SIZE="100M"
 DEFAULT_NODE_SERVICE_PORT="3000"
 DEFAULT_NODE_WORKER_PROCESS_COUNT="1"
-DEFAULT_NODE_WEB_COMMAND="node /var/www/html/server.js"
+DEFAULT_NODE_WEB_COMMAND=""
+
+# Check for default web entry script
+DEFAULT_WEB_ENTRY_SCRIPT="/var/www/html/server.js"
+if [ -f "${DEFAULT_WEB_ENTRY_SCRIPT}" ]; then
+  DEFAULT_NODE_WEB_COMMAND="node ${DEFAULT_WEB_ENTRY_SCRIPT}"
+fi
 
 # Determine effective max upload size
 MAX_UPLOAD_SIZE_EFFECTIVE="${MAX_UPLOAD_SIZE:-$DEFAULT_MAX_UPLOAD_SIZE}"
@@ -38,6 +44,7 @@ fi
 # If the NODE_WORKER_COMMAND is set, set the CONTAINER_MODE environment variable to "worker", otherwise set it to "web"
 if [ -n "${NODE_WORKER_COMMAND}" ]; then
   export CONTAINER_MODE="worker"
+  echo "[ENTRYPOINT] Detected NODE_WORKER_COMMAND, executing: ${NODE_WORKER_COMMAND}";
 else
   # If in web mode, we require the NODE_WEB_COMMAND to be set, otherwise exit with an error
   if [ -z "${NODE_WEB_COMMAND}" ]; then
@@ -45,6 +52,7 @@ else
     exit 1
   else
     export NODE_WEB_COMMAND
+    echo "[ENTRYPOINT] Detected NODE_WEB_COMMAND, executing: ${NODE_WEB_COMMAND}";
   fi
   export CONTAINER_MODE="web"
 fi

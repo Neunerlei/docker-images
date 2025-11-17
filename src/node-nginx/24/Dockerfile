@@ -32,6 +32,9 @@ RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
     gosu \
     && apt-get clean
 
+# Remove the "node" user, so we do not create conflicts with www-data
+RUN userdel -r node || true
+
 # Create additional config directories
 RUN mkdir -p /etc/app/config.tpl && chmod 755 /etc/app/config.tpl && \
     mkdir -p /etc/nginx/snippets/before.d && chmod 755 /etc/nginx/snippets/before.d && \

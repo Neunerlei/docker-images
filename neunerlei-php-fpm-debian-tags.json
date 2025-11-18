@@ -1,0 +1,11 @@
+{
+  "image": "neunerlei/php",
+  "imageName": "neunerlei/php (fpm-debian)",
+  "deprecated": true,
+  "maintainedTags": [
+    "8.4-fpm-debian"
+  ],
+  "availableTags": [
+    "8.5-fpm-debian"
+  ]
+}

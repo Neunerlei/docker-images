@@ -1,0 +1,14 @@
+{
+  "image": "neunerlei/php",
+  "imageName": "neunerlei/php (fpm-alpine)",
+  "deprecated": true,
+  "maintainedTags": [
+    "8.4-fpm-alpine",
+    "8.3-fpm-alpine"
+  ],
+  "availableTags": [
+    "8.2-fpm-alpine",
+    "8.1-fpm-alpine",
+    "7.4-fpm-alpine"
+  ]
+}

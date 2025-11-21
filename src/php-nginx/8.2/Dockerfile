@@ -62,6 +62,7 @@ COPY --chown=www-data:www-data config/templates /etc/app/config.tpl
 
 # Copy configuration files
 COPY --chown=www-data:www-data config/nginx.conf /etc/nginx
+COPY --chown=www-data:www-data config/mime.custom.types /etc/nginx
 COPY --chown=www-data:www-data config/supervisord.conf /etc/supervisor
 
 # Remove default fpm pool config (This causes issues, because we want to listen to a socket, not port 9000)

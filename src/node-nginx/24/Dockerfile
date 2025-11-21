@@ -47,6 +47,7 @@ COPY --chown=www-data:www-data config/templates /etc/app/config.tpl
 
 # Copy configuration files
 COPY --chown=www-data:www-data config/nginx.conf /etc/nginx
+COPY --chown=www-data:www-data config/mime.custom.types /etc/nginx
 COPY --chown=www-data:www-data config/supervisord.conf /etc/supervisor
 
 # Copy initial soruces

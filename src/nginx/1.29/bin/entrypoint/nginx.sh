@@ -38,6 +38,6 @@ else
 fi
 
 # Enable the default site
-ln -sf /etc/nginx/sites-available/default /etc/nginx/conf.d/default.conf;
+ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default;
 
 echo "[ENTRYPOINT.nginx] Nginx configuration completed";

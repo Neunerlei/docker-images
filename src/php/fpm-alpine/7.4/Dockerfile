@@ -31,7 +31,7 @@ RUN --mount=type=cache,id=apk-cache,target=/var/cache/apk rm -rf /etc/apk/cache 
 
 # Install php extensions
 RUN --mount=type=cache,id=apk-cache,target=/var/cache/apk \
-    --mount=type=bind,from=mlocati/php-extension-installer:1.5,source=/usr/bin/install-php-extensions,target=/usr/local/bin/install-php-extensions \
+    --mount=type=bind,from=mlocati/php-extension-installer:latest,source=/usr/bin/install-php-extensions,target=/usr/local/bin/install-php-extensions \
 		rm -rf /etc/apk/cache && ln -s /var/cache/apk /etc/apk/cache && \
 		install-php-extensions \
 			apcu \

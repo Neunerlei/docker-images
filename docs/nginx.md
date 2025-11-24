@@ -31,6 +31,7 @@ services:
       - PROXY_FRONTEND_CONTAINER=node-app
       - PROXY_FRONTEND_PATH=/
       - PROXY_FRONTEND_PORT=8000
+      - PROXY_FRONTEND_PROTOCOL=https # By default, this is http, but you can set it to https if you want
 
       # PHP backend on a sub-path, rewrite url to its root
       - PROXY_BACKEND_CONTAINER=php-app
@@ -85,8 +86,9 @@ For each service you want to proxy, you define a group of variables with a uniqu
 |-------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `PROXY_<KEY>_CONTAINER` | **(Required)** The hostname of the backend service (usually the Docker Compose service name).                                                                                |
 | `PROXY_<KEY>_PATH`      | The path for this service, **relative to `DOCKER_PROJECT_PATH`**. For example, if `DOCKER_PROJECT_PATH` is `/app` and this is `/api`, the final location will be `/app/api`. |
-| `PROXY_<KEY>_PORT`      | The internal port the backend service is listening on. Default is `80`.                                                                                                      |
+| `PROXY_<KEY>_PORT`      | **(Optional)** The internal port the backend service is listening on. Default is `80`.                                                                                       |
 | `PROXY_<KEY>_DEST`      | **(Optional)** Rewrites the request path. For example, `PROXY_BACKEND_PATH=/api` and `PROXY_BACKEND_DEST=/` will route `/api/users` to `/users` on the backend container.    |
+| `PROXY_<KEY>_PROTOCOL`  | **(Optional)** The protocol for this service. Default is `http`.                                                                                                             |
 
 ## Proxy Mode In-Depth
 

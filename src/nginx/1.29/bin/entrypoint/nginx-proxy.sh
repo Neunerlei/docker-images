@@ -22,6 +22,7 @@ if [[ "$CONTAINER_MODE" == "proxy" ]]; then
         declare PROXY_DEST_VAR="PROXY_${KEY}_DEST"
         declare PROXY_PORT_VAR="PROXY_${KEY}_PORT"
         declare PROXY_CONTAINER_VAR="PROXY_${KEY}_CONTAINER"
+        declare PROXY_PROTOCOL_VAR="PROXY_${KEY}_PROTOCOL"
 
         # Get the relative path for this service
         RELATIVE_SERVICE_PATH="${!PROXY_PATH_VAR:-/}"
@@ -34,10 +35,12 @@ if [[ "$CONTAINER_MODE" == "proxy" ]]; then
 
         export PROXY_UPSTREAM_HOST="${!PROXY_CONTAINER_VAR}"
         export PROXY_UPSTREAM_PORT="${!PROXY_PORT_VAR:-80}"
+        export PROXY_PROTOCOL="${!PROXY_PROTOCOL_VAR:-http}"
 
         echo "   - Location path: ${PROXY_LOCATION_PATH}"
         echo "   - Upstream host: ${PROXY_UPSTREAM_HOST}"
         echo "   - Upstream port: ${PROXY_UPSTREAM_PORT}"
+        echo "   - Upstream protocol: ${PROXY_PROTOCOL}"
 
         # Set VIRTUAL_DEST if the variable exists and is not empty
         PROXY_DEST_VALUE="${!PROXY_DEST_VAR}"
@@ -48,7 +51,7 @@ if [[ "$CONTAINER_MODE" == "proxy" ]]; then
             export PROXY_REWRITE_RULE=""
         fi
 
-        CURRENT_LOCATION_BLOCK=$(render_template_string 'KEY PROXY_LOCATION_PATH PROXY_UPSTREAM_HOST PROXY_UPSTREAM_PORT PROXY_REWRITE_RULE' /etc/app/config.tpl/nginx/proxy.location.tpl.nginx.conf)
+        CURRENT_LOCATION_BLOCK=$(render_template_string 'KEY PROXY_LOCATION_PATH PROXY_UPSTREAM_HOST PROXY_UPSTREAM_PORT PROXY_PROTOCOL PROXY_REWRITE_RULE' /etc/app/config.tpl/nginx/proxy.location.tpl.nginx.conf)
         LOCATION_BLOCKS="${LOCATION_BLOCKS}${CURRENT_LOCATION_BLOCK}"
     done
 

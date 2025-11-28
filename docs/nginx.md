@@ -198,7 +198,7 @@ This image is designed to be extensible. The NGINX configuration includes severa
 
 * `/etc/nginx/snippets/before.d/`: Included at the beginning of the `server` block. Good for `map` directives or other server-level settings.
 * `/etc/nginx/snippets/after.d/`: Included at the end of the `server` block. Good for general `location` blocks (e.g., for `/robots.txt`).
-* `/etc/nginx/snippets/proxy.d/${KEY}-*.conf`: A location-specific hook! Files placed here will be included *inside* the `location` block for that specific service. This is perfect for adding custom headers or caching rules for a single backend.
+* `/etc/nginx/snippets/proxy.d/${KEY}-*.conf`: A location-specific hook! Files placed here will be included *inside* the `location` block for that specific service. This is perfect for adding custom headers or caching rules for a single backend. Note, that the `${KEY}` will be resolved in lowercase, so if your service key is `API`, the file must be named `api-proxy.conf`.
 
 **Example: Adding a custom header to a single backend**
 

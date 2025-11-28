@@ -50,7 +50,8 @@ if [[ "$CONTAINER_MODE" == "proxy" ]]; then
             export PROXY_REWRITE_RULE=""
         fi
 
-        CURRENT_LOCATION_BLOCK=$(render_template_string 'KEY PROXY_LOCATION_PATH PROXY_UPSTREAM_HOST PROXY_UPSTREAM_PORT PROXY_UPSTREAM_PROTOCOL PROXY_REWRITE_RULE DOCKER_SERVICE_ABS_PATH' /etc/app/config.tpl/nginx/proxy.location.tpl.nginx.conf)
+        declare KEY_LOWER=${KEY,,}
+        CURRENT_LOCATION_BLOCK=$(render_template_string 'KEY_LOWER PROXY_LOCATION_PATH PROXY_UPSTREAM_HOST PROXY_UPSTREAM_PORT PROXY_UPSTREAM_PROTOCOL PROXY_REWRITE_RULE DOCKER_SERVICE_ABS_PATH' /etc/app/config.tpl/nginx/proxy.location.tpl.nginx.conf)
         LOCATION_BLOCKS="${LOCATION_BLOCKS}${CURRENT_LOCATION_BLOCK}"
     done
 

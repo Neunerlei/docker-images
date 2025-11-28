@@ -3,8 +3,13 @@ if [ "${CONTAINER_MODE}" == "web" ]; then
   echo "[ENTRYPOINT.nginx] Configuring nginx for web mode";
 
   render_template 'NGINX_CLIENT_MAX_BODY_SIZE NGINX_DOC_ROOT NODE_SERVICE_PORT' /etc/app/config.tpl/nginx/service.snippet.tpl.nginx.conf /etc/nginx/snippets/service.nginx.conf
+  render_template_dir 'DOCKER_PROJECT_HOST DOCKER_PROJECT_PROTOCOL DOCKER_PROJECT_PATH DOCKER_SERVICE_PROTOCOL DOCKER_SERVICE_PATH DOCKER_SERVICE_ABS_PATH NGINX_DOC_ROOT' \
+    /etc/nginx/snippets/before.d \
+    /etc/nginx/snippets/after.d \
+    /etc/nginx/snippets/before.https.d \
+    /etc/nginx/snippets/after.https.d
 
-  if [ "${DOCKER_PROJECT_PROTOCOL}" == "https" ]; then
+  if [ "${DOCKER_SERVICE_PROTOCOL}" == "https" ]; then
     echo "[ENTRYPOINT.nginx] Configuring for HTTPS.";
 
     LEGACY_NGINX_CERT_PATH="/var/www/certs/cert.pem"

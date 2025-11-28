@@ -3,6 +3,9 @@ set -e
 
 echo "[ENTRYPOINT] Starting PHP bootstrapping process...";
 
+ENTRYPOINT_DIR="$(dirname $(realpath "${BASH_SOURCE[0]}"))/entrypoint"
+source "${ENTRYPOINT_DIR}/util/utils.sh"
+
 # Configurable default values
 DEFAULT_NGINX_DOC_ROOT="/var/www/html/public"
 DEFAULT_NGINX_CERT_PATH="/etc/ssl/certs/cert.pem"
@@ -39,6 +42,13 @@ export PHP_FPM_MIN_SPARE_SERVERS="${PHP_FPM_MIN_SPARE_SERVERS:-$DEFAULT_PHP_FPM_
 export PHP_FPM_MAX_SPARE_SERVERS="${PHP_FPM_MAX_SPARE_SERVERS:-$DEFAULT_PHP_FPM_MAX_SPARE_SERVERS}"
 export PHP_FPM_MAX_REQUESTS="${PHP_FPM_MAX_REQUESTS:-$DEFAULT_PHP_FPM_MAX_REQUESTS}"
 
+export DOCKER_PROJECT_HOST="${DOCKER_PROJECT_HOST:-localhost}"
+export DOCKER_PROJECT_PROTOCOL="${DOCKER_PROJECT_PROTOCOL:-http}"
+export DOCKER_PROJECT_PATH="${DOCKER_PROJECT_PATH:-/}"
+export DOCKER_SERVICE_PROTOCOL="${DOCKER_SERVICE_PROTOCOL:-${DOCKER_PROJECT_PROTOCOL}}"
+export DOCKER_SERVICE_PATH="${DOCKER_SERVICE_PATH:-/}"
+export DOCKER_SERVICE_ABS_PATH="$(join_paths "${DOCKER_PROJECT_PATH:-/}" "${DOCKER_SERVICE_PATH}")}"
+
 # If the PHP_WORKER_COMMAND is set, set the CONTAINER_MODE environment variable to "worker", otherwise set it to "web"
 if [ -n "${PHP_WORKER_COMMAND}" ]; then
   export CONTAINER_MODE="worker"
@@ -49,8 +59,6 @@ fi
 # Configure services
 echo "[ENTRYPOINT] Configuring services in mode: ${CONTAINER_MODE}...";
 
-ENTRYPOINT_DIR="$(dirname $(realpath "${BASH_SOURCE[0]}"))/entrypoint"
-source "${ENTRYPOINT_DIR}/util/render-template.sh"
 source "${ENTRYPOINT_DIR}/user-setup.sh"
 source "${ENTRYPOINT_DIR}/php.sh"
 source "${ENTRYPOINT_DIR}/nginx.sh"

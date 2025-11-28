@@ -53,15 +53,18 @@ This image is configured almost entirely through environment variables. This all
 | `CONTAINER_MODE`                  | Read-only. Automatically set to `web` or `worker`.                                                                  | `web`                     |
 | `MAX_UPLOAD_SIZE`                 | A convenient variable to set NGINX, `upload_max_filesize`, and `post_max_size` all at once.                         | `100M`                    |
 | `APP_ENV`                         | Usage optional, can be used by your application to determine the environment. Suggested: `prod`, `dev`, `stage`     | `prod`                    |
-| **PROJECT**                       |                                                                                                                     |                           |
-| `DOCKER_PROJECT_HOST`             | The hostname your application (for the application URL generation, etc.).                                           | `localhost`               |
-| `DOCKER_PROJECT_PATH`             | The web root when accessing the pages. For example, if your app is at `http://example.com/app`, set this to `/app`. | `/`                       |
-| `DOCKER_PROJECT_PROTOCOL`         | Can be either `http` or `https`, to determine how nginx should listen for connections.                              | `"http"`                  |
+| **Project**                       |                                                                                                                     |                           |
+| `DOCKER_PROJECT_HOST`        | The hostname for your application (not actively used by the image but available for your app).                                                                                              | `localhost`                         |
+| `DOCKER_PROJECT_PATH`        | The web root (not actively used by the image but available for your app).                                                                                                                   | `/`                                 |
+| `DOCKER_PROJECT_PROTOCOL`    | Can be `http` or `https`. Determines if NGINX should listen for HTTP or HTTPS.                                                                                                              | `http`                              |
+| `DOCKER_SERVICE_PROTOCOL`    | When running behind a proxy, your service might run on a different protocol than the public one. If omitted, it defaults to the value of `DOCKER_PROJECT_PROTOCOL`.                         | (matches `DOCKER_PROJECT_PROTOCOL`) |
+| `DOCKER_SERVICE_PATH`        | When running behind a proxy, the `DOCKER_PROJECT_PATH` is expected to be the public path of the proxy. Your service might run on a "sub-path" of that path. If omitted, it defaults to `/`. | `/`                                 |
+| `DOCKER_SERVICE_ABS_PATH`    | This combines `DOCKER_PROJECT_PATH` and `DOCKER_SERVICE_PATH` into an absolute path.                                                                                                        | (derived value)                     |
 | **NGINX**                         |                                                                                                                     |                           |
 | `NGINX_DOC_ROOT`                  | The document root NGINX should use.                                                                                 | `/var/www/html/public`    |
 | `NGINX_CLIENT_MAX_BODY_SIZE`      | Overrides `client_max_body_size` in NGINX.                                                                          | Matches `MAX_UPLOAD_SIZE` |
-| `NGINX_KEY_PATH`                  | Path to the SSL key file (only used if `DOCKER_PROJECT_PROTOCOL="https"`).                                          | `/etc/ssl/certs/key.pem`  |
-| `NGINX_CERT_PATH`                 | Path to the SSL certificate file (only used if `DOCKER_PROJECT_PROTOCOL="https"`).                                  | `/etc/ssl/certs/cert.pem` |
+| `NGINX_CERT_PATH`            | Path to the SSL certificate file (used if `DOCKER_PROJECT_PROTOCOL="https"`).                                                                                                               | `/etc/ssl/certs/cert.pem`           |
+| `NGINX_KEY_PATH`             | Path to the SSL key file (used if `DOCKER_PROJECT_PROTOCOL="https"`).                                                                                                                       | `/etc/ssl/certs/key.pem`            |
 | **PHP**                           |                                                                                                                     |                           |
 | `PHP_UPLOAD_MAX_FILESIZE`         | Overrides PHP's `upload_max_filesize` directly.                                                                     | Matches `MAX_UPLOAD_SIZE` |
 | `PHP_POST_MAX_SIZE`               | Overrides PHP's `post_max_size` directly.                                                                           | Matches `MAX_UPLOAD_SIZE` |
@@ -79,6 +82,73 @@ This image is configured almost entirely through environment variables. This all
 | `PHP_FPM_MAX_SPARE_SERVERS`       | `pm.max_spare_servers`                                                                                              | `4`                       |
 | `PHP_FPM_MAX_REQUESTS`            | `pm.max_requests`                                                                                                   | `500`                     |
 
+### Path Composition: `PROJECT_PATH` + `SERVICE_PATH`
+
+When running multiple services behind a single reverse proxy, you need a way to manage URL paths. This image handles this by composing the final public URL path from two separate variables. A reverse proxy sits between your users and your services, directing traffic to the right place based on the URL path.
+
+* `DOCKER_PROJECT_PATH`: The **base path** for the entire group of related services. If your whole application is served from `https://example.com/myapp/`, then this value would be `/myapp/`.
+* `DOCKER_SERVICE_PATH`: The unique **sub-path** for a specific service within that project. For an API service, this might be `/api/`.
+* `DOCKER_SERVICE_ABS_PATH`: This read-only variable is automatically created by combining the two: `DOCKER_PROJECT_PATH` + `DOCKER_SERVICE_PATH`. Your application can use this to reliably generate correct absolute URLs.
+
+Your reverse proxy uses `DOCKER_SERVICE_PATH` for routing, while your application uses `DOCKER_SERVICE_ABS_PATH` for its internal logic.
+
+---
+
+#### Scenario 1: A Single App on a Domain Root
+
+Your app runs at the root of a domain. This is the simplest case.
+
+* **Public URL:** `https://my-app.com/`
+* **Environment:**
+    * `DOCKER_PROJECT_PATH: /`
+    * `DOCKER_SERVICE_PATH: /` (or unset, as it defaults to `/`)
+* **Resulting Path:**
+    * `DOCKER_SERVICE_ABS_PATH` will be `/`.
+
+---
+
+#### Scenario 2: Frontend and Backend on the Same Domain
+
+You have a frontend service at the root and a backend API service under `/api/`. A reverse proxy routes traffic.
+
+* **Public URLs:**
+    * Frontend: `https://my-app.com/`
+    * Backend: `https://my-app.com/api/`
+
+**Frontend Service Configuration:**
+
+* `DOCKER_PROJECT_PATH: /`
+* `DOCKER_SERVICE_PATH: /`
+* **Resulting Path:** `DOCKER_SERVICE_ABS_PATH` is `/`.
+
+**Backend Service Configuration:**
+
+* `DOCKER_PROJECT_PATH: /`
+* `DOCKER_SERVICE_PATH: /api/`
+* **Resulting Path:** `DOCKER_SERVICE_ABS_PATH` is `/api/`. The backend can now correctly generate links like `/api/users/123`.
+
+---
+
+#### Scenario 3: An Entire Project Deployed on a Sub-Path
+
+Your entire project, including a frontend and backend, must live under a specific path on a shared server.
+
+* **Public URLs:**
+    * Frontend: `https://shared.server.com/project-alpha/`
+    * Backend: `https://shared.server.com/project-alpha/api/`
+
+**Frontend Service Configuration:**
+
+* `DOCKER_PROJECT_PATH: /project-alpha/`
+* `DOCKER_SERVICE_PATH: /`
+* **Resulting Path:** `DOCKER_SERVICE_ABS_PATH` is `/project-alpha/`.
+
+**Backend Service Configuration:**
+
+* `DOCKER_PROJECT_PATH: /project-alpha/`
+* `DOCKER_SERVICE_PATH: /api/`
+* **Resulting Path:** `DOCKER_SERVICE_ABS_PATH` is `/project-alpha/api/`.
+
 ## Web Mode In-Depth
 
 In the default `web` mode, the entrypoint script dynamically generates the NGINX configuration to act as a reverse proxy for your PHP application.
@@ -94,6 +164,45 @@ This setup is great for local development with tools like `mkcert` or for produc
 
 > For a more automated approach to SSL, especially in production with Let's Encrypt certificates, you might consider a dedicated reverse proxy gateway like [linuxserver.io/swag](https://docs.linuxserver.io/images/docker-swag/) in front of this container (running in plain HTTP mode). Another good alternative is [nginx-proxy](https://github.com/nginx-proxy/nginx-proxy) with the [acme-companion](https://github.com/nginx-proxy/acme-companion).
 > This allows you to centralize SSL management and offload that responsibility from your application containers.
+
+#### SSL Termination using a proxy
+
+When your service is running behind a reverse proxy [e.g. neunerlei/nginx](nginx.md), you might want to terminate the SSL connection at the proxy level. In this setup, your reverse proxy is exposed to the internet and handles all the complex and CPU-intensive work of HTTPS encryption and decryption. Once it receives a secure request, it "terminates" the SSL and forwards a plain, unencrypted HTTP request to the appropriate internal service.
+
+This is beneficial because:
+
+* **Centralized Security:** You only need to manage TLS certificates in one place (the proxy), not in every single application container.
+* **Simplicity:** Your application containers don't need to be configured for HTTPS, simplifying their setup and code.
+
+----
+
+##### Example: A Secure Application with SSL Termination
+
+You're running a single application that must be accessed securely over HTTPS. Your reverse proxy will handle the security.
+
+* **Public URL:** `https://my-secure-app.com/`
+* **Request Flow:**
+    1. User's browser connects to `https://my-secure-app.com/`.
+    2. The reverse proxy receives the HTTPS request on port 443 and terminates the TLS connection.
+    3. The proxy forwards a plain HTTP request to the internal `app` service (e.g., `http://app`).
+
+* **Configuration for the `app` service:**
+  ```yaml
+  environment:
+    # --- Public-Facing Configuration ---
+    DOCKER_PROJECT_HOST: 'my-secure-app.com'
+    DOCKER_PROJECT_PROTOCOL: 'https' # The user connects via HTTPS
+
+    # --- Service-Specific Configuration ---
+    DOCKER_SERVICE_PROTOCOL: 'http'  # But the proxy talks to us via plain HTTP
+  ```
+
+* **Result:**
+    * Your main proxy listens for `https` traffic.
+    * Your `app` service only needs to run a standard `http` server on its internal port.
+    * The automatically derived `DOCKER_SERVICE_ABS_PATH` is `/`, and your application code can still be made aware that the public connection is secure by checking the `X-Forwarded-Proto` header, which proxies typically add.
+
+If you were to omit `DOCKER_SERVICE_PROTOCOL`, it would default to the value of `DOCKER_PROJECT_PROTOCOL` (`https` in this case), and your internal service would be expected to handle HTTPS traffic directly. By setting it explicitly to `http`, you enable the SSL Termination pattern.
 
 ### Customizing NGINX with Snippets
 
@@ -115,7 +224,7 @@ Any `.conf` file you mount into these directories will be included in the `serve
    ```yaml
    services:
      app:
-       image: neunerlei/php-nginx:8.5
+       image: neunerlei/php-nginx:latest
        volumes:
          - ./your-code:/var/www/html
          # Mount the custom snippet
@@ -149,6 +258,35 @@ The order of the hooks is as follows:
 > Feel free to name your certificate and key files anything you like; just make sure to adjust either the mount paths or `NGINX_KEY_PATH` and `NGINX_CERT_PATH` environment variables accordingly.
 >
 > For backward compatibility, if the specified certificate or key files are not found, it will also look at `/var/www/certs/cert.pem` and `/var/www/certs/key.pem` locations respectively; however a warning will be logged.
+
+#### Variables in nginx.conf
+
+To avoid configuration duplication in your nginx snippets, you can use the following variables that are replaced at runtime:
+
+- DOCKER_PROJECT_HOST
+- DOCKER_PROJECT_PROTOCOL
+- DOCKER_PROJECT_PATH
+- DOCKER_SERVICE_PROTOCOL
+- DOCKER_SERVICE_PATH
+- DOCKER_SERVICE_ABS_PATH
+- NGINX_DOC_ROOT
+
+They will be replaced with their respective values when the nginx configuration is generated.
+Use them like this:
+
+```nginx
+location ^~ ${DOCKER_SERVICE_ABS_PATH}custom/ {
+    root ${NGINX_DOC_ROOT};
+    index index.html index.htm;
+}
+```
+
+The replacement will happen in all files that are placed **directly** (not in subdirectories) in:
+
+- /etc/nginx/snippets/before.d/
+- /etc/nginx/snippets/after.d/
+- /etc/nginx/snippets/before.https.d/
+- /etc/nginx/snippets/after.https.d/
 
 ## Worker Mode In-Depth
 

@@ -3,6 +3,9 @@ set -e
 
 echo "[ENTRYPOINT] Starting Node.js bootstrapping process...";
 
+ENTRYPOINT_DIR="$(dirname $(realpath "${BASH_SOURCE[0]}"))/entrypoint"
+source "${ENTRYPOINT_DIR}/util/utils.sh"
+
 # Configurable default values
 DEFAULT_NGINX_DOC_ROOT="/var/www/html/public"
 DEFAULT_NGINX_CERT_PATH="/etc/ssl/certs/cert.pem"
@@ -29,6 +32,13 @@ export NGINX_KEY_PATH="${NGINX_KEY_PATH:-$DEFAULT_NGINX_KEY_PATH}"
 export NODE_SERVICE_PORT="${NODE_SERVICE_PORT:-$DEFAULT_NODE_SERVICE_PORT}"
 export NODE_WEB_COMMAND="${NODE_WEB_COMMAND:-$DEFAULT_NODE_WEB_COMMAND}"
 export NODE_WORKER_PROCESS_COUNT="${NODE_WORKER_PROCESS_COUNT:-$DEFAULT_NODE_WORKER_PROCESS_COUNT}"
+
+export DOCKER_PROJECT_HOST="${DOCKER_PROJECT_HOST:-localhost}"
+export DOCKER_PROJECT_PROTOCOL="${DOCKER_PROJECT_PROTOCOL:-http}"
+export DOCKER_PROJECT_PATH="${DOCKER_PROJECT_PATH:-/}"
+export DOCKER_SERVICE_PROTOCOL="${DOCKER_SERVICE_PROTOCOL:-${DOCKER_PROJECT_PROTOCOL}}"
+export DOCKER_SERVICE_PATH="${DOCKER_SERVICE_PATH:-/}"
+export DOCKER_SERVICE_ABS_PATH="$(join_paths "${DOCKER_PROJECT_PATH:-/}" "${DOCKER_SERVICE_PATH}")}"
 
 # Inherit the NODE_ENV environment variable from APP_ENV if the latter is set, the former is not set
 if [ -z "${NODE_ENV}" ] && [ -n "${APP_ENV}" ]; then
@@ -60,8 +70,6 @@ fi
 # Configure services
 echo "[ENTRYPOINT] Configuring services in mode: ${CONTAINER_MODE}...";
 
-ENTRYPOINT_DIR="$(dirname $(realpath "${BASH_SOURCE[0]}"))/entrypoint"
-source "${ENTRYPOINT_DIR}/util/render-template.sh"
 source "${ENTRYPOINT_DIR}/user-setup.sh"
 source "${ENTRYPOINT_DIR}/nginx.sh"
 source "${ENTRYPOINT_DIR}/supervisor.sh"

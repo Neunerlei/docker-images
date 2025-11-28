@@ -5,6 +5,12 @@ echo "[ENTRYPOINT.nginx] Starting Nginx configuration process...";
 mkdir -p /etc/nginx/sites-available
 chown nginx:nginx /etc/nginx/sites-available
 
+render_template_dir 'DOCKER_PROJECT_HOST DOCKER_PROJECT_PROTOCOL DOCKER_PROJECT_PATH DOCKER_SERVICE_PROTOCOL DOCKER_SERVICE_PATH DOCKER_SERVICE_ABS_PATH NGINX_DOC_ROOT' \
+  /etc/nginx/snippets/before.d \
+  /etc/nginx/snippets/after.d \
+  /etc/nginx/snippets/before.https.d \
+  /etc/nginx/snippets/after.https.d
+
 if [ "${DOCKER_PROJECT_PROTOCOL}" == "https" ]; then
   echo "[ENTRYPOINT.nginx] Configuring for HTTPS.";
 

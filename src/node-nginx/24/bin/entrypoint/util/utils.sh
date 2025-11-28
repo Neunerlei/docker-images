@@ -58,3 +58,56 @@ render_template_string() {
         printf '%s\n' "$line"
     done < "$template_file"
 }
+
+# Replaces the given list of placeholders in all files found in the specified directories.
+# The placeholders in the files should look like "${VAR_NAME}".
+# The variable names to substitute should be provided as a space-separated string.
+# The values are taken from the current environment, with the same name as the variable names.
+# Files are modified in-place.
+#
+# Usage:
+#   render_template_dir 'VAR_NAME ANOTHER_VAR_NAME' /path/to/dir1 /path/to/dir2
+#
+render_template_dir() {
+    local vars_to_substitute="$1"
+    shift  # Remove first argument, remaining are directory paths
+
+    local dir file temp_file
+
+    for dir in "$@"; do
+        if [ ! -d "$dir" ]; then
+            echo "Directory not found: $dir" >&2
+            continue
+        fi
+
+        for file in "$dir"/*; do
+            [ ! -f "$file" ] && continue
+
+            temp_file=$(mktemp) || {
+                echo "Failed to create temp file for: $file" >&2
+                continue
+            }
+
+            if render_template_string "$vars_to_substitute" "$file" > "$temp_file"; then
+                mv "$temp_file" "$file"
+            else
+                echo "Failed to render template: $file" >&2
+                rm -f "$temp_file"
+            fi
+        done
+    done
+}
+
+# Joins multiple path segments into a single normalized path.
+# It ensures that there are no duplicate slashes, and that the path starts with a single slash.
+# Trailing slashes are removed unless the path is just "/".
+# Usage:
+#   joined_path=$(join_paths "/path/to" "some//dir/" "/file.txt")
+#
+join_paths() {
+    local path
+    path=$( (IFS=/; echo "$*") | tr -s / )
+    [[ -n "$path" && "${path:0:1}" != "/" ]] && path="/${path}"
+    [[ "${#path}" -gt 1 && "${path: -1}" == "/" ]] && path="${path%/}"
+    echo "${path:-/}"
+}

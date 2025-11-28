@@ -1,13 +1,6 @@
 if [[ "$CONTAINER_MODE" == "proxy" ]]; then
     echo "[ENTRYPOINT.proxy] Configuring Nginx in proxy mode..."
-
-    # Read the global project path, ensuring it's not just "/" and cleaning trailing slashes
-    PROJECT_BASE_PATH=$(echo "${DOCKER_PROJECT_PATH:-/}" | sed 's:/*$::')
-    if [ "$PROJECT_BASE_PATH" == "/" ]; then
-        PROJECT_BASE_PATH=""
-    else
-      echo "[ENTRYPOINT.proxy] Using project base path: '${PROJECT_BASE_PATH}'"
-    fi
+    echo "[ENTRYPOINT.proxy] Using project base path: '${DOCKER_SERVICE_ABS_PATH}'"
 
     LOCATION_BLOCKS=""
     # `compgen -A variable` lists all variables. We grep for our pattern.
@@ -21,26 +14,32 @@ if [[ "$CONTAINER_MODE" == "proxy" ]]; then
         declare PROXY_PATH_VAR="PROXY_${KEY}_PATH"
         declare PROXY_DEST_VAR="PROXY_${KEY}_DEST"
         declare PROXY_PORT_VAR="PROXY_${KEY}_PORT"
+        declare PROXY_HTTPS_PORT_VAR="PROXY_${KEY}_HTTPS_PORT"
         declare PROXY_CONTAINER_VAR="PROXY_${KEY}_CONTAINER"
         declare PROXY_PROTOCOL_VAR="PROXY_${KEY}_PROTOCOL"
+        declare PROXY_LOCATION_PATH="$(join_paths "${DOCKER_SERVICE_ABS_PATH}" "${!PROXY_PATH_VAR:-/}")"
 
-        # Get the relative path for this service
-        RELATIVE_SERVICE_PATH="${!PROXY_PATH_VAR:-/}"
-        # Combine the global project path and the relative service path
-        export PROXY_LOCATION_PATH="${PROJECT_BASE_PATH}${RELATIVE_SERVICE_PATH}"
-        # Clean up any double slashes that might result, except for regex paths starting with ~
-        if [[ ! "$PROXY_LOCATION_PATH" =~ ^\~ ]]; then
-          PROXY_LOCATION_PATH=$(echo "$PROXY_LOCATION_PATH" | sed 's://:/:g')
+        # Determine either port by protocol, or protocol by port
+        # If PROXY_PROTOCOL_VAR is not set, assume HTTP
+        # If PROXY_HTTPS_PORT_VAR is set, assume HTTPS
+        DEFAULT_PROTOCOL="http"
+        export PROXY_UPSTREAM_PROTOCOL="${!PROXY_PROTOCOL_VAR:-$DEFAULT_PROTOCOL}"
+
+        # Determine default port based on protocol
+        if [ "${PROXY_UPSTREAM_PROTOCOL}" == "https" ]; then
+            export PROXY_UPSTREAM_PORT="${!PROXY_HTTPS_PORT_VAR:-443}"
+        else
+            export PROXY_UPSTREAM_PORT="${!PROXY_PORT_VAR:-80}"
         fi
 
         export PROXY_UPSTREAM_HOST="${!PROXY_CONTAINER_VAR}"
-        export PROXY_UPSTREAM_PORT="${!PROXY_PORT_VAR:-80}"
-        export PROXY_PROTOCOL="${!PROXY_PROTOCOL_VAR:-http}"
+        export PROXY_UPSTREAM_PORT="${!PROXY_PORT_VAR:-${PROXY_UPSTREAM_PORT}}"
+        export PROXY_UPSTREAM_PROTOCOL="${!PROXY_PROTOCOL_VAR:-$DEFAULT_PROTOCOL}"
 
         echo "   - Location path: ${PROXY_LOCATION_PATH}"
         echo "   - Upstream host: ${PROXY_UPSTREAM_HOST}"
         echo "   - Upstream port: ${PROXY_UPSTREAM_PORT}"
-        echo "   - Upstream protocol: ${PROXY_PROTOCOL}"
+        echo "   - Upstream protocol: ${PROXY_UPSTREAM_PROTOCOL}"
 
         # Set VIRTUAL_DEST if the variable exists and is not empty
         PROXY_DEST_VALUE="${!PROXY_DEST_VAR}"
@@ -51,7 +50,7 @@ if [[ "$CONTAINER_MODE" == "proxy" ]]; then
             export PROXY_REWRITE_RULE=""
         fi
 
-        CURRENT_LOCATION_BLOCK=$(render_template_string 'KEY PROXY_LOCATION_PATH PROXY_UPSTREAM_HOST PROXY_UPSTREAM_PORT PROXY_PROTOCOL PROXY_REWRITE_RULE' /etc/app/config.tpl/nginx/proxy.location.tpl.nginx.conf)
+        CURRENT_LOCATION_BLOCK=$(render_template_string 'KEY PROXY_LOCATION_PATH PROXY_UPSTREAM_HOST PROXY_UPSTREAM_PORT PROXY_UPSTREAM_PROTOCOL PROXY_REWRITE_RULE DOCKER_SERVICE_ABS_PATH' /etc/app/config.tpl/nginx/proxy.location.tpl.nginx.conf)
         LOCATION_BLOCKS="${LOCATION_BLOCKS}${CURRENT_LOCATION_BLOCK}"
     done
 

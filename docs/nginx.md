@@ -253,13 +253,13 @@ The order of the hooks is as follows:
 
 To avoid configuration duplication in your nginx snippets, you can use the following variables that are replaced at runtime:
 
-- DOCKER_PROJECT_HOST
-- DOCKER_PROJECT_PROTOCOL
-- DOCKER_PROJECT_PATH
-- DOCKER_SERVICE_PROTOCOL
-- DOCKER_SERVICE_PATH
-- DOCKER_SERVICE_ABS_PATH
-- NGINX_DOC_ROOT
+- `DOCKER_PROJECT_HOST`
+- `DOCKER_PROJECT_PROTOCOL`
+- `DOCKER_PROJECT_PATH`
+- `DOCKER_SERVICE_PROTOCOL`
+- `DOCKER_SERVICE_PATH`
+- `DOCKER_SERVICE_ABS_PATH`
+- `NGINX_DOC_ROOT`
 
 They will be replaced with their respective values when the nginx configuration is generated.
 Use them like this:
@@ -273,10 +273,11 @@ location ^~ ${DOCKER_SERVICE_ABS_PATH}custom/ {
 
 The replacement will happen in all files that are placed **directly** (not in subdirectories) in:
 
-- /etc/nginx/snippets/before.d/
-- /etc/nginx/snippets/after.d/
-- /etc/nginx/snippets/before.https.d/
-- /etc/nginx/snippets/after.https.d/
+- `/etc/nginx/snippets/before.d/`
+- `/etc/nginx/snippets/after.d/`
+- `/etc/nginx/snippets/before.https.d/`
+- `/etc/nginx/snippets/after.https.d/`
+- `/etc/nginx/snippets/proxy.d/`
 
 ## Advanced Customization
 

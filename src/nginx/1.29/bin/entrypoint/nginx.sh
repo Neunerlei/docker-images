@@ -9,7 +9,8 @@ render_template_dir 'DOCKER_PROJECT_HOST DOCKER_PROJECT_PROTOCOL DOCKER_PROJECT_
   /etc/nginx/snippets/before.d \
   /etc/nginx/snippets/after.d \
   /etc/nginx/snippets/before.https.d \
-  /etc/nginx/snippets/after.https.d
+  /etc/nginx/snippets/after.https.d \
+  /etc/nginx/snippets/proxy.d
 
 if [ "${DOCKER_PROJECT_PROTOCOL}" == "https" ]; then
   echo "[ENTRYPOINT.nginx] Configuring for HTTPS.";

@@ -26,7 +26,7 @@ export DOCKER_PROJECT_PROTOCOL="${DOCKER_PROJECT_PROTOCOL:-http}"
 export DOCKER_PROJECT_PATH="${DOCKER_PROJECT_PATH:-/}"
 export DOCKER_SERVICE_PROTOCOL="${DOCKER_SERVICE_PROTOCOL:-${DOCKER_PROJECT_PROTOCOL}}"
 export DOCKER_SERVICE_PATH="${DOCKER_SERVICE_PATH:-/}"
-export DOCKER_SERVICE_ABS_PATH="$(join_paths "${DOCKER_PROJECT_PATH:-/}" "${DOCKER_SERVICE_PATH}")}"
+export DOCKER_SERVICE_ABS_PATH="$(join_paths "${DOCKER_PROJECT_PATH:-/}" "${DOCKER_SERVICE_PATH}")"
 
 # If there are any PROXY_*_CONTAINER environment variables, set the container mode to "proxy"
 if env | grep -q '^PROXY_.*_CONTAINER='; then

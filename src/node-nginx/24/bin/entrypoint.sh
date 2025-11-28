@@ -38,7 +38,7 @@ export DOCKER_PROJECT_PROTOCOL="${DOCKER_PROJECT_PROTOCOL:-http}"
 export DOCKER_PROJECT_PATH="${DOCKER_PROJECT_PATH:-/}"
 export DOCKER_SERVICE_PROTOCOL="${DOCKER_SERVICE_PROTOCOL:-${DOCKER_PROJECT_PROTOCOL}}"
 export DOCKER_SERVICE_PATH="${DOCKER_SERVICE_PATH:-/}"
-export DOCKER_SERVICE_ABS_PATH="$(join_paths "${DOCKER_PROJECT_PATH:-/}" "${DOCKER_SERVICE_PATH}")}"
+export DOCKER_SERVICE_ABS_PATH="$(join_paths "${DOCKER_PROJECT_PATH:-/}" "${DOCKER_SERVICE_PATH}")"
 
 # Inherit the NODE_ENV environment variable from APP_ENV if the latter is set, the former is not set
 if [ -z "${NODE_ENV}" ] && [ -n "${APP_ENV}" ]; then

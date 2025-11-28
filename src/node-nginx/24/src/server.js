@@ -12,7 +12,7 @@ if(process.env.NODE_ENV !== 'production') {
     envVars = `
 <div class="environment-variables">
     <h2>Environment Variables</h2>
-    <ul>${Object.keys(process.env).map(key => `<li><strong>${key}:</strong> ${process.env[key]}</li>`).join('')}</ul>
+    <ul>${Object.keys(process.env).sort().map(key => `<li><strong>${key}:</strong> ${process.env[key]}</li>`).join('')}</ul>
 </div>`;
 }
 

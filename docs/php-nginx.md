@@ -45,42 +45,62 @@ The "brain" of this image is its entrypoint script. When the container starts, t
 
 This image is configured almost entirely through environment variables. This allows you to use the same image for different purposes (web vs. worker, dev vs. prod) without rebuilding it.
 
-| Variable                          | Description                                                                                                         | Default Value             |
-|-----------------------------------|---------------------------------------------------------------------------------------------------------------------|---------------------------|
-| **General**                       |                                                                                                                     |                           |
-| `PUID`                            | The user ID to run PHP-FPM and NGINX as. Useful for matching host file permissions.                                 | `33`                      |
-| `PGID`                            | The group ID to run PHP-FPM and NGINX as. Useful for matching host file permissions.                                | `33`                      |
-| `CONTAINER_MODE`                  | Read-only. Automatically set to `web` or `worker`.                                                                  | `web`                     |
-| `MAX_UPLOAD_SIZE`                 | A convenient variable to set NGINX, `upload_max_filesize`, and `post_max_size` all at once.                         | `100M`                    |
-| `APP_ENV`                         | Usage optional, can be used by your application to determine the environment. Suggested: `prod`, `dev`, `stage`     | `prod`                    |
-| **Project**                       |                                                                                                                     |                           |
-| `DOCKER_PROJECT_HOST`        | The hostname for your application (not actively used by the image but available for your app).                                                                                              | `localhost`                         |
-| `DOCKER_PROJECT_PATH`        | The web root (not actively used by the image but available for your app).                                                                                                                   | `/`                                 |
-| `DOCKER_PROJECT_PROTOCOL`    | Can be `http` or `https`. Determines if NGINX should listen for HTTP or HTTPS.                                                                                                              | `http`                              |
-| `DOCKER_SERVICE_PROTOCOL`    | When running behind a proxy, your service might run on a different protocol than the public one. If omitted, it defaults to the value of `DOCKER_PROJECT_PROTOCOL`.                         | (matches `DOCKER_PROJECT_PROTOCOL`) |
-| `DOCKER_SERVICE_PATH`        | When running behind a proxy, the `DOCKER_PROJECT_PATH` is expected to be the public path of the proxy. Your service might run on a "sub-path" of that path. If omitted, it defaults to `/`. | `/`                                 |
-| `DOCKER_SERVICE_ABS_PATH`    | This combines `DOCKER_PROJECT_PATH` and `DOCKER_SERVICE_PATH` into an absolute path.                                                                                                        | (derived value)                     |
-| **NGINX**                         |                                                                                                                     |                           |
-| `NGINX_DOC_ROOT`                  | The document root NGINX should use.                                                                                 | `/var/www/html/public`    |
-| `NGINX_CLIENT_MAX_BODY_SIZE`      | Overrides `client_max_body_size` in NGINX.                                                                          | Matches `MAX_UPLOAD_SIZE` |
-| `NGINX_CERT_PATH`            | Path to the SSL certificate file (used if `DOCKER_PROJECT_PROTOCOL="https"`).                                                                                                               | `/etc/ssl/certs/cert.pem`           |
-| `NGINX_KEY_PATH`             | Path to the SSL key file (used if `DOCKER_PROJECT_PROTOCOL="https"`).                                                                                                                       | `/etc/ssl/certs/key.pem`            |
-| **PHP**                           |                                                                                                                     |                           |
-| `PHP_UPLOAD_MAX_FILESIZE`         | Overrides PHP's `upload_max_filesize` directly.                                                                     | Matches `MAX_UPLOAD_SIZE` |
-| `PHP_POST_MAX_SIZE`               | Overrides PHP's `post_max_size` directly.                                                                           | Matches `MAX_UPLOAD_SIZE` |
-| `PHP_MEMORY_LIMIT`                | Overrides PHP's `memory_limit`.                                                                                     | `1024M`                   |
-| `PHP_TIMEZONE`                    | Sets the default timezone for `date()` functions.                                                                   | `UTC`                     |
-| `PHP_PROD_DISPLAY_ERRORS`         | Overrides `display_errors` in `php.prod.ini`.                                                                       | `Off`                     |
-| `PHP_PROD_DISPLAY_STARTUP_ERRORS` | Overrides `display_startup_errors` in `php.prod.ini`.                                                               | `Off`                     |
-| **PHP Worker Mode**               |                                                                                                                     |                           |
-| `PHP_WORKER_COMMAND`              | The command to execute in worker mode. **Setting this enables worker mode.**                                        | (unset)                   |
-| `PHP_WORKER_PROCESS_COUNT`        | The number of worker processes to run (`numprocs` in Supervisor).                                                   | `1`                       |
-| **PHP-FPM**                       |                                                                                                                     |                           |
-| `PHP_FPM_MAX_CHILDREN`            | `pm.max_children`                                                                                                   | `20`                      |
-| `PHP_FPM_START_SERVERS`           | `pm.start_servers`                                                                                                  | `2`                       |
-| `PHP_FPM_MIN_SPARE_SERVERS`       | `pm.min_spare_servers`                                                                                              | `1`                       |
-| `PHP_FPM_MAX_SPARE_SERVERS`       | `pm.max_spare_servers`                                                                                              | `4`                       |
-| `PHP_FPM_MAX_REQUESTS`            | `pm.max_requests`                                                                                                   | `500`                     |
+| Variable                          | Description                                                                                                      | Default Value              |
+|-----------------------------------|------------------------------------------------------------------------------------------------------------------|----------------------------|
+| **General**                       |                                                                                                                  |                            |
+| `PUID`                            | The user ID to run PHP-FPM and NGINX as. Useful for matching host file permissions.                              | `33`                       |
+| `PGID`                            | The group ID to run PHP-FPM and NGINX as. Useful for matching host file permissions.                             | `33`                       |
+| `CONTAINER_MODE`                  | Read-only. Automatically set to `web` or `worker`.                                                               | `web`                      |
+| `MAX_UPLOAD_SIZE`                 | A convenient variable to set NGINX, `upload_max_filesize`, and `post_max_size` all at once.                      | `100M`                     |
+| `ENVIRONMENT`                     | Sets the overall environment. `dev`/`development` is non-production; all other values are considered production. | `production`               |
+| `APP_ENV`                         | The semi-standard PHP framework environment variable.   Defaults to the value of `ENVIRONMENT`.                  | (derived)                  |
+| **Project**                       |                                                                                                                  |                            |
+| `DOCKER_PROJECT_HOST`             | The public hostname for your application (available for your app).                                               | `localhost`                |
+| `DOCKER_PROJECT_PATH`             | The public root path of the entire project.                                                                      | `/`                        |
+| `DOCKER_PROJECT_PROTOCOL`         | The public protocol. `http` or `https`. Determines NGINX's listening mode.                                       | `http`                     |
+| `DOCKER_SERVICE_PROTOCOL`         | The protocol your service uses internally. Defaults to `DOCKER_PROJECT_PROTOCOL`.                                | (derived)                  |
+| `DOCKER_SERVICE_PATH`             | The sub-path for this specific service within the project.                                                       | `/`                        |
+| `DOCKER_SERVICE_ABS_PATH`         | Read-only. The absolute path for this service (`PROJECT_PATH` + `SERVICE_PATH`).                                 | (derived)                  |
+| **NGINX**                         |                                                                                                                  |                            |
+| `NGINX_DOC_ROOT`                  | The document root NGINX should use.                                                                              | `/var/www/html/public`     |
+| `NGINX_CLIENT_MAX_BODY_SIZE`      | Overrides `client_max_body_size` in NGINX.                                                                       | Matches `MAX_UPLOAD_SIZE`  |
+| `NGINX_CERT_PATH`                 | Path to the SSL certificate file (used if `DOCKER_PROJECT_PROTOCOL="https"`).                                    | `/etc/ssl/certs/cert.pem`  |
+| `NGINX_KEY_PATH`                  | Path to the SSL key file (used if `DOCKER_PROJECT_PROTOCOL="https"`).                                            | `/etc/ssl/certs/key.pem`   |
+| **PHP**                           |                                                                                                                  |                            |
+| `PHP_UPLOAD_MAX_FILESIZE`         | Overrides PHP's `upload_max_filesize` directly.                                                                  | Matches `MAX_UPLOAD_SIZE`  |
+| `PHP_POST_MAX_SIZE`               | Overrides PHP's `post_max_size` directly.                                                                        | Matches `MAX_UPLOAD_SIZE`  |
+| `PHP_MEMORY_LIMIT`                | Overrides PHP's `memory_limit`.                                                                                  | `1024M`                    |
+| `PHP_TIMEZONE`                    | Sets the default timezone for `date()` functions.                                                                | `UTC`                      |
+| `PHP_PROD_DISPLAY_ERRORS`         | Overrides `display_errors` in `php.prod.ini`.                                                                    | `Off`                      |
+| `PHP_PROD_DISPLAY_STARTUP_ERRORS` | Overrides `display_startup_errors` in `php.prod.ini`.                                                            | `Off`                      |
+| **PHP Worker Mode**               |                                                                                                                  |                            |
+| `PHP_WORKER_COMMAND`              | The command to execute in worker mode. **Setting this enables worker mode.**                                     | (unset)                    |
+| `PHP_WORKER_PROCESS_COUNT`        | The number of worker processes to run (`numprocs` in Supervisor).                                                | `1`                        |
+| **PHP-FPM**                       |                                                                                                                  |                            |
+| `PHP_FPM_MAX_CHILDREN`            | `pm.max_children`                                                                                                | `20`                       |
+| `PHP_FPM_START_SERVERS`           | `pm.start_servers`                                                                                               | `2`                        |
+| `PHP_FPM_MIN_SPARE_SERVERS`       | `pm.min_spare_servers`                                                                                           | `1`                        |
+| `PHP_FPM_MAX_SPARE_SERVERS`       | `pm.max_spare_servers`                                                                                           | `4`                        |
+| `PHP_FPM_MAX_REQUESTS`            | `pm.max_requests`                                                                                                | `500`                      |
+| **Advanced/Internal**             |                                                                                                                  |                            |
+| `CONTAINER_TEMPLATE_DIR`          | The path to the container's internal template files.                                                             | `/etc/container/templates` |
+| `CONTAINER_BIN_DIR`               | The path to the container's internal binary and script files.                                                    | `/usr/bin/container`       |
+
+### ENVIRONMENT
+
+The `ENVIRONMENT` variable is shared between all my base images and is used to define the overall environment your application is running in. It can be set to either `development` (or `dev`) or `production` (or `prod`); the values in brackets will be expanded to their full forms automatically. This variable is primarily used to load the correct NGINX configuration, but it also influences other behaviors in the entrypoint script. If any other value is provided, it will be used as-is.
+
+> Please note tho, that every value other than `development` or `dev` is considered production.
+
+#### `APP_ENV` Derivation
+
+If you do not explicitly set `APP_ENV`, it will be derived from `ENVIRONMENT` as follows:
+
+* If `ENVIRONMENT` is `prod` or `production`, `APP_ENV` becomes `production`.
+* If `ENVIRONMENT` is `dev` or `development`, `APP_ENV` becomes `development`.
+* Otherwise, `APP_ENV` is set to the value of `ENVIRONMENT`.
+
+If you set `APP_ENV` directly, its value will always be respected.
 
 ### Path Composition: `PROJECT_PATH` + `SERVICE_PATH`
 
@@ -204,75 +224,19 @@ You're running a single application that must be accessed securely over HTTPS. Y
 
 If you were to omit `DOCKER_SERVICE_PROTOCOL`, it would default to the value of `DOCKER_PROJECT_PROTOCOL` (`https` in this case), and your internal service would be expected to handle HTTPS traffic directly. By setting it explicitly to `http`, you enable the SSL Termination pattern.
 
-### Customizing NGINX with Snippets
+### Customizing NGINX with Intelligent Snippets
 
-This image is designed to be extensible without being modified. The NGINX configuration includes several "hook" directories:
+This image uses a flexible system for extending the base NGINX configuration. You can add any number of custom configuration files, and the container's entrypoint script will intelligently process and include them based on their name and your environment variables.
 
-* `/etc/nginx/snippets/before.d/`
-* `/etc/nginx/snippets/after.d/`
+You can learn more about this powerful feature in [Advanced Customization](#advanced-customization-templating-and-overrides), especially in the [Adding Custom NGINX Snippets](#1-adding-custom-nginx-snippets-recommended-for-most-cases) section.
 
-Any `.conf` file you mount into these directories will be included in the `server` block. `before.d` is included before the primary `location` block and proxy configuration, while `after.d` is included at the very end of the `server` block.
+In a nutshell:
 
-**Example: Adding a custom security header**
+* Place your custom NGINX `.conf` files in a local directory.
+* Mount that directory to `/etc/container/templates/nginx/custom/` in the container.
+* The entrypoint will process these files, substituting any environment variable placeholders, and include them in the main NGINX configuration.
 
-1. Create a file, e.g., `my-headers.conf`:
-   ```nginx
-   # my-headers.conf
-   add_header X-Content-Type-Options "nosniff";
-   ```
-2. Mount this file into the `before.d` directory in your `docker-compose.yml`:
-   ```yaml
-   services:
-     app:
-       image: neunerlei/php-nginx:latest
-       volumes:
-         - ./your-code:/var/www/html
-         # Mount the custom snippet
-         - ./my-headers.conf:/etc/nginx/snippets/before.d/headers.conf
-   ```
-
-NGINX will now automatically include this header in its responses.
-
-> When you are building your own derived images, you can also COPY files into these directories.
-
-#### SSL Customization
-
-When running in HTTPS mode, two additional hook directories are available that only apply to the SSL `server` block:
-
-* `/etc/nginx/snippets/before.https.d/`
-* `/etc/nginx/snippets/after.https.d/`
-
-Any `.conf` files placed in these directories will be included in the SSL server block, allowing you to customize SSL settings further.
-In general, the SSL configuration is included AFTER the main server configuration, so you can override settings as needed. The `before.https`
-and `after.https` hooks are included before and after the SSL-specific settings, respectively.
-
-The order of the hooks is as follows:
-
-1. `/etc/nginx/snippets/before.d/`
-2. The main service configuration (root, proxy pass, etc.).
-3. `/etc/nginx/snippets/before.https.d/`
-4. SSL-specific settings (`ssl_certificate`, hardening options).
-5. `/etc/nginx/snippets/after.https.d/`
-6. `/etc/nginx/snippets/after.d/`
-
-> Feel free to name your certificate and key files anything you like; just make sure to adjust either the mount paths or `NGINX_KEY_PATH` and `NGINX_CERT_PATH` environment variables accordingly.
->
-> For backward compatibility, if the specified certificate or key files are not found, it will also look at `/var/www/certs/cert.pem` and `/var/www/certs/key.pem` locations respectively; however a warning will be logged.
-
-#### Variables in nginx.conf
-
-To avoid configuration duplication in your nginx snippets, you can use the following variables that are replaced at runtime:
-
-- `DOCKER_PROJECT_HOST`
-- `DOCKER_PROJECT_PROTOCOL`
-- `DOCKER_PROJECT_PATH`
-- `DOCKER_SERVICE_PROTOCOL`
-- `DOCKER_SERVICE_PATH`
-- `DOCKER_SERVICE_ABS_PATH`
-- `NGINX_DOC_ROOT`
-
-They will be replaced with their respective values when the nginx configuration is generated.
-Use them like this:
+Your custom snippets can add headers, redirects, or even new `location` blocks and can look like this:
 
 ```nginx
 location ^~ ${DOCKER_SERVICE_ABS_PATH}custom/ {
@@ -280,13 +244,6 @@ location ^~ ${DOCKER_SERVICE_ABS_PATH}custom/ {
     index index.html index.htm;
 }
 ```
-
-The replacement will happen in all files that are placed **directly** (not in subdirectories) in:
-
-- `/etc/nginx/snippets/before.d/`
-- `/etc/nginx/snippets/after.d/`
-- `/etc/nginx/snippets/before.https.d/`
-- `/etc/nginx/snippets/after.https.d/`
 
 ## Worker Mode In-Depth
 
@@ -320,13 +277,86 @@ services:
       - PHP_WORKER_COMMAND=while true; do php /var/www/html/my_task.php; sleep 300; done
 ```
 
-## Advanced Customization
+## Advanced Customization: Templating and Overrides
+
+This image uses a powerful templating engine that processes **all internal configuration files** on startup. This allows for deep customization of NGINX, Supervisor, and other components.
+
+### How Templating Works
+
+Every configuration file inside `/etc/container/templates/` is treated as a template. The entrypoint script will read these files, substitute placeholders with their corresponding environment variable values, and write the final config to its destination.
+
+You can use any of the environment variables listed above as placeholders in your custom files, using the syntax `${VAR_NAME}`.
+
+#### The `[[DEBUG_VARS]]` Helper
+
+To see exactly which variables are available for a template, you can add the special string `[[DEBUG_VARS]]` anywhere in a `.conf` file you are customizing. When the container starts, the template engine will detect this, print a list of all available variables and their current values to the console, and then exit. This is an invaluable tool for debugging your configurations.
+
+Example output:
+
+```
+DEBUG_VARS detected in template: '/etc/container/templates/nginx/custom/my_debug.conf'. Current variables that can be substituted:
+  - ${CONTAINER_MODE} = web
+  - ${ENVIRONMENT} = production
+  - ${NGINX_DOC_ROOT} = /var/www/html/public
+  ...
+```
+
+### Customization Methods
+
+There are four primary ways to customize the container's configuration:
+
+#### 1. Adding Custom NGINX Snippets (Recommended for most cases)
+
+This is the standard, additive approach for extending NGINX. It's perfect for adding headers, redirects, or custom `location` blocks.
+
+* **How it works:** Place your custom `.conf` files in a local directory and mount it to `/etc/container/templates/nginx/custom/`.
+* **Result:** These files are treated as snippets. After variable substitution, they are copied to `/etc/nginx/snippets/service.d/` and included by the main server block.
+
+```yaml
+# docker-compose.yml
+services:
+  app:
+    image: neunerlei/node-nginx:latest
+    volumes:
+      # Mount your custom snippets into the 'custom' directory
+      - ./my-nginx-snippets:/etc/container/templates/nginx/custom
+```
+
+**Filename Markers for Conditional Loading:**
+Snippets in this directory support special filename markers to be loaded conditionally:
+
+* `.prod.` : The snippet is loaded only if `ENVIRONMENT` is `production`.
+* `.dev.` : The snippet is loaded only if `ENVIRONMENT` is `development`.
+* `.https.` : The snippet is loaded only if `DOCKER_SERVICE_PROTOCOL` is `https`.
+
+**Examples:**
+
+* `01-security-headers.prod.conf`: Adds security headers, but only in production.
+* `10-hsts.https.prod.conf`: Adds HSTS rules, but only when the service is running HTTPS in production.
+* `20-redirects.conf`: A general-purpose file that is always loaded.
+
+#### 2. Adding Custom php.ini and php-fpm.conf Snippets
+
+You can also extend the PHP configuration by adding custom snippets for `php.ini` and `php-fpm.conf`.
+This procedure follows the same pattern as NGINX snippets, except instead of you putting your files in the `nginx/custom/` directory, you place them in: `/etc/container/templates/php/custom/`. `.ini` files will be treated as `php.ini` snippets, and `.conf` files as `php-fpm.conf` snippets.
+
+> The default fpm-pool configuration is loaded as "www.conf"
+> The default php.ini configuration is loaded as "x.php.common.ini" and "x.php.prod.ini" depending on the environment.
+> So make sure your file names do not conflict with the defaults, and reflect the naming scheme (e.g. by prefixing with z- to load them last).
+
+#### 3. Overriding Core Templates (Advanced)
+
+For maximum control, you can completely replace any of the container's default template files. This is an "all-or-nothing" approach best used for fundamentally changing a core component.
+
+* **How it works:** Identify the default template you wish to replace (e.g., `/etc/container/templates/nginx/service.root.nginx.conf`). In your project, create a file with your desired content and mount it to the *
+
+#### 4. Custom Entrypoint Hooks
 
 The entrypoint provides two script hooks for advanced customization.
 
-* `/usr/bin/app/entrypoint.user-setup.sh`: This script is executed early in the startup process. It's the ideal place to put the run-time user mapping logic for local development to solve UID/GID file permission issues. **IMPORTANT** This script is ONLY executed if the `PUID` and `PGID` environment variables are set to values different from the defaults. If you want to modify permissions unconditionally, use the `entrypoint.local.sh` hook instead.
-* `/usr/bin/app/entrypoint.local.sh`: This script is executed just before the main command. It's a general-purpose hook for any other custom setup commands you might need.
+* `/usr/bin/container/entrypoint.user-setup.sh`: This script is executed early in the startup process. It's the ideal place to put the run-time user mapping logic for local development to solve UID/GID file permission issues. **IMPORTANT** This script is ONLY executed if the `PUID` and `PGID` environment variables are set to values different from the defaults. If you want to modify permissions unconditionally, use the `entrypoint.local.sh` hook instead.
+* `/usr/bin/container/entrypoint.local.sh`: This script is executed just before the main command. It's a general-purpose hook for any other custom setup commands you might need.
 
-### Default Script (index.php)
+## Default Script (index.php)
 
 To get you started quickly, the image includes a simple default `index.php` file located at `/var/www/html/public/index.php`. This file displays a welcome message and some basic PHP configuration information. You can replace this file with your own application code by mounting your project into `/var/www/html`.

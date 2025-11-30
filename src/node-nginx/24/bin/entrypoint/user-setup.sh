@@ -14,10 +14,10 @@ if ! getent group www-data >/dev/null 2>&1; then
     exit 1
 fi
 
-CURRENT_UID="$(id -u www-data)"
-CURRENT_GID="$(id -g www-data)"
-TARGET_UID="${PUID:-$CURRENT_UID}"
-TARGET_GID="${PGID:-$CURRENT_GID}"
+declare CURRENT_UID="$(id -u www-data)"
+declare CURRENT_GID="$(id -g www-data)"
+declare TARGET_UID="${PUID:-$CURRENT_UID}"
+declare TARGET_GID="${PGID:-$CURRENT_GID}"
 
 if [ "$TARGET_UID" == "$CURRENT_UID" ] && [ "$TARGET_GID" == "$CURRENT_GID" ]; then
   echo "[ENTRYPOINT.user-setup] User and group ID already set to target values, skipping user configuration."
@@ -46,16 +46,15 @@ fi
 
 # Set correct ownership on the relevant directories
 echo "[ENTRYPOINT.user-setup] Setting ownership on application directories..."
-chown -R www-data:www-data "/etc/app/config.tpl"
-chown -R www-data:www-data "/etc/nginx/snippets/before.d"
-chown -R www-data:www-data "/etc/nginx/snippets/after.d"
-chown -R www-data:www-data "/etc/nginx/snippets/before.https.d"
-chown -R www-data:www-data "/etc/nginx/snippets/after.https.d"
 chown -R www-data:www-data "/etc/ssl/certs"
 chown -R www-data:www-data "/etc/supervisor"
+chown -R www-data:www-data "/run"
+chown -R www-data:www-data "/var/lib/nginx"
+chown -R www-data:www-data "/var/log/nginx"
+chown -R www-data:www-data "/var/www/html"
 
 # This allows the final image to set up a custom user setup script
-if [ -f /usr/bin/app/entrypoint.user-setup.sh ]; then
-  echo "[ENTRYPOINT.user-setup] Executing custom user setup script '/usr/bin/app/entrypoint.user-setup.sh'";
-	source /usr/bin/app/entrypoint.user-setup.sh;
+if [ -f "${CONTAINER_BIN_DIR}/entrypoint.user-setup.sh" ]; then
+  echo "[ENTRYPOINT.user-setup] Executing custom user setup script '${CONTAINER_BIN_DIR}/entrypoint.user-setup.sh'";
+	source "${CONTAINER_BIN_DIR}/entrypoint.user-setup.sh";
 fi

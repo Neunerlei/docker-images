@@ -26,59 +26,66 @@ services:
       # --- Define the services to proxy to ---
 
       # Main frontend app on the root path
-      - PROXY_FRONTEND_CONTAINER=node-app
+      - PROXY_FRONTEND_CONTAINER=frontend-app
       - PROXY_FRONTEND_PATH=/
-      - PROXY_FRONTEND_PORT=8000
-      - PROXY_FRONTEND_PROTOCOL=https # By default, this is http, but you can set it to https if you want
+      - PROXY_FRONTEND_PORT=3000
 
-      # PHP backend on a sub-path, rewrite url to its root
-      - PROXY_BACKEND_CONTAINER=php-app
-      - PROXY_BACKEND_PATH=/api
-      - PROXY_BACKEND_DEST=/ # Route /api to the root of the php-app
+      # Backend API on a sub-path, rewrite url to its root
+      - PROXY_API_CONTAINER=backend-app
+      - PROXY_API_PATH=/api
+      - PROXY_API_DEST=/ # Route /api/* to /* on the backend-app
 
   # 2. Your Application Services
-  node-app:
-    image: node:24-alpine
-    # ... your node app service definition ...
+  frontend-app:
+  # ... your frontend service definition, listening on port 3000 ...
 
-  php-app:
-    image: neunerlei/php:8.5-fpm-nginx-debian
-    # ... your php app service definition ...
+  backend-app:
+  # ... your backend service definition, listening on port 80 ...
 ```
 
 Run `docker-compose up`, and the proxy will automatically:
 
-* Route requests to `http://localhost/` to the `node-app` on its internal port 8000.
-* Route requests to `http://localhost/api/users` to the `php-app`, sending the request as `/users`.
+* Route requests to `http://localhost:8080/` to the `frontend-app` on its internal port 3000.
+* Route requests to `http://localhost:8080/api/users` to the `backend-app`, sending the request as `/users`.
 
 ## Core Concepts: The Smart Entrypoint
 
-The "brain" of this image is its entrypoint script. When the container starts, it automatically detects its operating mode and configures NGINX accordingly.
+The "brain" of this image is its entrypoint script. When the container starts, it detects its operating mode and configures NGINX accordingly.
 
 1. **Proxy Mode:** This is the main mode. If the script detects any `PROXY_*_CONTAINER` environment variables, it scans all of them and builds a sophisticated reverse proxy configuration.
-2. **Static Mode:** If no `PROXY_*` variables are found, the image gracefully falls back to being a simple web server, serving static files from `/var/www/html/public`. This makes it useful for simple landing pages or maintenance modes.
+2. **Static Mode:** If no `PROXY_*` variables are found, the image gracefully falls back to being a simple web server, serving static files from `/var/www/html/public`. This makes a single instance of the image useful for either being a gateway or a simple file server.
 
 ## Configuration via Environment Variables
 
 The proxy is configured almost entirely through declarative environment variables.
 
-| Variable                     | Description                                                                                                                                                                                          | Default Value                       |
-|------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------|
-| **General**                  |                                                                                                                                                                                                      |                                     |
-| `CONTAINER_MODE`             | Read-only. Automatically set to `proxy` or `static`.                                                                                                                                                 | `static`                            |
-| `MAX_UPLOAD_SIZE`            | A convenient variable to set the global `client_max_body_size`. This applies only if in "proxy" mode, as all uploads need to pass through the proxy.                                                 | `100M`                              |
-| **Project**                  |                                                                                                                                                                                                      |                                     |
-| `DOCKER_PROJECT_HOST`        | The hostname for your project (used for logging and headers).                                                                                                                                        | `localhost`                         |
-| `DOCKER_PROJECT_PATH`        | A global path prefix for the entire project. If set to `/my-project`, all service paths will be prefixed with it. This allows you to host the entire application stack under a common sub-directory. | `/`                                 |
-| `DOCKER_PROJECT_PROTOCOL`    | Can be `http` or `https`. Determines if NGINX should listen for HTTP or HTTPS.                                                                                                                       | `http`                              |
-| `DOCKER_SERVICE_PROTOCOL`    | When running behind a proxy, your service might run on a different protocol than the public one. If omitted, it defaults to the value of `DOCKER_PROJECT_PROTOCOL`.                                  | (matches `DOCKER_PROJECT_PROTOCOL`) |
-| `DOCKER_SERVICE_PATH`        | When running behind a proxy, the `DOCKER_PROJECT_PATH` is expected to be the public path of the proxy. Your service might run on a "sub-path" of that path. If omitted, it defaults to `/`.          | `/`                                 |
-| `DOCKER_SERVICE_ABS_PATH`    | This combines `DOCKER_PROJECT_PATH` and `DOCKER_SERVICE_PATH` into an absolute path.                                                                                                                 | (derived value)                     |
-| **NGINX**                    |                                                                                                                                                                                                      |                                     |
-| `NGINX_CLIENT_MAX_BODY_SIZE` | Overrides `client_max_body_size`.                                                                                                                                                                    | Matches `MAX_UPLOAD_SIZE`           |
-| `NGINX_DOC_ROOT`             | The document root NGINX serves static files from.                                                                                                                                                    | `/var/www/html/public`              |
-| `NGINX_KEY_PATH`             | Path to the SSL key file (only used if `DOCKER_PROJECT_PROTOCOL="https"`).                                                                                                                           | `/etc/ssl/key.pem`                  |
-| `NGINX_CERT_PATH`            | Path to the SSL certificate file (only used if `DOCKER_PROJECT_PROTOCOL="https"`).                                                                                                                   | `/etc/ssl/cert.pem`                 |
+| Variable                     | Description                                                                                                                                          | Default Value              |
+|------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------|
+| **General**                  |                                                                                                                                                      |                            |
+| `CONTAINER_MODE`             | Read-only. Automatically set to `proxy` or `static`.                                                                                                 | `static`                   |
+| `MAX_UPLOAD_SIZE`            | A convenient variable to set the global `client_max_body_size`. This applies only if in "proxy" mode, as all uploads need to pass through the proxy. | `100M`                     |
+| `ENVIRONMENT`                | Sets the overall environment. `dev`/`development` is non-production; all other values are considered production.                                     | `production`               |
+| **Project**                  |                                                                                                                                                      |                            |
+| `DOCKER_PROJECT_HOST`        | The public hostname for your application (available for your app).                                                                                   | `localhost`                |
+| `DOCKER_PROJECT_PATH`        | The public root path of the entire project.                                                                                                          | `/`                        |
+| `DOCKER_PROJECT_PROTOCOL`    | The public protocol. `http` or `https`. Determines NGINX's listening mode.                                                                           | `http`                     |
+| `DOCKER_SERVICE_PROTOCOL`    | The protocol your service uses internally. Defaults to `DOCKER_PROJECT_PROTOCOL`.                                                                    | (derived)                  |
+| `DOCKER_SERVICE_PATH`        | The sub-path for this specific service within the project.                                                                                           | `/`                        |
+| `DOCKER_SERVICE_ABS_PATH`    | Read-only. The absolute path for this service (`PROJECT_PATH` + `SERVICE_PATH`).                                                                     | (derived)                  |
+| **NGINX**                    |                                                                                                                                                      |                            |
+| `NGINX_DOC_ROOT`             | The document root NGINX serves static files from.                                                                                                    | `/var/www/html/public`     |
+| `NGINX_CLIENT_MAX_BODY_SIZE` | Sets `client_max_body_size` in NGINX.                                                                                                                | Matches `MAX_UPLOAD_SIZE`  |
+| `NGINX_CERT_PATH`            | Path to the SSL certificate (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                  | `/etc/ssl/certs/cert.pem`  |
+| `NGINX_KEY_PATH`             | Path to the SSL key (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                          | `/etc/ssl/certs/key.pem`   |
+| **Advanced/Internal**        |                                                                                                                                                      |                            |
+| `CONTAINER_TEMPLATE_DIR`     | The path to the container's internal template files.                                                                                                 | `/etc/container/templates` |
+| `CONTAINER_BIN_DIR`          | The path to the container's internal binary and script files.                                                                                        | `/usr/bin/container`       |
+
+### ENVIRONMENT
+
+The `ENVIRONMENT` variable is shared between all my base images and is used to define the overall environment your application is running in. It can be set to either `development` (or `dev`) or `production` (or `prod`); the values in brackets will be expanded to their full forms automatically. This variable is primarily used to load the correct NGINX configuration, but it also influences other behaviors in the entrypoint script. If any other value is provided, it will be used as-is.
+
+> Please note tho, that every value other than `development` or `dev` is considered production.
 
 ## Proxy Mode In-Depth
 
@@ -88,28 +95,30 @@ In `proxy` mode, the entrypoint generates a unique `location` block for each ser
 
 For each service you want to proxy, you define a group of variables with a unique key (e.g., `FRONTEND`, `BACKEND`, `API_V2`).
 
-| Variable Pattern        | Description                                                                                                                                                                  |
-|-------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `PROXY_<KEY>_CONTAINER` | **(Required)** The hostname of the backend service (usually the Docker Compose service name).                                                                                |
-| `PROXY_<KEY>_PATH`      | The path for this service, **relative to `DOCKER_PROJECT_PATH`**. For example, if `DOCKER_PROJECT_PATH` is `/app` and this is `/api`, the final location will be `/app/api`. |
-| `PROXY_<KEY>_PORT`      | **(Optional)** The internal port the backend service is listening on. Default is `80`.                                                                                       |
-| `PROXY_<KEY>_DEST`      | **(Optional)** Rewrites the request path. For example, `PROXY_BACKEND_PATH=/api` and `PROXY_BACKEND_DEST=/` will route `/api/users` to `/users` on the backend container.    |
-| `PROXY_<KEY>_PROTOCOL`  | **(Optional)** The protocol for this service. Default is `http`.                                                                                                             |
+| Variable Pattern         | Description                                                                                           |
+|--------------------------|-------------------------------------------------------------------------------------------------------|
+| `PROXY_<KEY>_CONTAINER`  | **(Required)** The hostname of the backend service (usually the Docker Compose service name).         |
+| `PROXY_<KEY>_PATH`       | The public path for this service. Default is `/`.                                                     |
+| `PROXY_<KEY>_DEST`       | **(Optional)** Rewrites the request path. `_PATH=/api` and `_DEST=/` routes `/api/users` to `/users`. |
+| `PROXY_<KEY>_PROTOCOL`   | **(Optional)** The protocol to communicate with the backend (`http` or `https`). Default is `http`.   |
+| `PROXY_<KEY>_PORT`       | **(Optional)** The internal port the backend listens on (for HTTP). Default is `80`.                  |
+| `PROXY_<KEY>_HTTPS_PORT` | **(Optional)** The internal port the backend listens on (for HTTPS). Default is `443`.                |
+
 ### **Project Base Path in Proxy Mode**
 
 You can serve the entire proxied application from a sub-directory using `DOCKER_PROJECT_PATH`.
 
-*   **Public URL goal:** `https://example.com/my-project/` should go to the `frontend` container, and `https://example.com/my-project/api/` to the `backend`.
-*   **Configuration:**
-    ```yaml
-    environment:
-      - DOCKER_PROJECT_PATH=/my-project
-      - PROXY_FRONTEND_CONTAINER=frontend
-      - PROXY_FRONTEND_PATH=/
-      - PROXY_API_CONTAINER=backend
-      - PROXY_API_PATH=/api
-    ```
-*   **Result:** The proxy automatically combines the project path and the service path for routing.
+* **Public URL goal:** `https://example.com/my-project/` should go to the `frontend` container, and `https://example.com/my-project/api/` to the `backend`.
+* **Configuration:**
+  ```yaml
+  environment:
+    - DOCKER_PROJECT_PATH=/my-project
+    - PROXY_FRONTEND_CONTAINER=frontend
+    - PROXY_FRONTEND_PATH=/
+    - PROXY_API_CONTAINER=backend
+    - PROXY_API_PATH=/api
+  ```
+* **Result:** The proxy automatically combines the project path and the service path for routing.
 
 ## **Static Mode In-Depth**
 
@@ -119,13 +128,13 @@ If no `PROXY_*` variables are found, the image runs as a high-performance web se
 
 In this mode, the image behaves like one of your application services (`node-nginx`, `php-nginx`) and can be placed behind another proxy.
 
-| Variable                  | Description                                                                    | Default Value          |
-|---------------------------|--------------------------------------------------------------------------------|------------------------|
-| `NGINX_DOC_ROOT`          | The document root for static files.                                            | `/var/www/html/public` |
-| `DOCKER_PROJECT_PATH`     | The base path for the entire project this service belongs to.                  | `/`                    |
-| `DOCKER_SERVICE_PATH`     | The unique sub-path for this static server.                                    | `/`                    |
-| `DOCKER_SERVICE_ABS_PATH` | Read-only. The derived absolute path (`PROJECT_PATH` + `SERVICE_PATH`).        | (derived value)        |
-| `DOCKER_SERVICE_PROTOCOL` | The protocol this service uses internally (usually `http`).                    | (matches `PROJECT`)    |
+| Variable                  | Description                                                             | Default Value          |
+|---------------------------|-------------------------------------------------------------------------|------------------------|
+| `NGINX_DOC_ROOT`          | The document root for static files.                                     | `/var/www/html/public` |
+| `DOCKER_PROJECT_PATH`     | The base path for the entire project this service belongs to.           | `/`                    |
+| `DOCKER_SERVICE_PATH`     | The unique sub-path for this static server.                             | `/`                    |
+| `DOCKER_SERVICE_ABS_PATH` | Read-only. The derived absolute path (`PROJECT_PATH` + `SERVICE_PATH`). | (derived value)        |
+| `DOCKER_SERVICE_PROTOCOL` | The protocol this service uses internally (usually `http`).             | (matches `PROJECT`)    |
 
 ### **Path Composition: `PROJECT_PATH` + `SERVICE_PATH`**
 
@@ -133,9 +142,9 @@ When running this image in `static` mode as part of a larger project, you need a
 
 A reverse proxy sits between your users and your services, directing traffic to the right place based on the URL path.
 
-*   `DOCKER_PROJECT_PATH`: The **base path** for the entire group of related services. If your whole application is served from `https://example.com/myapp/`, then this value would be `/myapp/`.
-*   `DOCKER_SERVICE_PATH`: The unique **sub-path** for a specific service within that project. For an API service, this might be `/api/`.
-*   `DOCKER_SERVICE_ABS_PATH`: This read-only variable is automatically created by combining the two: `DOCKER_PROJECT_PATH` + `DOCKER_SERVICE_PATH`. Your application can use this to reliably generate correct absolute URLs.
+* `DOCKER_PROJECT_PATH`: The **base path** for the entire group of related services. If your whole application is served from `https://example.com/myapp/`, then this value would be `/myapp/`.
+* `DOCKER_SERVICE_PATH`: The unique **sub-path** for a specific service within that project. For an API service, this might be `/api/`.
+* `DOCKER_SERVICE_ABS_PATH`: This read-only variable is automatically created by combining the two: `DOCKER_PROJECT_PATH` + `DOCKER_SERVICE_PATH`. Your application can use this to reliably generate correct absolute URLs.
 
 Your reverse proxy uses `DOCKER_SERVICE_PATH` for routing, while your application uses `DOCKER_SERVICE_ABS_PATH` for its internal logic.
 
@@ -145,12 +154,12 @@ Your reverse proxy uses `DOCKER_SERVICE_PATH` for routing, while your applicatio
 
 Your app runs at the root of a domain. This is the simplest case.
 
-*   **Public URL:** `https://my-app.com/`
-*   **Environment:**
-    *   `DOCKER_PROJECT_PATH: /`
-    *   `DOCKER_SERVICE_PATH: /` (or unset, as it defaults to `/`)
-*   **Resulting Path:**
-    *   `DOCKER_SERVICE_ABS_PATH` will be `/`.
+* **Public URL:** `https://my-app.com/`
+* **Environment:**
+    * `DOCKER_PROJECT_PATH: /`
+    * `DOCKER_SERVICE_PATH: /` (or unset, as it defaults to `/`)
+* **Resulting Path:**
+    * `DOCKER_SERVICE_ABS_PATH` will be `/`.
 
 ---
 
@@ -158,19 +167,21 @@ Your app runs at the root of a domain. This is the simplest case.
 
 You have a frontend service at the root and a backend API service under `/api/`. A reverse proxy routes traffic.
 
-*   **Public URLs:**
-    *   Frontend: `https://my-app.com/`
-    *   Backend: `https://my-app.com/api/`
+* **Public URLs:**
+    * Frontend: `https://my-app.com/`
+    * Backend: `https://my-app.com/api/`
 
 **Frontend Service Configuration:**
-*   `DOCKER_PROJECT_PATH: /`
-*   `DOCKER_SERVICE_PATH: /`
-*   **Resulting Path:** `DOCKER_SERVICE_ABS_PATH` is `/`.
+
+* `DOCKER_PROJECT_PATH: /`
+* `DOCKER_SERVICE_PATH: /`
+* **Resulting Path:** `DOCKER_SERVICE_ABS_PATH` is `/`.
 
 **Backend Service Configuration:**
-*   `DOCKER_PROJECT_PATH: /`
-*   `DOCKER_SERVICE_PATH: /api/`
-*   **Resulting Path:** `DOCKER_SERVICE_ABS_PATH` is `/api/`. The backend can now correctly generate links like `/api/users/123`.
+
+* `DOCKER_PROJECT_PATH: /`
+* `DOCKER_SERVICE_PATH: /api/`
+* **Resulting Path:** `DOCKER_SERVICE_ABS_PATH` is `/api/`. The backend can now correctly generate links like `/api/users/123`.
 
 ---
 
@@ -178,109 +189,163 @@ You have a frontend service at the root and a backend API service under `/api/`.
 
 Your entire project, including a frontend and backend, must live under a specific path on a shared server.
 
-*   **Public URLs:**
-    *   Frontend: `https://shared.server.com/project-alpha/`
-    *   Backend: `https://shared.server.com/project-alpha/api/`
+* **Public URLs:**
+    * Frontend: `https://shared.server.com/project-alpha/`
+    * Backend: `https://shared.server.com/project-alpha/api/`
 
 **Frontend Service Configuration:**
-*   `DOCKER_PROJECT_PATH: /project-alpha/`
-*   `DOCKER_SERVICE_PATH: /`
-*   **Resulting Path:** `DOCKER_SERVICE_ABS_PATH` is `/project-alpha/`.
+
+* `DOCKER_PROJECT_PATH: /project-alpha/`
+* `DOCKER_SERVICE_PATH: /`
+* **Resulting Path:** `DOCKER_SERVICE_ABS_PATH` is `/project-alpha/`.
 
 **Backend Service Configuration:**
-*   `DOCKER_PROJECT_PATH: /project-alpha/`
-*   `DOCKER_SERVICE_PATH: /api/`
-*   **Resulting Path:** `DOCKER_SERVICE_ABS_PATH` is `/project-alpha/api/`.
 
-## Customizing NGINX with Snippets
+* `DOCKER_PROJECT_PATH: /project-alpha/`
+* `DOCKER_SERVICE_PATH: /api/`
+* **Resulting Path:** `DOCKER_SERVICE_ABS_PATH` is `/project-alpha/api/`.
 
-This image is designed to be extensible. The NGINX configuration includes several "hook" directories for placing custom `.conf` files.
+### HTTP vs. HTTPS
 
-* `/etc/nginx/snippets/before.d/`: Included at the beginning of the `server` block. Good for `map` directives or other server-level settings.
-* `/etc/nginx/snippets/after.d/`: Included at the end of the `server` block. Good for general `location` blocks (e.g., for `/robots.txt`).
-* `/etc/nginx/snippets/proxy.d/${KEY}-*.conf`: A location-specific hook! Files placed here will be included *inside* the `location` block for that specific service. This is perfect for adding custom headers or caching rules for a single backend. Note, that the `${KEY}` will be resolved in lowercase, so if your service key is `API`, the file must be named `api-proxy.conf`.
+The image supports a simple way to enable SSL. This is fundamental for modern web applications and NGINX handles this process, known as SSL Termination, very efficiently [docs.nginx.com](https://docs.nginx.com/nginx/admin-guide/security-controls/terminating-ssl-http/).
 
-**Example: Adding a custom header to a single backend**
+* **By default (`DOCKER_PROJECT_PROTOCOL="http"`):** NGINX listens for plain HTTP on port 80.
+* **When `DOCKER_PROJECT_PROTOCOL="https"`:** NGINX is configured to listen on port 443 with SSL, using certificates it expects to find at the paths specified by `NGINX_CERT_PATH` and `NGINX_KEY_PATH`. It also sets up an automatic redirect from HTTP (port 80) to HTTPS. You must mount your certificates to these paths.
 
-1. Create a file, e.g., `my-api-header.conf`:
-   ```nginx
-   # my-api-header.conf
-   add_header X-API-Version "2.1" always;
-   ```
-2. Mount this file into the `proxy.d` directory in your `docker-compose.yml`, naming it with the service key:
-   ```yaml
-   services:
-     proxy:
-       image: neunerlei/nginx:latest
-       environment:
-         - PROXY_API_CONTAINER=my-api-service
-         - PROXY_API_PATH=/api
-       volumes:
-         # Mount the custom snippet, using the key "API"
-         - ./my-api-header.conf:/etc/nginx/snippets/proxy.d/API-headers.conf
-   ```
+This setup is great for local development with tools like `mkcert` or for production if you provide valid certificates.
 
-The `X-API-Version` header will now only be added to requests sent to the `/api` backend.
+> For a more automated approach to SSL, especially in production with Let's Encrypt certificates, you might consider a dedicated reverse proxy gateway like [linuxserver.io/swag](https://docs.linuxserver.io/images/docker-swag/) in front of this container (running in plain HTTP mode). Another good alternative is [nginx-proxy](https://github.com/nginx-proxy/nginx-proxy) with the [acme-companion](https://github.com/nginx-proxy/acme-companion).
+> This allows you to centralize SSL management and offload that responsibility from your application containers.
 
+#### SSL Termination using a proxy
 
-## HTTP vs. HTTPS
+When your service is running behind a reverse proxy [e.g. neunerlei/nginx](nginx.md), you might want to terminate the SSL connection at the proxy level. In this setup, your reverse proxy is exposed to the internet and handles all the complex and CPU-intensive work of HTTPS encryption and decryption. Once it receives a secure request, it "terminates" the SSL and forwards a plain, unencrypted HTTP request to the appropriate internal service.
 
-The image supports a convenient way to run SSL locally using tools like `mkcert`.
+This is beneficial because:
 
-* **By default (`DOCKER_PROJECT_PROTOCOL="http"`):** NGINX is configured to listen for plain HTTP on port 80.
-* **When `DOCKER_PROJECT_PROTOCOL="https"`:** NGINX is configured to listen on port 443 with SSL, using certificates it expects to find at the paths defined by `NGINX_CERT_PATH` and `NGINX_KEY_PATH`. It also sets up an automatic redirect from HTTP (port 80) to HTTPS. You can mount your certificates to this path. This setup is also suitable for production if you provide valid certificates.
+* **Centralized Security:** You only need to manage TLS certificates in one place (the proxy), not in every single application container.
+* **Simplicity:** Your application containers don't need to be configured for HTTPS, simplifying their setup and code.
 
-### SSL Customization
+----
 
-When the container is configured to run in HTTPS mode, it expects to find the SSL certificate and key at `/var/www/certs/cert.pem` and `/var/www/certs/key.pem`. You can mount your own certificates to this path. Additionally, to the config options described above, you have additional hooks that only apply when HTTPS is enabled:
+##### Example: A Secure Application with SSL Termination
 
-* `/etc/nginx/snippets/before.https.d/`
-* `/etc/nginx/snippets/after.https.d/`
+You're running a single application that must be accessed securely over HTTPS. Your reverse proxy will handle the security.
 
-Any `.conf` files placed in these directories will be included in the SSL server block, allowing you to customize SSL settings further.
-In general, the SSL configuration is included AFTER the main server configuration, so you can override settings as needed. The `before.https`
+* **Public URL:** `https://my-secure-app.com/`
+* **Request Flow:**
+    1. User's browser connects to `https://my-secure-app.com/`.
+    2. The reverse proxy receives the HTTPS request on port 443 and terminates the TLS connection.
+    3. The proxy forwards a plain HTTP request to the internal `app` service (e.g., `http://app`).
 
-The order of the hooks is as follows:
+* **Configuration for the `app` service:**
+  ```yaml
+  environment:
+    # --- Public-Facing Configuration ---
+    DOCKER_PROJECT_HOST: 'my-secure-app.com'
+    DOCKER_PROJECT_PROTOCOL: 'https' # The user connects via HTTPS
 
-1. `/etc/nginx/snippets/before.d/`
-2. Set up the main service + locations
-3. `/etc/nginx/snippets/before.https.d/`
-4. SSL-specific settings, like certificates and hardening
-5. `/etc/nginx/snippets/after.https.d/`
-6. `/etc/nginx/snippets/after.d/`
+    # --- Service-Specific Configuration ---
+    DOCKER_SERVICE_PROTOCOL: 'http'  # But the proxy talks to us via plain HTTP
+  ```
 
-#### Variables in nginx.conf
+* **Result:**
+    * Your main proxy listens for `https` traffic.
+    * Your `app` service only needs to run a standard `http` server on its internal port.
+    * The automatically derived `DOCKER_SERVICE_ABS_PATH` is `/`, and your application code can still be made aware that the public connection is secure by checking the `X-Forwarded-Proto` header, which proxies typically add.
 
-To avoid configuration duplication in your nginx snippets, you can use the following variables that are replaced at runtime:
+If you were to omit `DOCKER_SERVICE_PROTOCOL`, it would default to the value of `DOCKER_PROJECT_PROTOCOL` (`https` in this case), and your internal service would be expected to handle HTTPS traffic directly. By setting it explicitly to `http`, you enable the SSL Termination pattern.
 
-- `DOCKER_PROJECT_HOST`
-- `DOCKER_PROJECT_PROTOCOL`
-- `DOCKER_PROJECT_PATH`
-- `DOCKER_SERVICE_PROTOCOL`
-- `DOCKER_SERVICE_PATH`
-- `DOCKER_SERVICE_ABS_PATH`
-- `NGINX_DOC_ROOT`
+## Advanced Customization: Templating and Overrides
 
-They will be replaced with their respective values when the nginx configuration is generated.
-Use them like this:
+This image uses a powerful templating engine that processes all internal configuration files on startup. This allows for deep customization of NGINX.
 
-```nginx
-location ^~ ${DOCKER_SERVICE_ABS_PATH}custom/ {
-    root ${NGINX_DOC_ROOT};
-    index index.html index.htm;
-}
+### How Templating Works
+
+Every configuration file inside `/etc/container/templates/` is treated as a template. The entrypoint script will read these templates, substitute placeholders like `${VAR_NAME}` with their environment variable values, and write the final config to its destination. This applies to both global snippets and direct file overrides.
+
+#### The `[[DEBUG_VARS]]` Helper
+
+To see exactly which variables are available for a template, you can add the special string `[[DEBUG_VARS]]` anywhere in a `.conf` file you are customizing. When the container starts, the template engine will detect this, print a list of all available variables and their current values to the console, and then exit. This is an invaluable tool for debugging your configurations.
+
+Example output:
+
+```
+DEBUG_VARS detected in template: '/etc/container/templates/nginx/custom/my_debug.conf'. Current variables that can be substituted:
+  - ${CONTAINER_MODE} = web
+  - ${ENVIRONMENT} = production
+  - ${NGINX_DOC_ROOT} = /var/www/html/public
+  ...
 ```
 
-The replacement will happen in all files that are placed **directly** (not in subdirectories) in:
+### 1. Adding Custom NGINX Snippets (Recommended)
 
-- `/etc/nginx/snippets/before.d/`
-- `/etc/nginx/snippets/after.d/`
-- `/etc/nginx/snippets/before.https.d/`
-- `/etc/nginx/snippets/after.https.d/`
-- `/etc/nginx/snippets/proxy.d/`
+This is the standard, additive approach for extending NGINX.
 
-## Advanced Customization
+#### a) Global Snippets
 
-Similar to the PHP images, you can hook into the startup process using a custom local script.
+These snippets are included in the main `server` block and are perfect for adding global rules, headers, or `map` blocks.
 
-* `/usr/bin/app/entrypoint.local.sh`: This script is executed just before the main NGINX process starts. It's a general-purpose hook for any custom setup commands you might need.
+* **How:** Mount a directory containing your `.conf` files to `/etc/container/templates/nginx/custom/`.
+* **Result:** The files are processed and included globally.
+
+#### b) Per-Service Snippets
+
+This powerful feature allows you to add custom rules *inside* the `location` block of a specific proxied service. This is ideal for things like per-route caching, rate-limiting, or custom headers.
+
+* **How:** Inside your custom templates directory, create a `proxy` sub-directory, and then another directory named after the **lowercase version of your proxy key**.
+    * For a service defined with `PROXY_API_CONTAINER`, the path would be `/etc/container/templates/nginx/custom/proxy/api/`.
+* **Result:** Any `.conf` files in this directory will be included only within the `location` block for the `API` service.
+
+#### Filename Markers for Conditional Loading
+
+**Both** global and per-service snippets support filename markers for conditional loading.
+
+* `.prod.` : Loaded only if `ENVIRONMENT` is `production`.
+* `.dev.` : Loaded only if `ENVIRONMENT` is `development`.
+* `.https.` : Loaded only if `DOCKER_SERVICE_PROTOCOL` is `https`.
+
+#### Full Example Directory Structure
+
+```
+my-nginx-configs/
+├── 01-global-headers.conf              # Global snippet, always loaded
+├── 99-security.prod.conf               # Global snippet, only for production
+└── proxy/
+    └── api/
+        ├── 01-rate-limiting.conf       # Per-service snippet for 'api', always loaded
+        └── 02-caching.prod.conf        # Per-service snippet for 'api', only for production
+```
+
+**Compose File:**
+
+```yaml
+services:
+  proxy:
+    image: neunerlei/nginx:latest
+    volumes:
+      - ./my-nginx-configs:/etc/container/templates/nginx/custom
+    environment:
+      - ENVIRONMENT=production
+      - PROXY_API_CONTAINER=backend-app
+      # ...
+```
+
+### 2. Overriding Core Templates (Advanced)
+
+For maximum control, you can completely replace any of the container's default template files. This is best used when snippets aren't enough to change a fundamental behavior.
+
+* **How:** Identify the default template (e.g., `/etc/container/templates/nginx/nginx.conf`). In your project, create your version and mount it to the *exact same path* inside the container.
+* **Result:** Your mounted file will completely replace the image's default. The entrypoint will then process *your* template instead.
+
+> **Note:** Filename markers do **not** apply when directly overriding a core template file.
+
+### 3. Custom Entrypoint Hooks
+
+The entrypoint provides a hook for advanced, non-NGINX customization.
+
+* `/usr/bin/container/entrypoint/custom.sh`: Sourced just before the main NGINX process starts, this script is a general-purpose hook for any custom setup commands you might need.
+
+## Default index.html
+
+If you run the image in `static` mode without mounting any files to `/var/www/html/public`, it will serve a default `index.html` page. Simply override this file with your own content by mounting your static files to that path.

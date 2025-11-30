@@ -2,17 +2,11 @@
 
 echo "[ENTRYPOINT.nginx] Starting Nginx configuration process...";
 
-mkdir -p /etc/nginx/sites-available
-chown nginx:nginx /etc/nginx/sites-available
+render_filtered_templates_in_dir "${NGINX_CUSTOM_TEMPLATE_DIR}" "${NGINX_SERVICE_SNIPPET_DIR}" "*.conf"
+render_template_all_vars "${NGINX_TEMPLATE_DIR}/nginx.conf" "$NGINX_DIR/nginx.conf"
+render_template_all_vars "${NGINX_TEMPLATE_DIR}/mime.custom.types" "$NGINX_DIR/mime.custom.types"
 
-render_template_dir 'DOCKER_PROJECT_HOST DOCKER_PROJECT_PROTOCOL DOCKER_PROJECT_PATH DOCKER_SERVICE_PROTOCOL DOCKER_SERVICE_PATH DOCKER_SERVICE_ABS_PATH NGINX_DOC_ROOT' \
-  /etc/nginx/snippets/before.d \
-  /etc/nginx/snippets/after.d \
-  /etc/nginx/snippets/before.https.d \
-  /etc/nginx/snippets/after.https.d \
-  /etc/nginx/snippets/proxy.d
-
-if [ "${DOCKER_PROJECT_PROTOCOL}" == "https" ]; then
+if [ "${DOCKER_SERVICE_PROTOCOL}" == "https" ]; then
   echo "[ENTRYPOINT.nginx] Configuring for HTTPS.";
 
     LEGACY_NGINX_CERT_PATH="/var/www/certs/cert.pem"
@@ -38,13 +32,13 @@ if [ "${DOCKER_PROJECT_PROTOCOL}" == "https" ]; then
       fi
     fi
 
-  render_template 'NGINX_CERT_PATH NGINX_KEY_PATH' /etc/app/config.tpl/nginx/default.https.tpl.nginx.conf /etc/nginx/sites-available/default
+  render_template_all_vars "$NGINX_TEMPLATE_DIR/default.https.nginx.conf" "/etc/nginx/sites-available/default"
 else
   echo "[ENTRYPOINT.nginx] Configuring for plain HTTP.";
-  cat /etc/app/config.tpl/nginx/default.tpl.nginx.conf > /etc/nginx/sites-available/default
+  render_template_all_vars "$NGINX_TEMPLATE_DIR/default.nginx.conf" "/etc/nginx/sites-available/default"
 fi
 
 # Enable the default site
-ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default;
+ln -sf "/etc/nginx/sites-available/default" "/etc/nginx/sites-enabled/default";
 
 echo "[ENTRYPOINT.nginx] Nginx configuration completed";

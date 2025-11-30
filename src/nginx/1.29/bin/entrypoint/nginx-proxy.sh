@@ -23,18 +23,18 @@ if [[ "$CONTAINER_MODE" == "proxy" ]]; then
         # If PROXY_PROTOCOL_VAR is not set, assume HTTP
         # If PROXY_HTTPS_PORT_VAR is set, assume HTTPS
         DEFAULT_PROTOCOL="http"
-        export PROXY_UPSTREAM_PROTOCOL="${!PROXY_PROTOCOL_VAR:-$DEFAULT_PROTOCOL}"
+        declare PROXY_UPSTREAM_PROTOCOL="${!PROXY_PROTOCOL_VAR:-$DEFAULT_PROTOCOL}"
 
         # Determine default port based on protocol
         if [ "${PROXY_UPSTREAM_PROTOCOL}" == "https" ]; then
-            export PROXY_UPSTREAM_PORT="${!PROXY_HTTPS_PORT_VAR:-443}"
+            declare PROXY_UPSTREAM_PORT="${!PROXY_HTTPS_PORT_VAR:-443}"
         else
-            export PROXY_UPSTREAM_PORT="${!PROXY_PORT_VAR:-80}"
+            declare PROXY_UPSTREAM_PORT="${!PROXY_PORT_VAR:-80}"
         fi
 
-        export PROXY_UPSTREAM_HOST="${!PROXY_CONTAINER_VAR}"
-        export PROXY_UPSTREAM_PORT="${!PROXY_PORT_VAR:-${PROXY_UPSTREAM_PORT}}"
-        export PROXY_UPSTREAM_PROTOCOL="${!PROXY_PROTOCOL_VAR:-$DEFAULT_PROTOCOL}"
+        declare PROXY_UPSTREAM_HOST="${!PROXY_CONTAINER_VAR}"
+        declare PROXY_UPSTREAM_PORT="${!PROXY_PORT_VAR:-${PROXY_UPSTREAM_PORT}}"
+        declare PROXY_UPSTREAM_PROTOCOL="${!PROXY_PROTOCOL_VAR:-$DEFAULT_PROTOCOL}"
 
         echo "   - Location path: ${PROXY_LOCATION_PATH}"
         echo "   - Upstream host: ${PROXY_UPSTREAM_HOST}"
@@ -44,18 +44,26 @@ if [[ "$CONTAINER_MODE" == "proxy" ]]; then
         # Set VIRTUAL_DEST if the variable exists and is not empty
         PROXY_DEST_VALUE="${!PROXY_DEST_VAR}"
         if [ -n "$PROXY_DEST_VALUE" ]; then
-            export PROXY_REWRITE_RULE="rewrite ^${PROXY_LOCATION_PATH}(.*)$ ${PROXY_DEST_VALUE}\$1 break;"
+            declare PROXY_REWRITE_RULE="rewrite ^${PROXY_LOCATION_PATH}(.*)$ ${PROXY_DEST_VALUE}\$1 break;"
             echo "   - Using rewrite rule: ${PROXY_REWRITE_RULE}"
         else
-            export PROXY_REWRITE_RULE=""
+            declare PROXY_REWRITE_RULE=""
         fi
 
         declare KEY_LOWER=${KEY,,}
-        CURRENT_LOCATION_BLOCK=$(render_template_string 'KEY_LOWER PROXY_LOCATION_PATH PROXY_UPSTREAM_HOST PROXY_UPSTREAM_PORT PROXY_UPSTREAM_PROTOCOL PROXY_REWRITE_RULE DOCKER_SERVICE_ABS_PATH' /etc/app/config.tpl/nginx/proxy.location.tpl.nginx.conf)
+        CURRENT_LOCATION_BLOCK=$(render_template_string "$(get_all_vars)" "$NGINX_TEMPLATE_DIR/proxy.location.nginx.conf")
         LOCATION_BLOCKS="${LOCATION_BLOCKS}${CURRENT_LOCATION_BLOCK}"
+
+        declare LOCATION_SNIPPET_DIR="${NGINX_PROXY_SNIPPET_DIR}/${KEY_LOWER}"
+        mkdir -p "${LOCATION_SNIPPET_DIR}"
+        declare LOCATION_TEMPLATE_DIR="${NGINX_CUSTOM_PROXY_TEMPLATE_DIR}/${KEY_LOWER}"
+        if [ -d "${LOCATION_TEMPLATE_DIR}" ]; then
+          render_filtered_templates_in_dir "${LOCATION_TEMPLATE_DIR}" "${LOCATION_SNIPPET_DIR}" "*.conf"
+        fi
     done
 
-    render_template 'LOCATION_BLOCKS NGINX_CLIENT_MAX_BODY_SIZE' /etc/app/config.tpl/nginx/service.proxy.snippet.tpl.nginx.conf /etc/nginx/snippets/service.nginx.conf
+    render_template_all_vars "${NGINX_TEMPLATE_DIR}/service.root.proxy.nginx.conf" "${NGINX_SNIPPET_DIR}/service.root.nginx.conf" "LOCATION_BLOCKS"
 
+cat "${NGINX_SNIPPET_DIR}/service.root.nginx.conf"
     echo "[ENTRYPOINT.proxy] Nginx configuration completed for proxy mode";
 fi

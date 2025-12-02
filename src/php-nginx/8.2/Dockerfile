@@ -9,8 +9,6 @@ ENV TZ=UTC
 ENV CONTAINER_TEMPLATE_DIR=/etc/container/templates
 ENV CONTAINER_BIN_DIR=/usr/bin/container
 
-WORKDIR /var/www/html
-
 RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=apt-lib,target=/var/lib/apt,sharing=locked\
     apt-get update && apt-get upgrade -y && apt-get install -y \
@@ -50,7 +48,15 @@ RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
 
 # Create additional config directories
 RUN mkdir -p "$CONTAINER_TEMPLATE_DIR" && chmod 755 "$CONTAINER_TEMPLATE_DIR" && \
-    mkdir -p /etc/nginx/snippets/service.d && chmod 755 /etc/nginx/snippets/service.d
+    mkdir -p /etc/nginx/sites-enabled && chmod 755 /etc/nginx/sites-enabled && \
+    mkdir -p /etc/nginx/sites-available && chmod 755 /etc/nginx/sites-available && \
+    mkdir -p /etc/nginx/snippets/service.d && chmod 755 /etc/nginx/snippets/service.d && \
+    mkdir -p /etc/nginx/snippets/global.d && chmod 755 /etc/nginx/snippets/global.d && \
+    mkdir -p /etc/ssl/certs && chmod 755 /etc/ssl/certs && \
+    mkdir -p /var/www/html/public && chmod 755 /var/www/html/public && \
+    mkdir -p /var/www/errors && chmod 755 /var/www/errors
+
+WORKDIR /var/www/html
 
 # Copy configuration tempaltes
 COPY --chown=www-data:www-data templates "$CONTAINER_TEMPLATE_DIR"

@@ -48,8 +48,6 @@ fi
 echo "[ENTRYPOINT.user-setup] Setting ownership on application directories..."
 chown -R www-data:www-data "/etc/ssl/certs"
 chown -R www-data:www-data "/etc/supervisor"
-chown -R www-data:www-data "/usr/local/etc/php-fpm.d"
-chown -R www-data:www-data "/usr/local/etc/php/conf.d"
 chown -R www-data:www-data "/run"
 chown -R www-data:www-data "/var/lib/nginx"
 chown -R www-data:www-data "/var/log/nginx"

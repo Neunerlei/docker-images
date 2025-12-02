@@ -51,7 +51,7 @@ if [[ "$CONTAINER_MODE" == "proxy" ]]; then
         fi
 
         declare KEY_LOWER=${KEY,,}
-        CURRENT_LOCATION_BLOCK=$(render_template_string "$(get_all_vars)" "$NGINX_TEMPLATE_DIR/proxy.location.nginx.conf")
+        CURRENT_LOCATION_BLOCK=$(render_template_string "$NGINX_TEMPLATE_DIR/proxy.location.nginx.conf")
         LOCATION_BLOCKS="${LOCATION_BLOCKS}${CURRENT_LOCATION_BLOCK}"
 
         declare LOCATION_SNIPPET_DIR="${NGINX_PROXY_SNIPPET_DIR}/${KEY_LOWER}"
@@ -62,8 +62,7 @@ if [[ "$CONTAINER_MODE" == "proxy" ]]; then
         fi
     done
 
-    render_template_all_vars "${NGINX_TEMPLATE_DIR}/service.root.proxy.nginx.conf" "${NGINX_SNIPPET_DIR}/service.root.nginx.conf" "LOCATION_BLOCKS"
+    render_template "${NGINX_TEMPLATE_DIR}/service.root.proxy.nginx.conf" "${NGINX_SNIPPET_DIR}/service.root.nginx.conf"
 
-cat "${NGINX_SNIPPET_DIR}/service.root.nginx.conf"
     echo "[ENTRYPOINT.proxy] Nginx configuration completed for proxy mode";
 fi

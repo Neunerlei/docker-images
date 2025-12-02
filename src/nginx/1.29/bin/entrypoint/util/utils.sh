@@ -1,20 +1,15 @@
 #!/bin/bash
 
-# The same as render_template but automatically uses all environment variables.
+# The same as render_template_with but automatically uses all environment variables.
 #
 # Usage:
-#   render_template_all_vars "path/to/template.tpl" "path/to/output.conf" ["ADDITIONAL_VAR1 ADDITIONAL_VAR2"]
+#   render_template "path/to/template.tpl" "path/to/output.conf" ["ADDITIONAL_VAR1 ADDITIONAL_VAR2"]
 #
-render_template_all_vars() {
+render_template() {
     local template_file="$1"
     local output_file="$2"
     local additional_vars="$3"
-    local all_vars
-    all_vars="$(get_all_vars)"
-    if [ -n "$additional_vars" ]; then
-        all_vars="${all_vars} ${additional_vars}"
-    fi
-    render_template "$all_vars" "$template_file" "$output_file"
+    render_template_with "$(get_all_vars)" "$template_file" "$output_file"
 }
 
 # Replaces the given list of placeholders in the template file,
@@ -23,15 +18,23 @@ render_template_all_vars() {
 # The values are taken from the current environment, with the same name as the variable names.
 #
 # Usage:
-#   render_template 'VAR_NAME ANOTHER_VAR_NAME' "path/to/template.tpl" "path/to/output.conf"
+#   render_template_with 'VAR_NAME ANOTHER_VAR_NAME' "path/to/template.tpl" "path/to/output.conf"
 #
-render_template() {
+render_template_with() {
     local vars_to_substitute="$1"
     local template_file="$2"
     local output_file="$3"
-    local rendered
-    rendered=$(render_template_string "$vars_to_substitute" "$template_file")
-    echo "$rendered" > "$output_file"
+    echo "$(render_template_string_with "$vars_to_substitute" "$template_file")" > "$output_file"
+}
+
+# The same as render_template_string_with but automatically uses all environment variables.
+
+# Usage:
+#   YOUR_VAR=$(render_template_string "path/to/template.tpl")
+#
+render_template_string() {
+    local template_file="$1"
+    render_template_string_with "$(get_all_vars)" "$template_file"
 }
 
 # Replaces the given list of placeholders in the template file,
@@ -40,9 +43,9 @@ render_template() {
 # The values are taken from the current environment, with the same name as the variable names.
 #
 # Usage:
-#   YOUR_VAR=$(render_template_string 'VAR_NAME ANOTHER_VAR_NAME' "path/to/template.tpl")
+#   YOUR_VAR=$(render_template_string_with 'VAR_NAME ANOTHER_VAR_NAME' "path/to/template.tpl")
 #
-render_template_string() {
+render_template_string_with() {
     local vars_to_substitute="$1"
     local template_file="$2"
     local line
@@ -136,6 +139,66 @@ find_environment() {
   esac
 }
 
+# Iterates over files in the given directory, filtering them based on filename markers
+# like .prod., .dev., and .https., and calls the provided callback function for each file that passes the filters.
+# The optional third argument is a pattern to match filenames (default is "*").
+# The optional fourth argument is additional arguments to pass to the callback function.
+# Usage:
+#   for_each_filtered_file_in_dir "path/to/dir" "callback_function" "[pattern]" "[additional_args]"
+#
+for_each_filtered_file_in_dir() {
+  local read_dir="$1"
+  local callback="$2"
+  local pattern="${3:-"*"}"
+  local additional_args="$4"
+
+  if [[ -z "$callback" ]]; then
+    echo "No callback function provided to for_each_filtered_file_in_dir" >&2
+    return 1
+  fi
+
+  echo "Processing files from ${read_dir}, matching '${pattern}'..." >&2
+
+  for file_path in $(find "${read_dir}" -maxdepth 1 -name "${pattern}" | sort); do
+    filename=$(basename "$file_path")
+
+    # Check for .prod. marker
+    if [[ "$filename" == *".prod."* ]] && [[ "${ENVIRONMENT}" != "production" ]]; then
+      echo " - Skipping '${filename}' (requires ENVIRONMENT=production)" >&2
+      continue
+    fi
+
+    # Check for .dev. marker
+    if [[ "$filename" == *".dev."* ]] && [[ "${ENVIRONMENT}" != "development" ]]; then
+      echo " - Skipping '${filename}' (requires ENVIRONMENT=development)" >&2
+      continue
+    fi
+
+    # Check for .https. marker
+    if [[ "$filename" == *".https."* ]] && [[ "${DOCKER_SERVICE_PROTOCOL}" != "https" ]]; then
+      echo " - Skipping '${filename}' (requires DOCKER_SERVICE_PROTOCOL=https)" >&2
+      continue
+    fi
+
+    echo " - Processing '${filename}'"  >&2
+    # Call the provided callback function with the file path
+    "$callback" "$file_path" $additional_args
+  done
+}
+
+# Callback function to render a template file to the output path.
+# @INTERNAL - Not intended for direct use.
+# Usage:
+#   _render_template_callback "path/to/template.tpl" "path/to/output.conf"
+_render_template_callback() {
+  local template_path="$1"
+  local output_path="$2"
+  local filename
+  filename=$(basename "$template_path")
+  echo " - Rendering '$filename' to '$output_path'" >&2
+  render_template "${template_path}" "${output_path}/$filename"
+}
+
 # Renders all templates in the given directory to the output directory,
 # applying filtering based on filename markers like .prod. and .https.
 # The optional third argument is a pattern to match filenames (default is "*").
@@ -152,28 +215,5 @@ render_filtered_templates_in_dir() {
   # Clear out old snippets to ensure a clean slate
   rm -f "${output_dir}/${pattern}"
 
-  for template_path in $(find "${template_dir}" -maxdepth 1 -name "${pattern}" | sort); do
-    filename=$(basename "$template_path")
-
-    # Check for .prod. marker
-    if [[ "$filename" == *".prod."* ]] && [[ "${ENVIRONMENT}" != "production" ]]; then
-      echo " - Skipping '${filename}' (requires ENVIRONMENT=production)"
-      continue
-    fi
-
-    # Check for .dev. marker
-    if [[ "$filename" == *".dev."* ]] && [[ "${ENVIRONMENT}" != "development" ]]; then
-      echo " - Skipping '${filename}' (requires ENVIRONMENT=development)"
-      continue
-    fi
-
-    # Check for .https. marker
-    if [[ "$filename" == *".https."* ]] && [[ "${DOCKER_SERVICE_PROTOCOL}" != "https" ]]; then
-      echo " - Skipping '${filename}' (requires DOCKER_SERVICE_PROTOCOL=https)"
-      continue
-    fi
-
-    echo " - Rendering '${filename}'"
-    render_template_all_vars "${template_path}" "${output_dir}/${filename}"
-  done
+  for_each_filtered_file_in_dir "$template_dir" _render_template_callback "$pattern" "$output_dir"
 }

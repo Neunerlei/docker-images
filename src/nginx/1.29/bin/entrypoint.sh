@@ -44,14 +44,17 @@ echo "   - CONTAINER_MODE=${CONTAINER_MODE}";
 export NGINX_DIR="/etc/nginx"
 export NGINX_SNIPPET_DIR="$NGINX_DIR/snippets"
 export NGINX_SERVICE_SNIPPET_DIR="${NGINX_SNIPPET_DIR}/service.d"
+export NGINX_GLOBAL_SNIPPET_DIR="${NGINX_SNIPPET_DIR}/global.d"
 export NGINX_PROXY_SNIPPET_DIR="${NGINX_SNIPPET_DIR}/proxy.d"
 export NGINX_TEMPLATE_DIR="${CONTAINER_TEMPLATE_DIR}/nginx"
 export NGINX_CUSTOM_TEMPLATE_DIR="${NGINX_TEMPLATE_DIR}/custom"
 export NGINX_CUSTOM_PROXY_TEMPLATE_DIR="${NGINX_CUSTOM_TEMPLATE_DIR}/proxy"
+export NGINX_CUSTOM_GLOBAL_TEMPLATE_DIR="${NGINX_CUSTOM_TEMPLATE_DIR}/global"
 
 # Configure services
 echo "[ENTRYPOINT] Configuring services...";
 
+source "${ENTRYPOINT_DIR}/user-setup.sh"
 source "${ENTRYPOINT_DIR}/nginx.sh"
 source "${ENTRYPOINT_DIR}/nginx-proxy.sh"
 source "${ENTRYPOINT_DIR}/nginx-static.sh"

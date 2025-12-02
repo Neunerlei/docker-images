@@ -52,9 +52,4 @@ chown -R www-data:www-data "/run"
 chown -R www-data:www-data "/var/lib/nginx"
 chown -R www-data:www-data "/var/log/nginx"
 chown -R www-data:www-data "/var/www/html"
-
-# This allows the final image to set up a custom user setup script
-if [ -f "${CONTAINER_BIN_DIR}/entrypoint.user-setup.sh" ]; then
-  echo "[ENTRYPOINT.user-setup] Executing custom user setup script '${CONTAINER_BIN_DIR}/entrypoint.user-setup.sh'";
-	source "${CONTAINER_BIN_DIR}/entrypoint.user-setup.sh";
-fi
+chown -R www-data:www-data "/var/www/.npm"

@@ -62,6 +62,8 @@ The proxy is configured almost entirely through declarative environment variable
 | Variable                     | Description                                                                                                                                          | Default Value              |
 |------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------|
 | **General**                  |                                                                                                                                                      |                            |
+| `PUID`                       | The user ID to run processes as (`www-data`). Useful for matching host file permissions.                                                             | `33`                       |
+| `PGID`                       | The group ID to run processes as (`www-data`). Useful for matching host file permissions.                                                            | `33`                       |
 | `CONTAINER_MODE`             | Read-only. Automatically set to `proxy` or `static`.                                                                                                 | `static`                   |
 | `MAX_UPLOAD_SIZE`            | A convenient variable to set the global `client_max_body_size`. This applies only if in "proxy" mode, as all uploads need to pass through the proxy. | `100M`                     |
 | `ENVIRONMENT`                | Sets the overall environment. `dev`/`development` is non-production; all other values are considered production.                                     | `production`               |
@@ -258,11 +260,13 @@ If you were to omit `DOCKER_SERVICE_PROTOCOL`, it would default to the value of 
 
 ## Advanced Customization: Templating and Overrides
 
-This image uses a powerful templating engine that processes all internal configuration files on startup. This allows for deep customization of NGINX.
+This image uses a powerful templating engine that processes **all internal configuration files** on startup. This allows for deep customization of NGINX, Supervisor, and other components.
 
 ### How Templating Works
 
-Every configuration file inside `/etc/container/templates/` is treated as a template. The entrypoint script will read these templates, substitute placeholders like `${VAR_NAME}` with their environment variable values, and write the final config to its destination. This applies to both global snippets and direct file overrides.
+Every configuration file inside `/etc/container/templates/` is treated as a template. The entrypoint script will read these files, substitute placeholders with their corresponding environment variable values, and write the final config to its destination.
+
+You can use any of the environment variables listed above as placeholders in your custom files, using the syntax `${VAR_NAME}`.
 
 #### The `[[DEBUG_VARS]]` Helper
 
@@ -278,34 +282,29 @@ DEBUG_VARS detected in template: '/etc/container/templates/nginx/custom/my_debug
   ...
 ```
 
-### 1. Adding Custom NGINX Snippets (Recommended)
-
-This is the standard, additive approach for extending NGINX.
-
-#### a) Global Snippets
-
-These snippets are included in the main `server` block and are perfect for adding global rules, headers, or `map` blocks.
-
-* **How:** Mount a directory containing your `.conf` files to `/etc/container/templates/nginx/custom/`.
-* **Result:** The files are processed and included globally.
-
-#### b) Per-Service Snippets
-
-This powerful feature allows you to add custom rules *inside* the `location` block of a specific proxied service. This is ideal for things like per-route caching, rate-limiting, or custom headers.
-
-* **How:** Inside your custom templates directory, create a `proxy` sub-directory, and then another directory named after the **lowercase version of your proxy key**.
-    * For a service defined with `PROXY_API_CONTAINER`, the path would be `/etc/container/templates/nginx/custom/proxy/api/`.
-* **Result:** Any `.conf` files in this directory will be included only within the `location` block for the `API` service.
-
 #### Filename Markers for Conditional Loading
 
-**Both** global and per-service snippets support filename markers for conditional loading.
+For greater flexibility, you can use special markers in your custom configuration filenames to control when they are loaded. The entrypoint script recognizes these markers and includes or excludes files based on the current environment. Whenever you see `MARKER-AWARE` in the options below, it means that these rules apply.
 
 * `.prod.` : Loaded only if `ENVIRONMENT` is `production`.
 * `.dev.` : Loaded only if `ENVIRONMENT` is `development`.
 * `.https.` : Loaded only if `DOCKER_SERVICE_PROTOCOL` is `https`.
 
-#### Full Example Directory Structure
+**Examples:**
+
+* `01-security-headers.prod.conf`: Adds security headers, but only in production.
+* `10-hsts.https.prod.conf`: Adds HSTS rules, but only when the service is running HTTPS in production.
+* `20-redirects.conf`: A general-purpose file that is always loaded.
+
+### Customization Methods
+
+There are multiple ways to customize the container's behavior and configuration. Here are the primary methods:
+
+#### 1. Adding Custom NGINX Snippets `MARKER-AWARE`
+
+This is the standard, additive approach for extending NGINX.
+
+**Directory Structure Example:**
 
 ```
 my-nginx-configs/
@@ -331,7 +330,29 @@ services:
       # ...
 ```
 
-### 2. Overriding Core Templates (Advanced)
+##### a) Server Snippets (server) `MARKER-AWARE`
+
+These snippets are included in the main `server` block and are perfect for adding global rules, headers, or `map` blocks.
+
+* **How:** Mount a directory containing your `.conf` files to `/etc/container/templates/nginx/custom/`.
+* **Result:** The files are processed and included globally.
+
+##### b) Per-Service Snippets (location) `MARKER-AWARE`
+
+This powerful feature allows you to add custom rules *inside* the `location` block of a specific proxied service. This is ideal for things like per-route caching, rate-limiting, or custom headers.
+
+* **How:** Inside your custom templates directory, create a `proxy` sub-directory, and then another directory named after the **lowercase version of your proxy key**.
+    * For a service defined with `PROXY_API_CONTAINER`, the path would be `/etc/container/templates/nginx/custom/proxy/api/`.
+* **Result:** Any `.conf` files in this directory will be included only within the `location` block for the `API` service.
+
+##### c) Global Snippets (http) `MARKER-AWARE`
+
+These snippets are included in the main `http` block and are perfect for adding global rules, headers, or `map` blocks.
+
+* **How:** Inside your custom templates directory, create a `global` sub-directory.
+* **Result:** The files are processed and included globally in the `http` block.
+
+#### 2. Overriding Core Templates (Advanced)
 
 For maximum control, you can completely replace any of the container's default template files. This is best used when snippets aren't enough to change a fundamental behavior.
 
@@ -340,11 +361,31 @@ For maximum control, you can completely replace any of the container's default t
 
 > **Note:** Filename markers do **not** apply when directly overriding a core template file.
 
-### 3. Custom Entrypoint Hooks
+#### 3. Custom error pages
 
-The entrypoint provides a hook for advanced, non-NGINX customization.
+The `/etc/container/templates/nginx/service.errors.nginx.conf` file is responsible for handling error pages in the nginx configuration. By default, it supports custom error pages for HTTP status codes 400, 401, 403, 404, 500, 502, 503, and 504; both as HTML and JSON responses.
 
-* `/usr/bin/container/entrypoint/custom.sh`: Sourced just before the main NGINX process starts, this script is a general-purpose hook for any custom setup commands you might need.
+You can customize these error pages by overriding the default templates at: `/etc/container/templates/nginx/errorPage.html` or `/etc/container/templates/nginx/errorPage.json`.
+Note, that these files are templates, so you can use any environment variables defined in the container within these files, additionally you have access to: `ERROR_CODE`, `ERROR_TITLE` and `ERROR_DESCRIPTION`, which will be replaced with the actual error code, title and description when the error page is rendered.
+
+#### 4. Custom Entrypoint Hooks `MARKER-AWARE`
+
+Additionally to service snippets, the image supports custom entrypoint hooks that allow you to run your own scripts when the container starts. The scripts will be executed, just before the main command (`supervisord`) is started.
+
+* **How it works:** Place your custom `.sh` files in a local directory and mount it to `/usr/bin/container/custom`.
+* **Result:** These files are treated as executable scripts and run during the container's startup process.
+
+> You can use all environment variables in your scripts as well; but there is no `[[DEBUG_VARS]]` helper for scripts, as they are executed as normal shell scripts.
+
+```yaml
+# docker-compose.yml
+services:
+  app:
+    image: neunerlei/node-nginx:latest
+    volumes:
+      # Mount your custom entrypoint scripts into the 'custom' directory
+      - ./my-entrypoint-scripts:/usr/bin/container/custom
+```
 
 ## Default index.html
 

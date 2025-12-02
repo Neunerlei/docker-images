@@ -293,9 +293,9 @@ DEBUG_VARS detected in template: '/etc/container/templates/nginx/custom/my_debug
 
 ### Customization Methods
 
-There are three primary ways to customize the container's configuration:
+There are multiple ways to customize the container's behavior and configuration. Here are the primary methods:
 
-#### 1. Adding Custom NGINX Snippets (Recommended for most cases)
+#### 1. Adding Custom NGINX Snippets
 
 This is the standard, additive approach for extending NGINX. It's perfect for adding headers, redirects, or custom `location` blocks.
 
@@ -333,10 +333,22 @@ For maximum control, you can completely replace any of the container's default t
 
 #### 3. Custom Entrypoint Hooks
 
-The entrypoint provides two script hooks for advanced customization.
+Additionally to service snippets, the image supports custom entrypoint hooks that allow you to run your own scripts when the container starts. The scripts will be executed, just before the main command (`supervisord`) is started.
 
-* `/usr/bin/container/entrypoint.user-setup.sh`: This script is executed early in the startup process if `PUID` or `PGID` are set. It's the ideal place to handle run-time user mapping for local development to solve file permission issues.
-* `/usr/bin/container/entrypoint.local.sh`: This script is executed just before the main command (`supervisord`). It's a general-purpose hook for any other custom setup commands you might need.
+* **How it works:** Place your custom `.sh` files in a local directory and mount it to `/usr/bin/container/custom`.
+* **Result:** These files are treated as executable scripts and run during the container's startup process.
+
+> Both, the sorting rules and the conditional filename markers described in the "Adding Custom NGINX Snippets" section also apply to these scripts. You can use all environment variables in your scripts as well; but there is no `[[DEBUG_VARS]]` helper for scripts, as they are executed as normal shell scripts.
+
+```yaml
+# docker-compose.yml
+services:
+  app:
+    image: neunerlei/node-nginx:latest
+    volumes:
+      # Mount your custom entrypoint scripts into the 'custom' directory
+      - ./my-entrypoint-scripts:/usr/bin/container/custom
+```
 
 ## Default Script (`server.js`)
 

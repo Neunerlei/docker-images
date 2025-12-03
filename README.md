@@ -32,7 +32,6 @@ If a new version introduces a **breaking change**, you simply need to:
 2.  Make the necessary fixes inside the new `src/nginx/1.29` directory.
 3.  Commit the change. The pipeline will automatically pick up and use this new directory for all future `1.29.x` builds.
 
-
 ## Local Build Process
 
 For development and testing, you can also build the images locally using the `bin/build.sh` script to build images.
@@ -52,6 +51,10 @@ To build and push:
 ```bash
 ./bin/build.sh php 8.5 fpm-debian 
 ```
+
+## Contributing
+
+If you want to contribute to this project or want to learn how the internals of the images are designed, please check the [contributing documentation](docs/contributing.md) file. Also, the [automated build system documentation](.github/BUILD.md) might be of interest to you, to understand how the images are build and published.
 
 ## License
 

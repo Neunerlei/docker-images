@@ -48,7 +48,7 @@ This image is configured almost entirely through environment variables. This all
 | **General**                  |                                                                                                                  |                                |
 | `PUID`                       | The user ID to run processes as (`www-data`). Useful for matching host file permissions.                         | `33`                           |
 | `PGID`                       | The group ID to run processes as (`www-data`). Useful for matching host file permissions.                        | `33`                           |
-| `CONTAINER_MODE`             | Read-only. Automatically set to `web` or `worker`.                                                               | `web`                          |
+| `CONTAINER_MODE`             | Read-only. Automatically set to `web`, `worker` or `build`.                                                      | `web`                          |
 | `MAX_UPLOAD_SIZE`            | A convenient variable to set NGINX's `client_max_body_size`.                                                     | `100M`                         |
 | `ENVIRONMENT`                | Sets the overall environment. `dev`/`development` is non-production; all other values are considered production. | `production`                   |
 | `NODE_ENV`                   | The standard Node.js environment variable. Defaults to the value of `ENVIRONMENT`.                               | (derived)                      |
@@ -74,21 +74,21 @@ This image is configured almost entirely through environment variables. This all
 | `CONTAINER_TEMPLATE_DIR`     | The path to the container's internal template files.                                                             | `/etc/container/templates`     |
 | `CONTAINER_BIN_DIR`          | The path to the container's internal binary and script files.                                                    | `/usr/bin/container`           |
 
-### ENVIRONMENT
+#### ENVIRONMENT and `NODE_ENV` Derivation
 
-The `ENVIRONMENT` variable is shared between all my base images and is used to define the overall environment your application is running in. It can be set to either `development` (or `dev`) or `production` (or `prod`); the values in brackets will be expanded to their full forms automatically. This variable is primarily used to load the correct NGINX configuration, but it also influences other behaviors in the entrypoint script. If any other value is provided, it will be used as-is.
+The `ENVIRONMENT` variable is a high-level switch for the container's operational mode. It is shared across all images in this ecosystem and influences NGINX configurations, logging verbosity, and other entrypoint behaviors.
 
-> Please note tho, that every value other than `development` or `dev` is considered production.
+- **Possible Values:** `production` (or `prod`) and `development` (or `dev`).
+- **Default:** `production`.
+- **Rule:** Any value other than `development` or `dev` is treated as a production environment.
 
-#### `NODE_ENV` Derivation
+**`NODE_ENV` Derivation Logic:**
 
-If you do not explicitly set `NODE_ENV`, it will be derived from `ENVIRONMENT` as follows:
+To align with standard Node.js practices, the `NODE_ENV` variable is automatically derived from `ENVIRONMENT`. You generally do not need to set it yourself.
 
-* If `ENVIRONMENT` is `prod` or `production`, `NODE_ENV` becomes `production`.
-* If `ENVIRONMENT` is `dev` or `development`, `NODE_ENV` becomes `development`.
-* Otherwise, `NODE_ENV` is set to the value of `ENVIRONMENT`.
-
-If you set `NODE_ENV` directly, its value will always be respected.
+1. If `ENVIRONMENT` is set to `production` or `prod`, `NODE_ENV` defaults to `production`.
+2. If `ENVIRONMENT` is set to `development` or `dev`, `NODE_ENV` defaults to `development`.
+3. If you set `NODE_ENV` explicitly, **your value will always take precedence**. This allows you to run in a `production` container `ENVIRONMENT` (with optimized NGINX settings) while having `NODE_ENV` set to `staging`, for example.
 
 ### Path Composition: `PROJECT_PATH` + `SERVICE_PATH`
 
@@ -159,32 +159,30 @@ Your entire project, including a frontend and backend, must live under a specifi
 
 ## Web Mode In-Depth
 
-In the default `web` mode, the entrypoint script dynamically generates the NGINX configuration to act as a reverse proxy for your Node.js application.
+In `web` mode, the entrypoint script configures NGINX to serve your application. By default, it operates over plain HTTP, but enabling SSL for HTTPS is controlled via a single environment variable. This process is known as **SSL Termination**, where NGINX handles the performance-intensive work of encrypting and decrypting traffic, freeing your application to communicate over plain HTTP internally.
 
-### HTTP vs. HTTPS
+**Controlling the Protocol:**
 
-The image supports a simple way to enable SSL. This is fundamental for modern web applications and NGINX handles this process, known as SSL Termination, very efficiently [docs.nginx.com](https://docs.nginx.com/nginx/admin-guide/security-controls/terminating-ssl-http/).
+The `DOCKER_PROJECT_PROTOCOL` and `DOCKER_SERVICE_PROTOCOL` variables work together to manage this.
 
-* **By default (`DOCKER_PROJECT_PROTOCOL="http"`):** NGINX listens for plain HTTP on port 80.
-* **When `DOCKER_PROJECT_PROTOCOL="https"`:** NGINX is configured to listen on port 443 with SSL, using certificates it expects to find at the paths specified by `NGINX_CERT_PATH` and `NGINX_KEY_PATH`. It also sets up an automatic redirect from HTTP (port 80) to HTTPS. You must mount your certificates to these paths.
+- `DOCKER_PROJECT_PROTOCOL`: Defines how the **end-user** connects to your service from the outside world. Set this to `"https"` if your service is exposed via HTTPS.
+- `DOCKER_SERVICE_PROTOCOL`: Defines how the **reverse proxy talks to your application container**. If you are terminating SSL at an outer proxy, you should set this to `"http"`. It defaults to the value of `DOCKER_PROJECT_PROTOCOL`.
 
-This setup is great for local development with tools like `mkcert` or for production if you provide valid certificates.
+**Common Scenarios:**
 
-> For a more automated approach to SSL, especially in production with Let's Encrypt certificates, you might consider a dedicated reverse proxy gateway like [linuxserver.io/swag](https://docs.linuxserver.io/images/docker-swag/) in front of this container (running in plain HTTP mode). Another good alternative is [nginx-proxy](https://github.com/nginx-proxy/nginx-proxy) with the [acme-companion](https://github.com/nginx-proxy/acme-companion).
-> This allows you to centralize SSL management and offload that responsibility from your application containers.
+1. **Direct HTTPS Exposure:**
+    - **Goal:** This container handles SSL directly.
+    - **Config:** `DOCKER_PROJECT_PROTOCOL="https"` (and leave `DOCKER_SERVICE_PROTOCOL` unset).
+    - **Result:** NGINX listens on port 443 with SSL, using certificates from `NGINX_CERT_PATH` and `NGINX_KEY_PATH`, and redirects HTTP traffic to HTTPS. You must mount your certificates into the container.
 
-#### SSL Termination using a proxy
+2. **SSL Termination at an External Gateway (Recommended for Production):**
+    - **Goal:** A different proxy (like Traefik, Caddy, or another `nginx` instance) handles SSL, and forwards plain HTTP traffic to this container.
+    - **Config:** `DOCKER_PROJECT_PROTOCOL="httpss"` (so your app can generate correct public URLs) and `DOCKER_SERVICE_PROTOCOL="http"`.
+    - **Result:** NGINX inside this container listens for plain HTTP on port 80. Your application remains simple and unaware of SSL, while still understanding that the public-facing connection is secure.
 
-When your service is running behind a reverse proxy [e.g. neunerlei/nginx](nginx.md), you might want to terminate the SSL connection at the proxy level. In this setup, your reverse proxy is exposed to the internet and handles all the complex and CPU-intensive work of HTTPS encryption and decryption. Once it receives a secure request, it "terminates" the SSL and forwards a plain, unencrypted HTTP request to the appropriate internal service.
+> **Production Note:** For automated certificate management (e.g., via Let's Encrypt), using a dedicated reverse proxy gateway like [linuxserver/swag](https://docs.linuxserver.io/images/docker-swag) or [nginx-proxy](https://github.com/nginx-proxy/nginx-proxy) in front of this container is a highly recommended pattern. This centralizes SSL management and simplifies your application containers.
 
-This is beneficial because:
-
-* **Centralized Security:** You only need to manage TLS certificates in one place (the proxy), not in every single application container.
-* **Simplicity:** Your application containers don't need to be configured for HTTPS, simplifying their setup and code.
-
-----
-
-##### Example: A Secure Application with SSL Termination
+### Example: A Secure Application with SSL Termination
 
 You're running a single application that must be accessed securely over HTTPS. Your reverse proxy will handle the security.
 
@@ -216,22 +214,7 @@ If you were to omit `DOCKER_SERVICE_PROTOCOL`, it would default to the value of 
 
 This image uses a flexible system for extending the base NGINX configuration. You can add any number of custom configuration files, and the container's entrypoint script will intelligently process and include them based on their name and your environment variables.
 
-You can learn more about this powerful feature in [Advanced Customization](#advanced-customization-templating-and-overrides), especially in the [Adding Custom NGINX Snippets](#1-adding-custom-nginx-snippets-recommended-for-most-cases) section.
-
-In a nutshell:
-
-* Place your custom NGINX `.conf` files in a local directory.
-* Mount that directory to `/etc/container/templates/nginx/custom/` in the container.
-* The entrypoint will process these files, substituting any environment variable placeholders, and include them in the main NGINX configuration.
-
-Your custom snippets can add headers, redirects, or even new `location` blocks and can look like this:
-
-```nginx
-location ^~ ${DOCKER_SERVICE_ABS_PATH}custom/ {
-    root ${NGINX_DOC_ROOT};
-    index index.html index.htm;
-}
-```
+You can learn more about this powerful feature in [Advanced Customization](#advanced-customization-templating-and-overrides), especially in the [Adding Custom NGINX Snippets](#1-adding-custom-nginx-snippets-marker-aware) section.
 
 ## Worker Mode In-Depth
 
@@ -267,6 +250,12 @@ services:
       - NODE_WORKER_COMMAND=while true; do node /var/www/html/my_task.js; sleep 300; done
 ```
 
+## Build Mode at a Glance
+
+Automatically activated when no command is provided. This mode sets up the full container environment for multi-stage builds, dependency installation, testing, or compilation without starting any services.
+
+Learn more about it in the [Build Mode Documentation](#build-time-execution-with-multi-stage-builds)
+
 ## Advanced Customization: Templating and Overrides
 
 This image uses a powerful templating engine that processes **all internal configuration files** on startup. This allows for deep customization of NGINX, Supervisor, and other components.
@@ -276,6 +265,8 @@ This image uses a powerful templating engine that processes **all internal confi
 Every configuration file inside `/etc/container/templates/` is treated as a template. The entrypoint script will read these files, substitute placeholders with their corresponding environment variable values, and write the final config to its destination.
 
 You can use any of the environment variables listed above as placeholders in your custom files, using the syntax `${VAR_NAME}`.
+
+> Whenever you see `TEMPLATES` in the headlines below, it means that you can use variables in the files.
 
 #### The `[[DEBUG_VARS]]` Helper
 
@@ -291,11 +282,58 @@ DEBUG_VARS detected in template: '/etc/container/templates/nginx/custom/my_debug
   ...
 ```
 
+### Filename Markers: Declarative Conditional Logic
+
+To control *when* your custom snippets and scripts are loaded, you can embed special markers in their filenames. This creates a powerful and readable declarative system for managing configuration.
+
+The system understands two operators: `.` (for AND) and `-or-` (for OR).
+
+> Whenever you see `MARKER-AWARE` in the headlines below, it means that these rules apply.
+
+**Logic Rules:**
+
+1. A filename is broken into groups by the `.` delimiter. For a file to be loaded, **every** logical group must be satisfied.
+2. Each group is broken into clauses by the `-or-` delimiter. For a group to be satisfied, **at least one** of its clauses must be true.
+
+**Available Markers:**
+
+| Marker        | Condition                             |
+|:--------------|:--------------------------------------|
+| `prod`        | `ENVIRONMENT` is `production`.        |
+| `dev`         | `ENVIRONMENT` is `development`.       |
+| `https`       | `DOCKER_SERVICE_PROTOCOL` is `https`. |
+| `mode-web`    | `CONTAINER_MODE` is `web`.            |
+| `mode-worker` | `CONTAINER_MODE` is `worker`.         |
+| `mode-build`  | `CONTAINER_MODE` is `build`.          |
+| `feat-nginx`  | The `nginx` feature is enabled.       |
+
+**Examples:**
+
+- **`01-headers.conf`**
+    - **Logic:** No markers.
+    - **Result:** Always loaded.
+
+- **`10-security.prod.conf`**
+    - **Logic:** `prod`
+    - **Result:** Loaded only when `ENVIRONMENT` is `production`.
+
+- **`20-hsts.prod.https.conf`**
+    - **Logic:** `prod` AND `https`
+    - **Result:** Loaded only in a `production` environment with `https` enabled.
+
+- **`30-debug-headers.dev-or-staging.conf`**
+    - **Logic:** `dev` OR `staging` (assuming a custom `staging` marker was added).
+    - **Result:** Loaded if `ENVIRONMENT` is `development` OR `staging`.
+
+- **`40-special-proxy.prod.mode-web-or-mode-worker.conf`**
+    - **Logic:** `prod` AND (`mode-web` OR `mode-worker`).
+    - **Result:** Loaded in a `production` environment if the container is running in either `web` or `worker` mode.
+
 ### Customization Methods
 
 There are multiple ways to customize the container's behavior and configuration. Here are the primary methods:
 
-#### 1. Adding Custom NGINX Snippets
+#### 1. Adding Custom NGINX Snippets `MARKER-AWARE` `TEMPLATES`
 
 This is the standard, additive approach for extending NGINX. It's perfect for adding headers, redirects, or custom `location` blocks.
 
@@ -312,33 +350,53 @@ services:
       - ./my-nginx-snippets:/etc/container/templates/nginx/custom
 ```
 
-**Filename Markers for Conditional Loading:**
-Snippets in this directory support special filename markers to be loaded conditionally:
+Your custom snippets can add headers, redirects, or even new `location` blocks and can look like this:
 
-* `.prod.` : The snippet is loaded only if `ENVIRONMENT` is `production`.
-* `.dev.` : The snippet is loaded only if `ENVIRONMENT` is `development`.
-* `.https.` : The snippet is loaded only if `DOCKER_SERVICE_PROTOCOL` is `https`.
+```nginx
+location ^~ ${DOCKER_SERVICE_ABS_PATH}custom/ {
+    root ${NGINX_DOC_ROOT};
+    index index.html index.htm;
+}
+```
 
-**Examples:**
+##### 1.1 Server Snippets (server) `MARKER-AWARE` `TEMPLATES`
 
-* `01-security-headers.prod.conf`: Adds security headers, but only in production.
-* `10-hsts.https.prod.conf`: Adds HSTS rules, but only when the service is running HTTPS in production.
-* `20-redirects.conf`: A general-purpose file that is always loaded.
+These snippets are included in the main `server` block and are perfect for adding global rules, headers, or `map` blocks.
 
-#### 2. Overriding Core Templates (Advanced)
+* **How:** Mount a directory containing your `.conf` files to `/etc/container/templates/nginx/custom/`.
+* **Result:** The files are processed and included globally.
+
+##### 1.2 Global Snippets (http) `MARKER-AWARE` `TEMPLATES`
+
+These snippets are included in the main `http` block and are perfect for adding global rules, headers, or `map` blocks.
+
+* **How:** Inside your custom templates directory, create a `global` sub-directory.
+* **Result:** The files are processed and included globally in the `http` block.
+
+#### 2. Overriding Core Templates (Advanced) `TEMPLATES`
 
 For maximum control, you can completely replace any of the container's default template files. This is an "all-or-nothing" approach best used for fundamentally changing a core component.
 
-* **How it works:** Identify the default template you wish to replace (e.g., `/etc/container/templates/nginx/service.root.nginx.conf`). In your project, create a file with your desired content and mount it to the *
+* **How:** Identify the default template (e.g., `/etc/container/templates/nginx/nginx.conf`). In your project, create your version and mount it to the *exact same path* inside the container.
+* **Result:** Your mounted file will completely replace the image's default. The entrypoint will then process *your* template instead.
 
-#### 3. Custom Entrypoint Hooks
+> **Note:** Filename markers do **not** apply when directly overriding a core template file.
+
+##### 2.1. Custom error pages `TEMPLATES`
+
+The `/etc/container/templates/nginx/service.errors.nginx.conf` file is responsible for handling error pages in the nginx configuration. By default, it supports custom error pages for HTTP status codes 400, 401, 403, 404, 500, 502, 503, and 504; both as HTML and JSON responses.
+
+You can customize these error pages by overriding the default templates at: `/etc/container/templates/nginx/errorPage.html` or `/etc/container/templates/nginx/errorPage.json`.
+Note, that these files are templates, so you can use any environment variables defined in the container within these files, additionally you have access to: `ERROR_CODE`, `ERROR_TITLE` and `ERROR_DESCRIPTION`, which will be replaced with the actual error code, title and description when the error page is rendered.
+
+#### 3. Custom Entrypoint Hooks `MARKER-AWARE`
 
 Additionally to service snippets, the image supports custom entrypoint hooks that allow you to run your own scripts when the container starts. The scripts will be executed, just before the main command (`supervisord`) is started.
 
 * **How it works:** Place your custom `.sh` files in a local directory and mount it to `/usr/bin/container/custom`.
 * **Result:** These files are treated as executable scripts and run during the container's startup process.
 
-> Both, the sorting rules and the conditional filename markers described in the "Adding Custom NGINX Snippets" section also apply to these scripts. You can use all environment variables in your scripts as well; but there is no `[[DEBUG_VARS]]` helper for scripts, as they are executed as normal shell scripts.
+> Custom entrypoint scripts use the same filename marker system described above, allowing you to conditionally execute scripts based on environment, mode, or protocol. All environment variables are automatically available in your scripts. Unlike templates, there's no `[[DEBUG_VARS]]` helper since scripts are executed directly, but you can use commands like `printenv | sort` to see all available variables.
 
 ```yaml
 # docker-compose.yml
@@ -355,3 +413,77 @@ services:
 To get you started quickly, the image includes a simple `server.js` file at `/var/www/html/server.js`. This file starts a basic web server that displays a welcome message and, if `NODE_ENV` is `development`, a list of environment variables.
 
 You can replace this file with your own application code by mounting your project into `/var/www/html`. NGINX is configured to serve static files from `/var/www/html/public` first, and if a file is not found, it will proxy the request to your Node.js application. If you don't want the `server.js` file as entrypoint, simply set the `NODE_WEB_COMMAND` environment variable to your desired start command.
+
+## The Shell Environment and the Bash Wrapper
+
+A common challenge in Docker is that environment variables set during an entrypoint's execution are not automatically available to subsequent `docker exec` sessions or different shell environments. This image solves this problem with a "bash wrapper."
+
+During the build process, the original `/bin/bash` is moved to `/bin/_bash`, and a new `/bin/bash` script is put in its place. This wrapper does one simple thing: before executing the real bash, it sources the file at `/etc/container-vars.sh`, which is generated by the entrypoint and contains all exported variables. The `/bin/sh` shell is also symlinked to this wrapper.
+
+**Implications for You:**
+
+- **Seamless `exec`:** Variables like `DOCKER_SERVICE_ABS_PATH` will be available in `docker exec my-container env` or `docker exec my-container bash`.
+- **Other Shells (e.g., `zsh`):** If you install and use a different shell, it will **not** inherit these variables automatically. To get the same behavior, you would need to configure your `~/.zshrc` (or equivalent) to source `/etc/container-vars.sh` upon startup.
+
+## Build-Time Execution with Multi-Stage Builds
+
+Beyond running as a web or worker service, this image includes a powerful **"Build Mode"** designed to be used inside your `Dockerfile` during a `docker build` process.
+
+This feature allows you to leverage the container's fully configured environment—including all its environment variables, helper scripts, and logic—to perform build tasks like compiling frontend assets, running database migrations, or running unit tests.
+
+### How It Works
+
+Build Mode is activated automatically:
+
+> When you execute the entrypoint script (`/usr/bin/container/entrypoint.sh`) inside a `Dockerfile` `RUN` instruction **without** providing any command, the framework detects this and sets `CONTAINER_MODE="build"`.
+
+It then proceeds to run all the normal setup steps, making variables like `DOCKER_SERVICE_ABS_PATH` available to subsequent `RUN` commands. Crucially, it skips the final `exec` step, allowing the Docker build to continue.
+
+### Use Case: Creating an Optimized Production Image
+
+This is the most common use case. In a multi-stage Docker build, you can use one stage to build your application and a final, clean stage to run it.
+
+Here is a typical `Dockerfile` for a Node.js application:
+
+```dockerfile
+# Start from your application's base image
+FROM neunerlei/node-nginx:latest AS builder
+
+# Pass in build-time arguments (e.g., from your CI/CD system)
+ARG DOCKER_PROJECT_PROTOCOL
+ARG DOCKER_PROJECT_HOST
+
+# Set them as environment variables so the entrypoint can read them
+ENV DOCKER_PROJECT_PROTOCOL=${DOCKER_PROJECT_PROTOCOL}
+ENV DOCKER_PROJECT_HOST=${DOCKER_PROJECT_HOST}
+
+# Copy your application source code
+COPY --chown=www-data:www-data ./package*.json ./
+COPY --chown=www-data:www-data ./src ./src
+
+# === Build-Time Execution ===
+# 1. Run the entrypoint to set up the environment.
+RUN /usr/bin/container/entrypoint.sh
+
+# 2. Run your build commands. They now have access to all container variables.
+#    For example, your `vite.config.js` or `webpack.config.js` can now
+#    read PUBLIC_HOST, PUBLIC_PATH, etc., from `process.env`.
+RUN npm ci
+RUN npm run build
+
+# --- Final Production Stage ---
+FROM neunerlei/node-nginx:latest
+
+WORKDIR /var/www/html
+
+# Copy only the necessary build artifacts from the builder stage.
+COPY --from=builder /var/www/html/dist ./dist
+COPY --from=builder /var/www/html/package*.json ./
+COPY --from=builder /var/www/html/node_modules ./node_modules
+
+# The final image now contains your compiled app but not the source code
+# or build-time dependencies, making it smaller and more secure.
+# The standard CMD and ENTRYPOINT will take over from here.
+```
+
+By using this pattern, you ensure that the environment variables and paths used during your build process are identical to those that will be used in production, eliminating a common source of bugs. You can also use filename markers like `my-script.mode-build.sh` in your custom entrypoint hooks to run scripts exclusively during the build phase.

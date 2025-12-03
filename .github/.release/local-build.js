@@ -118,6 +118,6 @@ const child_process = require('node:child_process');
     console.log(` - Source Image with Tag: ${buildEntry.sourceImageWithTag}`);
     console.log(` - Build Path: ${buildEntry.buildPath}`);
 
-    const dockerBuildCommand = `cd "${buildEntry.buildPath}" && docker build -t ${targetImage}:${buildEntry.tag} --progress=plain --build-arg SOURCE_IMAGE=${buildEntry.sourceImageWithTag} .`;
+    const dockerBuildCommand = `cd "${buildEntry.buildPath}" && docker build -t ${targetImage}:${buildEntry.tag} --build-context common=../../_common --progress=plain --build-arg SOURCE_IMAGE=${buildEntry.sourceImageWithTag} .`;
     child_process.execSync(dockerBuildCommand, {stdio: 'inherit'});
 })();

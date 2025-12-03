@@ -1,6 +1,0 @@
-{
-  "success": false,
-  "status": "${ERROR_CODE}",
-  "error": "${ERROR_TITLE}",
-  "message": "${ERROR_DESCRIPTION}"
-}

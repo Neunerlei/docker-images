@@ -368,7 +368,7 @@ These snippets are included in the main `server` block and are perfect for addin
 
 If you are using the container as proxy (`CONTAINER_MODE` = `proxy`), this feature allows you to add custom rules *inside* the `location` block of a specific proxied service. This is ideal for things like per-route caching, rate-limiting, or custom headers.
 
-* **How:** Inside your custom templates directory, create a new `.conf` file with the prefix of `proxy-${service_key}.conf`. The `${service_key} is the **lowercase version of your proxy key**. For a service defined with `PROXY_API_CONTAINER`, the path would be `proxy-api.conf`. Everything after that prefix is optional and can include markers as described above.
+* **How:** Inside your custom templates directory, create a `proxy` sub-directory. Then create a new `.conf` file with the prefix of `${service_key}` and the `.conf` extension. The `${service_key}` is the **lowercase version of your proxy key**. For a service defined with `PROXY_API_CONTAINER`, the path would be `api.conf`. Your name can include markers as described above like: `api.prod-or-env-staging.https.conf`.
 * **Result:** All files following that schema will be included within the `location` block for the `API` service (if the marker conditions are met).
 
 ##### 1.3 Global Snippets (http) `MARKER-AWARE` `TEMPLATES`

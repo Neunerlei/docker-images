@@ -9,7 +9,6 @@ if [ -f "${default_web_entrypoint_script}" ]; then
   default_node_web_command="node ${default_web_entrypoint_script}"
 fi
 
-export NGINX_KEY_PATH="${NGINX_KEY_PATH:-"/etc/ssl/certs/key.pem"}"
 export NODE_SERVICE_PORT="${NODE_SERVICE_PORT:-"3000"}"
 export NODE_WORKER_PROCESS_COUNT="${NODE_WORKER_PROCESS_COUNT:-"1"}"
 export NODE_ENV="${NODE_ENV:-${ENVIRONMENT}}"
@@ -31,3 +30,7 @@ if [ -z "${CONTAINER_MODE}" ] ; then
   fi
   feature_registry="${feature_registry} supervisor"
 fi
+
+user_owned_directories_registry+=(
+  "/var/www/.npm"
+)

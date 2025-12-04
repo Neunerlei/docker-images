@@ -24,7 +24,19 @@ render_filtered_templates_in_dir() {
   local output_dir="$2"
   local pattern="${3:-"*"}"
 
-  echo "Processing custom snippets from ${template_dir}, matching '${pattern}'..." >&2
+  # If template_dir is empty, fail with error
+  if [ -z "$template_dir" ]; then
+    echo "Error: template_dir is required" >&2
+    exit 1
+  fi
+
+  # If template_dir does not exist, skip processing
+  if [ ! -d "$template_dir" ]; then
+    echo "Template directory '${template_dir}' does not exist. Skipping." >&2
+    return 0
+  fi
+
+  echo "Processing templates from '${template_dir}', matching '${pattern}'..." >&2
 
   # Clear out old snippets to ensure a clean slate
   rm -f "${output_dir}/${pattern}"

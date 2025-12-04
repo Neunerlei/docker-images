@@ -456,7 +456,7 @@ It then proceeds to run all the normal setup steps, making variables like `DOCKE
 
 This is the most common use case. In a multi-stage Docker build, you can use one stage to build your application and a final, clean stage to run it.
 
-Here is a typical `Dockerfile` for a Node.js application:
+Here is a typical `Dockerfile` for running unit tests during the build process:
 
 ```dockerfile
 # Start from your application's base image
@@ -479,8 +479,6 @@ COPY --chown=www-data:www-data ./src ./src
 RUN /usr/bin/container/entrypoint.sh
 
 # 2. Run your build commands. They now have access to all container variables.
-#    For example, your `vite.config.js` or `webpack.config.js` can now
-#    read PUBLIC_HOST, PUBLIC_PATH, etc., from `process.env`.
 RUN composer install --no-dev --optimize-autoloader
 RUN ./vendor/bin/phpunit
 ```

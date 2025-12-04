@@ -15,7 +15,7 @@ if [ ${#changed_vars[@]} -gt 0 ]; then
   echo "[ENTRYPOINT.export-custom-vars] Detected changes in environment variables, exporting new/changed variables:";
   for var_name in "${changed_vars[@]}"; do
     var_value="${!var_name}"
-    echo " - Exporting variable: ${var_name}=\"${var_value}\""
+    echo " - Exporting variable: ${var_name}=\"$(mask_var "${var_name}" "${var_value}")\""
     echo "export ${var_name}=\"${var_value}\"" >> "${CONTAINER_VARS_SCRIPT}"
   done
 fi

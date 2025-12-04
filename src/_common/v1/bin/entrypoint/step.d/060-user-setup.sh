@@ -14,42 +14,32 @@ if ! getent group www-data >/dev/null 2>&1; then
     exit 1
 fi
 
-declare CURRENT_UID="$(id -u www-data)"
-declare CURRENT_GID="$(id -g www-data)"
-declare TARGET_UID="${PUID:-$CURRENT_UID}"
-declare TARGET_GID="${PGID:-$CURRENT_GID}"
+declare current_uid="$(id -u www-data)"
+declare current_gid="$(id -g www-data)"
+declare target_uid="${PUID:-${current_uid}}"
+declare target_gid="${PGID:-$current_gid}"
 
-if [ "$TARGET_UID" == "$CURRENT_UID" ] && [ "$TARGET_GID" == "$CURRENT_GID" ]; then
+if [ "${target_uid}" == "${current_uid}" ] && [ "${target_gid}" == "${current_gid}" ]; then
   echo "[ENTRYPOINT.user-setup] User and group ID already set to target values, skipping user configuration."
   return;
 fi
 
-echo "[ENTRYPOINT.user-setup] Current www-data UID/GID is $CURRENT_UID/$CURRENT_GID. Target is $TARGET_UID/$TARGET_GID."
+echo "[ENTRYPOINT.user-setup] Current www-data UID/GID is ${current_uid}/${current_gid}. Target is ${target_uid}/${target_gid}."
 
 # Change the group ID first
-if [ "$TARGET_GID" != "$CURRENT_GID" ]; then
-  if [ "$(getent group "$TARGET_GID")" ]; then
-    EXISTING_GROUP_NAME=$(getent group "$TARGET_GID" | cut -d: -f1)
-    echo "[ENTRYPOINT.user-setup] WARNING: GID $TARGET_GID is already in use by group '$EXISTING_GROUP_NAME'. This may cause conflicts."
+if [ "${target_gid}" != "${current_gid}" ]; then
+  if [ "$(getent group "${target_gid}")" ]; then
+    existing_group_name=$(getent group "${target_gid}" | cut -d: -f1)
+    echo "[ENTRYPOINT.user-setup] WARNING: GID ${target_gid} is already in use by group '${existing_group_name}'. This may cause conflicts."
   fi
-  groupmod -o -g "$TARGET_GID" www-data
+  groupmod -o -g "${target_gid}" www-data
 fi
 
 # Change the user ID
-if [ "$TARGET_UID" != "$CURRENT_UID" ]; then
-  if id -u "$TARGET_UID" >/dev/null 2>&1; then
-    EXISTING_USER_NAME=$(getent passwd "$TARGET_UID" | cut -d: -f1)
-    echo "[ENTRYPOINT.user-setup] WARNING: UID $TARGET_UID is already in use by user '$EXISTING_USER_NAME'. This may cause conflicts."
+if [ "${target_uid}" != "${current_uid}" ]; then
+  if id -u "${target_uid}" >/dev/null 2>&1; then
+    existing_user_name=$(getent passwd "${target_uid}" | cut -d: -f1)
+    echo "[ENTRYPOINT.user-setup] WARNING: UID ${target_uid} is already in use by user '${existing_user_name}'. This may cause conflicts."
   fi
-  usermod -o -u "$TARGET_UID" www-data
+  usermod -o -u "${target_uid}" www-data
 fi
-
-# Set correct ownership on the relevant directories
-echo "[ENTRYPOINT.user-setup] Setting ownership on application directories..."
-chown -R www-data:www-data "/etc/ssl/certs"
-chown -R www-data:www-data "/etc/supervisor"
-chown -R www-data:www-data "/run"
-chown -R www-data:www-data "/var/lib/nginx"
-chown -R www-data:www-data "/var/log/nginx"
-chown -R www-data:www-data "/var/www/html"
-chown -R www-data:www-data "/var/www/.npm"

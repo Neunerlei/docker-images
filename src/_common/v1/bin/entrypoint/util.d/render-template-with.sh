@@ -9,8 +9,23 @@
 #   render_template_with 'VAR_NAME ANOTHER_VAR_NAME' "path/to/template.tpl" "path/to/output.conf"
 #
 render_template_with() {
-    local vars_to_substitute="$1"
-    local template_file="$2"
-    local output_file="$3"
-    echo "$(render_template_string_with "$vars_to_substitute" "$template_file")" > "$output_file"
+  local vars_to_substitute="$1"
+  local template_file="$2"
+  local output_file="$3"
+
+  # Fail if output_file is not provided
+  if [ -z "$output_file" ]; then
+      echo "Output file path is required" >&2
+      exit 1
+  fi
+
+  # Fail if the directory of the output file does not exist
+  local output_dir
+  output_dir=$(dirname "$output_file")
+  if [ ! -d "$output_dir" ]; then
+      echo "Output directory does not exist: $output_dir" >&2
+      exit 1
+  fi
+
+  echo "$(render_template_string_with "$vars_to_substitute" "$template_file")" > "$output_file"
 }

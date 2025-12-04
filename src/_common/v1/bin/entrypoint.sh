@@ -39,6 +39,14 @@ declare -gA file_marker_condition_registry
 # A list of feature names (nginx | supervisor | ...) to dynamically enable / disable
 # entrypoint features
 declare -g feature_registry
+# User directories
+# A list of directory paths that should be owned by the www-data user inside the container
+declare -g -a user_owned_directories_registry=(
+  "/etc/supervisor"
+  "/run"
+  "/var/lib/nginx"
+  "/var/log/nginx"
+)
 
 # Load utility scripts first
 source_files_in_dir_alphabetically "$util_dir"

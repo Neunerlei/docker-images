@@ -14,8 +14,15 @@ render_template_string_with() {
     local line
 
     if [ ! -f "$template_file" ]; then
-        echo "Template file not found: $template_file" >&2
-        return 1
+      echo "Template file not found: $template_file" >&2
+      exit 1
+    fi
+
+    # If there are no variables to substitute, return the template as-is
+    if [ -z "$vars_to_substitute" ]; then
+      echo "Warning: There are no variables to substitute in template: '$template_file'. Returning the template as-is." >&2
+      cat "$template_file"
+      return 0
     fi
 
     while IFS= read -r line || [ -n "$line" ]; do

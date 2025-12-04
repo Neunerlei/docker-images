@@ -31,6 +31,10 @@ COPY --chown=www-data:www-data templates/ "${CONTAINER_TEMPLATE_DIR}/"
 COPY --chown=www-data:www-data --chmod=+x bin/ "${CONTAINER_BIN_DIR}/"
 COPY --chown=www-data:www-data src /var/www/html/public
 
+# Create a directory for the proxy snippets
+RUN mkdir -p /etc/nginx/snippets/proxy.d/ && \
+    chown -R www-data:www-data /etc/nginx/snippets/proxy.d/
+
 EXPOSE 80
 
 # Link our custom entrypoint into the container entrypoint

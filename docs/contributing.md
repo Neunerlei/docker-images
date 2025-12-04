@@ -72,6 +72,7 @@ The framework uses two global associative arrays declared in `entrypoint.sh` to 
 
 -   `file_marker_condition_registry`: This is the primary registry. It's a map where keys are marker names (e.g., `"prod"`) and values are the names of the shell functions that evaluate the condition (e.g., `"_file_marker_is_prod"`). To add a new marker, you simply define its condition function and add an entry to this map.
 -   `feature_registry`: A simpler, space-separated string that enables or disables large chunks of logic in the `step.d` scripts (e.g., enabling the entire Nginx or Supervisor setup). This is for coarse-grained control.
+-   `user_owned_directories_registry`: A registry for directories that should be owned by www-data. This is used to ensure when we modify the user ID of www-data, we also update ownership of these directories. If the directories are already owned by www-data, they are skipped. If any directory does not exist, it is created.
 
 ```bash
 # Core system defines registries

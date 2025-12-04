@@ -20,6 +20,12 @@ export PHP_CUSTOM_TEMPLATE_DIR="${CONTAINER_TEMPLATE_DIR}/php/custom"
 export PHP_CONFIG_DIR="/usr/local/etc/php/conf.d"
 export PHP_FPM_CONFIG_DIR="/usr/local/etc/php-fpm.d"
 
+# Allow access to www-data
+user_owned_directories_registry+=(
+  "${PHP_CONFIG_DIR}"
+  "${PHP_FPM_CONFIG_DIR}"
+)
+
 if [ -z "${CONTAINER_MODE}" ] ; then
   # If the PHP_WORKER_COMMAND is set, set the CONTAINER_MODE environment variable to "worker", otherwise set it to "web"
   if [ -n "${PHP_WORKER_COMMAND}" ]; then

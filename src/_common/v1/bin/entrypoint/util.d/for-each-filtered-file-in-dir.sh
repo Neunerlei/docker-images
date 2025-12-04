@@ -22,6 +22,13 @@ for_each_filtered_file_in_dir() {
     echo "Warning: file_marker_condition_registry map is empty. No filtering will be applied." >&2
   fi
 
+  # Build a single regex pattern from all registry keys.
+  # This is a highly efficient way to quickly discard non-matching groups.
+  local all_markers_regex
+  all_markers_regex="($(IFS=\|; echo "${!file_marker_condition_registry[*]}"))"
+  # This converts 'env-*|https' into a regex like '(env-.*|https)'
+  all_markers_regex="${all_markers_regex//\*/.*}"
+
   echo "Processing files from ${read_dir}, matching '${pattern}'..." >&2
 
   while IFS= read -r -d '' file_path; do
@@ -37,21 +44,9 @@ for_each_filtered_file_in_dir() {
       IFS='.' read -ra and_groups <<<"$filename"
 
       for group in "${and_groups[@]}"; do
-        # This check is a pre-filter. A group must contain something that looks
-        # like a marker. This is a simple optimization.
-        if ! [[ "${group}" == *-* || -v file_marker_condition_registry["${group}"] ]]; then
-            # If the group is not a compound word (like 'env-prod') and not a known scalar marker, skip it.
-            # This avoids processing 'file' or 'sh' from 'file.env-prod.sh'.
-            local is_potential_marker=false
-            for key in "${!file_marker_condition_registry[@]}"; do
-                if [[ "${group}" = $key ]]; then
-                   is_potential_marker=true
-                   break
-                fi
-            done
-            if ! $is_potential_marker; then
-                continue
-            fi
+        # Use the fast regex pre-filter.
+        if ! [[ "$group" =~ $all_markers_regex ]]; then
+          continue
         fi
 
         # Split the group into its OR clauses.
@@ -74,7 +69,7 @@ for_each_filtered_file_in_dir() {
             # Use Bash's glob matching:
             # - If registered_marker is 'https', it matches if clause is 'https'.
             # - If registered_marker is 'env-*', it matches if clause is 'env-prod', 'env-staging', etc.
-            if [[ "$clause" == "${registered_marker}" ]]; then
+            if [[ "${clause}" == ${registered_marker} ]]; then
               local condition_func="${file_marker_condition_registry["${registered_marker}"]}"
               local arg=""
 

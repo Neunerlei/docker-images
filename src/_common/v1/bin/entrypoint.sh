@@ -13,6 +13,7 @@ declare entrypoint_command="$@"
 export CONTAINER_MODE=""
 if [ -z "$entrypoint_command" ]; then
   export CONTAINER_MODE="build"
+  echo "[ENTRYPOINT] No command specified, setting CONTAINER_MODE to 'build'.";
 fi
 
 # Sources all .sh files in the given directory in alphabetical order

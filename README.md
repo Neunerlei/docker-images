@@ -6,10 +6,10 @@ A collection of Docker images; optimized for production use with common extensio
 
 ## Available Images 
 
- - **[PHP-nginx](docs/php-nginx.md)**: PHP with NGINX included (from PHP 8.5 onwards, and PHP 8.4 as legacy)
- - **[PHP (deprecated)](docs/php.md)**: PHP-FPM only (without NGINX) (legacy, deprecated since PHP 8.4)
- - **[Nginx](docs/nginx.md)**: Minimal NGINX web server / reverse proxy
- - **[Node.js](docs/node-nginx.md)**: Node.js in a box with NGINX as reverse proxy
+ - **[php-nginx](docs/php-nginx.md)**: PHP with NGINX included (from PHP 8.5 onwards, and PHP 8.4 as legacy)
+ - **[php (deprecated)](docs/php.md)**: PHP-FPM only (without NGINX) (legacy, deprecated since PHP 8.4)
+ - **[nginx](docs/nginx.md)**: Minimal NGINX web server / reverse proxy
+ - **[node-nginx](docs/node-nginx.md)**: Node.js in a box with NGINX as reverse proxy
 
 ## Automated Image Build Process
 

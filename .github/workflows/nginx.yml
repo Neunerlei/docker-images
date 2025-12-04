@@ -4,6 +4,7 @@ on:
     branches: [ "main" ]
     paths:
       - src/nginx/**
+      - src/_common/**
   schedule:
     - cron: '0 2 * * 1,4'
   workflow_dispatch:

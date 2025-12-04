@@ -4,6 +4,7 @@ on:
     branches: [ "main" ]
     paths:
       - src/php-nginx/**
+      - src/_common/**
   schedule:
     - cron: '0 2 * * 2,5'
   workflow_dispatch:

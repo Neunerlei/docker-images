@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Returns all environment variable names as a space-separated string.
+# NOTE: This excludes bash internal variables and common environment variables as well as variables starting with lowercase letters or underscore.
 # Usage:
 #   render_template "$(get_all_vars)" "path/to/template.tpl" "path/to/output.conf"
 #
@@ -11,5 +12,6 @@ get_all_vars() {
     compgen -v \
     | grep -E -v "$bp" \
     | grep -E -v "$cep" \
+    | grep -E '^[A-Z]' \
     | sort
 }

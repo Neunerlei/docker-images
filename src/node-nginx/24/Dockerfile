@@ -11,10 +11,8 @@ ENV CONTAINER_BIN_DIR=/usr/bin/container
 
 RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=apt-lib,target=/var/lib/apt,sharing=locked\
-    --mount=type=bind,from=common,source=v1/installer,target=/tmp/scripts \
-    bash /tmp/scripts/install-common-deps.sh && \
-    bash /tmp/scripts/install-bash-wrapper.sh && \
-    bash /tmp/scripts/install-common-dirs.sh
+    --mount=type=bind,from=common,source=v1,target=/tmp/installer \
+    bash /tmp/installer/installer.sh
 
 SHELL ["/bin/bash", "-c"]
 WORKDIR /var/www/html

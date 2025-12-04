@@ -433,10 +433,7 @@ The marker system uses filesystem operations to discover files. For directories 
 ### Variable Expansion
 
 The `get_all_vars()` function filters out bash internals and common system variables to reduce template processing overhead.
-
-### Registry Lookups
-
-Marker condition registry uses associative arrays for O(1) lookups, ensuring good performance even with many custom markers.
+It also filters out variables starting with a lower case letter or an underscore, as these are typically not intended for template use.
 
 ## Future Extensibility
 

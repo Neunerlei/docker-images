@@ -286,7 +286,7 @@ DEBUG_VARS detected in template: '/etc/container/templates/nginx/custom/my_debug
 
 To control *when* your custom snippets and scripts are loaded, you can embed special markers in their filenames. This creates a powerful and readable declarative system for managing configuration.
 
-The system understands two operators: `.` (for AND) and `-or-` (for OR).
+The system understands two operators: `.` (for AND) and `-or-` (for OR). It also supports **wildcard markers** for dynamic conditions like environments.
 
 > Whenever you see `MARKER-AWARE` in the headlines below, it means that these rules apply.
 
@@ -297,15 +297,13 @@ The system understands two operators: `.` (for AND) and `-or-` (for OR).
 
 **Available Markers:**
 
-| Marker        | Condition                             |
-|:--------------|:--------------------------------------|
-| `prod`        | `ENVIRONMENT` is `production`.        |
-| `dev`         | `ENVIRONMENT` is `development`.       |
-| `https`       | `DOCKER_SERVICE_PROTOCOL` is `https`. |
-| `mode-web`    | `CONTAINER_MODE` is `web`.            |
-| `mode-worker` | `CONTAINER_MODE` is `worker`.         |
-| `mode-build`  | `CONTAINER_MODE` is `build`.          |
-| `feat-nginx`  | The `nginx` feature is enabled.       |
+| Marker Pattern | Example Filename          | Condition for Loading                                                                                                                                                                                                                                          |
+|:---------------|:--------------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `env-*`        | `config.env-staging.conf` | The value of `$ENVIRONMENT` must match the part after `env-` (in this case, "staging"). This allows you to define custom environments beyond `prod` and `dev`. The aliases `env-prod` (for `production`) and `env-dev` (for `development`) are also supported. |
+| `mode-*`       | `script.mode-worker.sh`   | The value of `$CONTAINER_MODE` must match the part after `mode-` (e.g., "worker", "web", or "build").                                                                                                                                                          |
+| `prod`         | `config.prod.conf`        | A short form of `env-prod` when `ENVIRONMENT` is `production`.                                                                                                                                                                                                 |
+| `dev`          | `config.dev.conf`         | A short form of `env-dev` when `ENVIRONMENT` is `development`.                                                                                                                                                                                                 |
+| `https`        | `ssl-settings.https.conf` | The `$DOCKER_SERVICE_PROTOCOL` must be `https`.                                                                                                                                                                                                                |
 
 **Examples:**
 
@@ -313,7 +311,7 @@ The system understands two operators: `.` (for AND) and `-or-` (for OR).
     - **Logic:** No markers.
     - **Result:** Always loaded.
 
-- **`10-security.prod.conf`**
+- **`10-security.prod.conf`** equivalent to `10-security.env-prod.conf`
     - **Logic:** `prod`
     - **Result:** Loaded only when `ENVIRONMENT` is `production`.
 
@@ -321,13 +319,9 @@ The system understands two operators: `.` (for AND) and `-or-` (for OR).
     - **Logic:** `prod` AND `https`
     - **Result:** Loaded only in a `production` environment with `https` enabled.
 
-- **`30-debug-headers.dev-or-staging.conf`**
-    - **Logic:** `dev` OR `staging` (assuming a custom `staging` marker was added).
-    - **Result:** Loaded if `ENVIRONMENT` is `development` OR `staging`.
-
-- **`40-special-proxy.prod.mode-web-or-mode-worker.conf`**
-    - **Logic:** `prod` AND (`mode-web` OR `mode-worker`).
-    - **Result:** Loaded in a `production` environment if the container is running in either `web` or `worker` mode.
+- **`30-analytics.prod-or-env-staging.conf`** equivalent to `30-analytics.env-prod-or-env-staging.conf` 
+    -   **Logic:** `env-prod` OR `env-staging`
+    -   **Result:** Loaded if `$ENVIRONMENT` is `production` or `staging`.
 
 ### Customization Methods
 

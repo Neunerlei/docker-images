@@ -15,23 +15,23 @@ _file_marker_is_https() {
 }
 file_marker_condition_registry["https"]=_file_marker_is_https
 
-_file_marker_has_nginx_feature() {
+_file_marker_has_feature() {
+  local feature="$1"
   # The spaces are important to avoid partial matches (note the padding of BOTH sides)
-  [[ " $feature_registry " == *" nginx "* ]]
+  [[ " ${feature_registry} " == *" ${feature} "* ]]
 }
-file_marker_condition_registry["feat-nginx"]=_file_marker_has_nginx_feature
+file_marker_condition_registry["feat-*"]=_file_marker_has_feature
 
-_file_marker_is_web_mode() {
-  [[ "${CONTAINER_MODE}" == "web" ]]
+_file_marker_is_env() {
+  local env="$1"
+  [[ "${ENVIRONMENT}" == "${env}" ]] ||
+  [[ "${env}" == "prod" && "${ENVIRONMENT}" == "production" ]] ||
+  [[ "${env}" == "dev" && "${ENVIRONMENT}" == "development" ]]
 }
-file_marker_condition_registry["mode-web"]=_file_marker_is_web_mode
+file_marker_condition_registry["env-*"]=_file_marker_is_env
 
-_file_marker_is_worker_mode() {
-  [[ "${CONTAINER_MODE}" == "worker" ]]
+_file_marker_is_mode() {
+  local mode="$1"
+  [[ "${CONTAINER_MODE}" == "${mode}" ]]
 }
-file_marker_condition_registry["mode-worker"]=_file_marker_is_worker_mode
-
-_file_marker_is_build_mode() {
-  [[ "${CONTAINER_MODE}" == "build" ]]
-}
-file_marker_condition_registry["mode-build"]=_file_marker_is_build_mode
+file_marker_condition_registry["mode-*"]=_file_marker_is_mode

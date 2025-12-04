@@ -309,15 +309,13 @@ The system understands two operators: `.` (for AND) and `-or-` (for OR).
 
 **Available Markers:**
 
-| Marker        | Condition                             |
-|:--------------|:--------------------------------------|
-| `prod`        | `ENVIRONMENT` is `production`.        |
-| `dev`         | `ENVIRONMENT` is `development`.       |
-| `https`       | `DOCKER_SERVICE_PROTOCOL` is `https`. |
-| `mode-web`    | `CONTAINER_MODE` is `web`.            |
-| `mode-worker` | `CONTAINER_MODE` is `worker`.         |
-| `mode-build`  | `CONTAINER_MODE` is `build`.          |
-| `feat-nginx`  | The `nginx` feature is enabled.       |
+| Marker Pattern | Example Filename          | Condition for Loading                                                                                                                                                                                                                                          |
+|:---------------|:--------------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `env-*`        | `config.env-staging.conf` | The value of `$ENVIRONMENT` must match the part after `env-` (in this case, "staging"). This allows you to define custom environments beyond `prod` and `dev`. The aliases `env-prod` (for `production`) and `env-dev` (for `development`) are also supported. |
+| `mode-*`       | `script.mode-worker.sh`   | The value of `$CONTAINER_MODE` must match the part after `mode-` (e.g., "worker", "web", or "build").                                                                                                                                                          |
+| `prod`         | `config.prod.conf`        | A short form of `env-prod` when `ENVIRONMENT` is `production`.                                                                                                                                                                                                 |
+| `dev`          | `config.dev.conf`         | A short form of `env-dev` when `ENVIRONMENT` is `development`.                                                                                                                                                                                                 |
+| `https`        | `ssl-settings.https.conf` | The `$DOCKER_SERVICE_PROTOCOL` must be `https`.                                                                                                                                                                                                                |
 
 **Examples:**
 
@@ -325,7 +323,7 @@ The system understands two operators: `.` (for AND) and `-or-` (for OR).
     - **Logic:** No markers.
     - **Result:** Always loaded.
 
-- **`10-security.prod.conf`**
+- **`10-security.prod.conf`** equivalent to `10-security.env-prod.conf`
     - **Logic:** `prod`
     - **Result:** Loaded only when `ENVIRONMENT` is `production`.
 
@@ -333,13 +331,9 @@ The system understands two operators: `.` (for AND) and `-or-` (for OR).
     - **Logic:** `prod` AND `https`
     - **Result:** Loaded only in a `production` environment with `https` enabled.
 
-- **`30-debug-headers.dev-or-staging.conf`**
-    - **Logic:** `dev` OR `staging` (assuming a custom `staging` marker was added).
-    - **Result:** Loaded if `ENVIRONMENT` is `development` OR `staging`.
-
-- **`40-special-proxy.prod.mode-web-or-mode-worker.conf`**
-    - **Logic:** `prod` AND (`mode-web` OR `mode-worker`).
-    - **Result:** Loaded in a `production` environment if the container is running in either `web` or `worker` mode.
+- **`30-analytics.prod-or-env-staging.conf`** equivalent to `30-analytics.env-prod-or-env-staging.conf` 
+    -   **Logic:** `env-prod` OR `env-staging`
+    -   **Result:** Loaded if `$ENVIRONMENT` is `production` or `staging`.
 
 ### Customization Methods
 
@@ -388,7 +382,7 @@ These snippets are included in the main `http` block and are perfect for adding 
 #### 2. Adding Custom php.ini and php-fpm.conf Snippets `MARKER-AWARE` `TEMPLATES`
 
 You can also extend the PHP configuration by adding custom snippets for `php.ini` and `php-fpm.conf`.
-This procedure follows the same pattern as NGINX snippets, except instead of you putting your files in the `nginx/custom/` directory, you place them in: `/etc/container/templates/php/custom/`. `.ini` files will be treated as `php.ini` snippets, and `.conf` files as `php-fpm.conf` snippets.
+Just copy or mount them to: `/etc/container/templates/php/custom/`. File ending with `.ini` will be treated as `php.ini` snippets, and `.conf` files as `php-fpm.conf` snippets.
 
 > The default fpm-pool configuration is loaded as "www.conf"
 > The default php.ini configuration is loaded as "x.php.common.ini" and "x.php.prod.ini" depending on the environment.

@@ -243,12 +243,48 @@ COPY --chmod=+x bin/ "$CONTAINER_BIN_DIR/"
 
 ### Adding Custom Markers
 
+The framework supports two types of markers, distinguished by their function signature:
+
+**1. Scalar Markers (Exact Match)**
+
+These are for simple, boolean-like conditions. They are registered with an exact string.
+
+-   **Registry Key:** An exact string (e.g., `"https"`).
+-   **Condition Function Signature:** Must take **no arguments**.
+-   **Example:**
+    -   Filename: `my-config.https.conf`
+    -   Registry: `file_marker_condition_registry["https"]=_file_marker_is_https`
+    -   Function: `_file_marker_is_https() { [[ ... ]]; }`
+    -   The function `_file_marker_is_https` is called with zero arguments.
+
+**2. Wildcard Markers (Pattern Match)**
+
+These are for dynamic, pattern-based conditions. They are registered with a `*` wildcard. This is the preferred method for related groups of conditions, like environments or modes.
+
+-   **Registry Key:** A pattern ending in `*` (e.g., `"env-*"`).
+-   **Condition Function Signature:** Must accept **one argument**, which will be the part of the filename that the `*` matched.
+-   **Example:**
+    -   Filename: `my-config.env-staging.conf`
+    -   Registry: `file_marker_condition_registry["env-*"]=_file_marker_is_env`
+    -   Function: `_file_marker_is_env() { local env_suffix="$1"; [[ ... ]]; }`
+    -   The parser matches `env-staging` against the `env-*` pattern.
+    -   The function `_file_marker_is_env` is called with `"staging"` as its first argument.
+
 1. **Create marker function**:
 ```bash
 _file_marker_meets_condition() {
   # Your logic here
   [[ "${MY_VAR}" == "expected_value" ]]
 }
+```
+OR a wildcard version:
+```bash
+_file_marker_is_mode() {
+  local mode_suffix="$1" # Will receive 'web', 'worker', 'build', etc.
+  [[ "${CONTAINER_MODE}" == "${mode_suffix}" ]]
+}
+# Register the single wildcard handler
+file_marker_condition_registry["mode-*"]=_file_marker_is_mode
 ```
 
 2. **Register the marker**:

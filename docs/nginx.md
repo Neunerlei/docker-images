@@ -128,9 +128,9 @@ You can serve the entire proxied application from a sub-directory using `DOCKER_
 
 If no `PROXY_*` variables are found, the image runs as a high-performance web server for static files. This is perfect for serving a SPA (Single-Page Application), documentation, or a simple maintenance page.
 
-| Variable                  | Description                                                             | Default Value          |
-|---------------------------|-------------------------------------------------------------------------|------------------------|
-| `NGINX_DOC_ROOT`          | The document root for static files.                                     | `/var/www/html/public` |
+| Variable         | Description                         | Default Value          |
+|------------------|-------------------------------------|------------------------|
+| `NGINX_DOC_ROOT` | The document root for static files. | `/var/www/html/public` |
 
 ### **Path Composition: `PROJECT_PATH` + `SERVICE_PATH`**
 
@@ -290,7 +290,7 @@ DEBUG_VARS detected in template: '/etc/container/templates/nginx/custom/my_debug
 
 To control *when* your custom snippets and scripts are loaded, you can embed special markers in their filenames. This creates a powerful and readable declarative system for managing configuration.
 
-The system understands two operators: `.` (for AND) and `-or-` (for OR).
+The system understands two operators: `.` (for AND) and `-or-` (for OR). It also supports **wildcard markers** for dynamic conditions like environments.
 
 > Whenever you see `MARKER-AWARE` in the headlines below, it means that these rules apply.
 
@@ -301,11 +301,13 @@ The system understands two operators: `.` (for AND) and `-or-` (for OR).
 
 **Available Markers:**
 
-| Marker        | Condition                             |
-|:--------------|:--------------------------------------|
-| `prod`        | `ENVIRONMENT` is `production`.        |
-| `dev`         | `ENVIRONMENT` is `development`.       |
-| `https`       | `DOCKER_SERVICE_PROTOCOL` is `https`. |
+| Marker Pattern | Example Filename          | Condition for Loading                                                                                                                                                                                                                                          |
+|:---------------|:--------------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `env-*`        | `config.env-staging.conf` | The value of `$ENVIRONMENT` must match the part after `env-` (in this case, "staging"). This allows you to define custom environments beyond `prod` and `dev`. The aliases `env-prod` (for `production`) and `env-dev` (for `development`) are also supported. |
+| `mode-*`       | `script.mode-worker.sh`   | The value of `$CONTAINER_MODE` must match the part after `mode-` (e.g., "worker", "web", or "build").                                                                                                                                                          |
+| `prod`         | `config.prod.conf`        | A short form of `env-prod` when `ENVIRONMENT` is `production`.                                                                                                                                                                                                 |
+| `dev`          | `config.dev.conf`         | A short form of `env-dev` when `ENVIRONMENT` is `development`.                                                                                                                                                                                                 |
+| `https`        | `ssl-settings.https.conf` | The `$DOCKER_SERVICE_PROTOCOL` must be `https`.                                                                                                                                                                                                                |
 
 **Examples:**
 
@@ -313,7 +315,7 @@ The system understands two operators: `.` (for AND) and `-or-` (for OR).
     - **Logic:** No markers.
     - **Result:** Always loaded.
 
-- **`10-security.prod.conf`**
+- **`10-security.prod.conf`** equivalent to `10-security.env-prod.conf`
     - **Logic:** `prod`
     - **Result:** Loaded only when `ENVIRONMENT` is `production`.
 
@@ -321,9 +323,9 @@ The system understands two operators: `.` (for AND) and `-or-` (for OR).
     - **Logic:** `prod` AND `https`
     - **Result:** Loaded only in a `production` environment with `https` enabled.
 
-- **`30-debug-headers.dev-or-staging.conf`**
-    - **Logic:** `dev` OR `staging` (assuming a custom `staging` marker was added).
-    - **Result:** Loaded if `ENVIRONMENT` is `development` OR `staging`.
+- **`30-analytics.prod-or-env-staging.conf`** equivalent to `30-analytics.env-prod-or-env-staging.conf` 
+    -   **Logic:** `env-prod` OR `env-staging`
+    -   **Result:** Loaded if `$ENVIRONMENT` is `production` or `staging`.
 
 ### Customization Methods
 

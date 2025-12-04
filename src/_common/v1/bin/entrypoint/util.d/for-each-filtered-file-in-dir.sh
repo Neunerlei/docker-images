@@ -13,7 +13,7 @@ for_each_filtered_file_in_dir() {
   local pattern="${3:-"*"}"
   local additional_args="$4"
 
-  if [[ -z "$callback" ]]; then
+  if [[ -z "${callback}" ]]; then
     echo "No callback function provided to for_each_filtered_file_in_dir" >&2
     return 1
   fi
@@ -24,13 +24,9 @@ for_each_filtered_file_in_dir() {
 
   echo "Processing files from ${read_dir}, matching '${pattern}'..." >&2
 
-  # Build a regex of all known markers, e.g., (prod|dev|https|feat-nginx)
-  local all_markers_regex
-  all_markers_regex="($(IFS=\|; echo "${!file_marker_condition_registry[*]}"))"
-
   while IFS= read -r -d '' file_path; do
     local filename
-    filename=$(basename "$file_path")
+    filename=$(basename "${file_path}")
     local all_and_groups_satisfied=true
 
     # We only need to parse the filename if it potentially contains markers.
@@ -41,9 +37,21 @@ for_each_filtered_file_in_dir() {
       IFS='.' read -ra and_groups <<<"$filename"
 
       for group in "${and_groups[@]}"; do
-        # If the group doesn't contain any known marker, skip it.
-        if ! [[ "$group" =~ $all_markers_regex ]]; then
-          continue
+        # This check is a pre-filter. A group must contain something that looks
+        # like a marker. This is a simple optimization.
+        if ! [[ "${group}" == *-* || -v file_marker_condition_registry["${group}"] ]]; then
+            # If the group is not a compound word (like 'env-prod') and not a known scalar marker, skip it.
+            # This avoids processing 'file' or 'sh' from 'file.env-prod.sh'.
+            local is_potential_marker=false
+            for key in "${!file_marker_condition_registry[@]}"; do
+                if [[ "${group}" = $key ]]; then
+                   is_potential_marker=true
+                   break
+                fi
+            done
+            if ! $is_potential_marker; then
+                continue
+            fi
         fi
 
         # Split the group into its OR clauses.
@@ -55,18 +63,38 @@ for_each_filtered_file_in_dir() {
 
         # Now read the newline-separated clauses into an array.
         local or_clauses
-        mapfile -t or_clauses <<< "$group_with_newlines"
+        mapfile -t or_clauses <<< "${group_with_newlines}"
 
         local is_or_group_satisfied=false
 
         for clause in "${or_clauses[@]}"; do
-          if [[ -z "$clause" ]]; then continue; fi # Skip empty clauses
-          if [[ -v file_marker_condition_registry["$clause"] ]]; then
-            local condition_func="${file_marker_condition_registry["$clause"]}"
-            if "$condition_func"; then
-              is_or_group_satisfied=true
-              break
+          if [[ -z "${clause}" ]]; then continue; fi
+
+          for registered_marker in "${!file_marker_condition_registry[@]}"; do
+            # Use Bash's glob matching:
+            # - If registered_marker is 'https', it matches if clause is 'https'.
+            # - If registered_marker is 'env-*', it matches if clause is 'env-prod', 'env-staging', etc.
+            if [[ "$clause" == "${registered_marker}" ]]; then
+              local condition_func="${file_marker_condition_registry["${registered_marker}"]}"
+              local arg=""
+
+              # If it was a wildcard match, extract the argument.
+              if [[ "${registered_marker}" == *"*"* ]]; then
+                local prefix="${registered_marker%\*}"
+                # Get the suffix (e.g., 'prod')
+                arg="${clause#$prefix}"
+              fi
+
+              # Call the function (with or without an argument)
+              if "$condition_func" "${arg}"; then
+                is_or_group_satisfied=true
+              fi
+              break # Found a matching handler, no need to check other markers for this clause.
             fi
+          done
+
+          if "$is_or_group_satisfied"; then
+            break # The OR group is satisfied, move to the next AND group.
           fi
         done
 
@@ -82,7 +110,7 @@ for_each_filtered_file_in_dir() {
     if ! "$all_and_groups_satisfied"; then
       continue
     fi
-    "$callback" "$file_path" $additional_args
+    "$callback" "${file_path}" $additional_args
 
   done < <(find "${read_dir}" -maxdepth 1 -name "${pattern}" -print0 | sort -z)
 }

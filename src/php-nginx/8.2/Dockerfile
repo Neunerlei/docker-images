@@ -47,6 +47,11 @@ COPY --chown=www-data:www-data src /var/www/html
 # Remove default fpm pool config (This causes issues, because we want to listen to a socket, not port 9000)
 RUN rm -rf /usr/local/etc/php-fpm.d/zz-docker.conf
 
+# Create a wrapper for the php executable, to set our env vars correctly
+RUN mv /usr/local/bin/php /usr/local/bin/_php && \
+    echo -e '#!/bin/bash\n/usr/local/bin/_php "$@"' > /usr/local/bin/php && \
+    chmod +x /usr/local/bin/php
+
 EXPOSE 80
 
 ENTRYPOINT ["/usr/bin/container/entrypoint.sh"]

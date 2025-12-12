@@ -45,48 +45,52 @@ The "brain" of this image is its entrypoint script. When the container starts, t
 
 This image is configured almost entirely through environment variables. This allows you to use the same image for different purposes (web vs. worker, dev vs. prod) without rebuilding it.
 
-| Variable                          | Description                                                                                                      | Default Value              |
-|-----------------------------------|------------------------------------------------------------------------------------------------------------------|----------------------------|
-| **General**                       |                                                                                                                  |                            |
-| `PUID`                            | The user ID to run PHP-FPM and NGINX as. Useful for matching host file permissions.                              | `33`                       |
-| `PGID`                            | The group ID to run PHP-FPM and NGINX as. Useful for matching host file permissions.                             | `33`                       |
-| `CONTAINER_MODE`                  | Read-only. Automatically set to `web` or `worker`.                                                               | `web`                      |
-| `MAX_UPLOAD_SIZE`                 | A convenient variable to set NGINX, `upload_max_filesize`, and `post_max_size` all at once.                      | `100M`                     |
-| `ENVIRONMENT`                     | Sets the overall environment. `dev`/`development` is non-production; all other values are considered production. | `production`               |
-| `APP_ENV`                         | The semi-standard PHP framework environment variable.   Defaults to the value of `ENVIRONMENT`.                  | (derived)                  |
-| **Project**                       |                                                                                                                  |                            |
-| `DOCKER_PROJECT_HOST`             | The public hostname for your application (available for your app).                                               | `localhost`                |
-| `DOCKER_PROJECT_PATH`             | The public root path of the entire project.                                                                      | `/`                        |
-| `DOCKER_PROJECT_PROTOCOL`         | The public protocol. `http` or `https`. Determines NGINX's listening mode.                                       | `http`                     |
-| `DOCKER_SERVICE_PROTOCOL`         | The protocol your service uses internally. Defaults to `DOCKER_PROJECT_PROTOCOL`.                                | (derived)                  |
-| `DOCKER_SERVICE_PATH`             | The sub-path for this specific service within the project.                                                       | `/`                        |
-| `DOCKER_SERVICE_ABS_PATH`         | Read-only. The absolute path for this service (`PROJECT_PATH` + `SERVICE_PATH`).                                 | (derived)                  |
-| **NGINX**                         |                                                                                                                  |                            |
-| `NGINX_DOC_ROOT`                  | The document root NGINX should use.                                                                              | `/var/www/html/public`     |
-| `NGINX_CLIENT_MAX_BODY_SIZE`      | Overrides `client_max_body_size` in NGINX.                                                                       | Matches `MAX_UPLOAD_SIZE`  |
-| `NGINX_CERT_PATH`                 | Path to the SSL certificate file (used if `DOCKER_PROJECT_PROTOCOL="https"`).                                    | `/etc/ssl/certs/cert.pem`  |
-| `NGINX_KEY_PATH`                  | Path to the SSL key file (used if `DOCKER_PROJECT_PROTOCOL="https"`).                                            | `/etc/ssl/certs/key.pem`   |
-| **PHP**                           |                                                                                                                  |                            |
-| `PHP_UPLOAD_MAX_FILESIZE`         | Overrides PHP's `upload_max_filesize` directly.                                                                  | Matches `MAX_UPLOAD_SIZE`  |
-| `PHP_POST_MAX_SIZE`               | Overrides PHP's `post_max_size` directly.                                                                        | Matches `MAX_UPLOAD_SIZE`  |
-| `PHP_MEMORY_LIMIT`                | Overrides PHP's `memory_limit`.                                                                                  | `1024M`                    |
-| `PHP_TIMEZONE`                    | Sets the default timezone for `date()` functions.                                                                | `UTC`                      |
-| `PHP_PROD_DISPLAY_ERRORS`         | Overrides `display_errors` in `php.prod.ini`.                                                                    | `Off`                      |
-| `PHP_PROD_DISPLAY_STARTUP_ERRORS` | Overrides `display_startup_errors` in `php.prod.ini`.                                                            | `Off`                      |
-| **PHP Worker Mode**               |                                                                                                                  |                            |
-| `PHP_WORKER_COMMAND`              | The command to execute in worker mode. **Setting this enables worker mode.**                                     | (unset)                    |
-| `PHP_WORKER_PROCESS_COUNT`        | The number of worker processes to run (`numprocs` in Supervisor).                                                | `1`                        |
-| **PHP-FPM**                       |                                                                                                                  |                            |
-| `PHP_FPM_MAX_CHILDREN`            | `pm.max_children`                                                                                                | `20`                       |
-| `PHP_FPM_START_SERVERS`           | `pm.start_servers`                                                                                               | `2`                        |
-| `PHP_FPM_MIN_SPARE_SERVERS`       | `pm.min_spare_servers`                                                                                           | `1`                        |
-| `PHP_FPM_MAX_SPARE_SERVERS`       | `pm.max_spare_servers`                                                                                           | `4`                        |
-| `PHP_FPM_MAX_REQUESTS`            | `pm.max_requests`                                                                                                | `500`                      |
-| **Advanced/Internal**             |                                                                                                                  |                            |
-| `CONTAINER_TEMPLATE_DIR`          | The path to the container's internal template files.                                                             | `/etc/container/templates` |
-| `CONTAINER_BIN_DIR`               | The path to the container's internal binary and script files.                                                    | `/usr/bin/container`       |
+| Variable                               | Description                                                                                                      | Default Value                                                                                                                                      |
+|----------------------------------------|------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
+| **General**                            |                                                                                                                  |                                                                                                                                                    |
+| `PUID`                                 | The user ID to run PHP-FPM and NGINX as. Useful for matching host file permissions.                              | `33`                                                                                                                                               |
+| `PGID`                                 | The group ID to run PHP-FPM and NGINX as. Useful for matching host file permissions.                             | `33`                                                                                                                                               |
+| `CONTAINER_MODE`                       | Read-only. Automatically set to `web` or `worker`.                                                               | `web`                                                                                                                                              |
+| `MAX_UPLOAD_SIZE`                      | A convenient variable to set NGINX, `upload_max_filesize`, and `post_max_size` all at once.                      | `100M`                                                                                                                                             |
+| `ENVIRONMENT`                          | Sets the overall environment. `dev`/`development` is non-production; all other values are considered production. | `production`                                                                                                                                       |
+| `APP_ENV`                              | The semi-standard PHP framework environment variable. Defaults to the value of `ENVIRONMENT`.                    | (derived)                                                                                                                                          |
+| `APP_DEBUG`                            | Defaults to `1`, if `ENVIRONMENT` is `development`, or `PHP_PROD_DEBUG` is set to true, otherwise `0`            | (derived)                                                                                                                                          |                                                                                                                                                     |
+| **Project**                            |                                                                                                                  |                                                                                                                                                    |
+| `DOCKER_PROJECT_HOST`                  | The public hostname for your application (available for your app).                                               | `localhost`                                                                                                                                        |
+| `DOCKER_PROJECT_PATH`                  | The public root path of the entire project.                                                                      | `/`                                                                                                                                                |
+| `DOCKER_PROJECT_PROTOCOL`              | The public protocol. `http` or `https`. Determines NGINX's listening mode.                                       | `http`                                                                                                                                             |
+| `DOCKER_SERVICE_PROTOCOL`              | The protocol your service uses internally. Defaults to `DOCKER_PROJECT_PROTOCOL`.                                | (derived)                                                                                                                                          |
+| `DOCKER_SERVICE_PATH`                  | The sub-path for this specific service within the project.                                                       | `/`                                                                                                                                                |
+| `DOCKER_SERVICE_ABS_PATH`              | Read-only. The absolute path for this service (`PROJECT_PATH` + `SERVICE_PATH`).                                 | (derived)                                                                                                                                          |
+| **NGINX**                              |                                                                                                                  |                                                                                                                                                    |
+| `NGINX_DOC_ROOT`                       | The document root NGINX should use.                                                                              | `/var/www/html/public`                                                                                                                             |
+| `NGINX_CLIENT_MAX_BODY_SIZE`           | Overrides `client_max_body_size` in NGINX.                                                                       | Matches `MAX_UPLOAD_SIZE`                                                                                                                          |
+| `NGINX_CERT_PATH`                      | Path to the SSL certificate file (used if `DOCKER_PROJECT_PROTOCOL="https"`).                                    | `/etc/ssl/certs/cert.pem`                                                                                                                          |
+| `NGINX_KEY_PATH`                       | Path to the SSL key file (used if `DOCKER_PROJECT_PROTOCOL="https"`).                                            | `/etc/ssl/certs/key.pem`                                                                                                                           |
+| **PHP**                                |                                                                                                                  |                                                                                                                                                    |
+| `PHP_UPLOAD_MAX_FILESIZE`              | Overrides PHP's `upload_max_filesize` directly.                                                                  | Matches `MAX_UPLOAD_SIZE`                                                                                                                          |
+| `PHP_POST_MAX_SIZE`                    | Overrides PHP's `post_max_size` directly.                                                                        | Matches `MAX_UPLOAD_SIZE`                                                                                                                          |
+| `PHP_MEMORY_LIMIT`                     | Overrides PHP's `memory_limit`.                                                                                  | `1024M`                                                                                                                                            |
+| `PHP_TIMEZONE`                         | Sets the default timezone for `date()` functions.                                                                | `UTC`                                                                                                                                              |
+| `PHP_PROD_DISPLAY_ERRORS`              | Overrides `display_errors` in `php.prod.ini`.                                                                    | `Off`                                                                                                                                              |
+| `PHP_PROD_DISPLAY_STARTUP_ERRORS`      | Overrides `display_startup_errors` in `php.prod.ini`.                                                            | `Off`                                                                                                                                              |
+| `PHP_PROD_ERROR_REPORTING`             | `E_ALL & ~E_DEPRECATED & ~E_STRICT`                                                                              | Overrides `error_reporting` in `php.prod.ini`.                                                                                                     |
+| `PHP_PROD_OPCACHE_VALIDATE_TIMESTAMPS` | `0`                                                                                                              | Overrides `opcache.validate_timestamps` in `php.prod.ini`.                                                                                         |
+| `PHP_PROD_DEBUG`                       | `false`                                                                                                          | When set to `true`, allows you to override the `PHP_PROD_*` variables with more lax settings suitable for debugging in a "production" environment. |
+| **PHP Worker Mode**                    |                                                                                                                  |                                                                                                                                                    |
+| `PHP_WORKER_COMMAND`                   | The command to execute in worker mode. **Setting this enables worker mode.**                                     | (unset)                                                                                                                                            |
+| `PHP_WORKER_PROCESS_COUNT`             | The number of worker processes to run (`numprocs` in Supervisor).                                                | `1`                                                                                                                                                |
+| **PHP-FPM**                            |                                                                                                                  |                                                                                                                                                    |
+| `PHP_FPM_MAX_CHILDREN`                 | `pm.max_children`                                                                                                | `20`                                                                                                                                               |
+| `PHP_FPM_START_SERVERS`                | `pm.start_servers`                                                                                               | `2`                                                                                                                                                |
+| `PHP_FPM_MIN_SPARE_SERVERS`            | `pm.min_spare_servers`                                                                                           | `1`                                                                                                                                                |
+| `PHP_FPM_MAX_SPARE_SERVERS`            | `pm.max_spare_servers`                                                                                           | `4`                                                                                                                                                |
+| `PHP_FPM_MAX_REQUESTS`                 | `pm.max_requests`                                                                                                | `500`                                                                                                                                              |
+| **Advanced/Internal**                  |                                                                                                                  |                                                                                                                                                    |
+| `CONTAINER_TEMPLATE_DIR`               | The path to the container's internal template files.                                                             | `/etc/container/templates`                                                                                                                         |
+| `CONTAINER_BIN_DIR`                    | The path to the container's internal binary and script files.                                                    | `/usr/bin/container`                                                                                                                               |
 
-#### ENVIRONMENT and `APP_ENV` Derivation
+### ENVIRONMENT, `APP_ENV` and `APP_DEBUG` Derivation
 
 The `ENVIRONMENT` variable is a high-level switch for the container's operational mode. It is shared across all images in this ecosystem and influences NGINX configurations, logging verbosity, and other entrypoint behaviors.
 
@@ -96,11 +100,35 @@ The `ENVIRONMENT` variable is a high-level switch for the container's operationa
 
 **`APP_ENV` Derivation Logic:**
 
-To align with standard Node.js practices, the `APP_ENV` variable is automatically derived from `ENVIRONMENT`. You generally do not need to set it yourself.
+To align with standard Framework (Symfony, Laravel, CakePhp...), the `APP_ENV` variable is automatically derived from `ENVIRONMENT`. You generally do not need to set it yourself.
 
-1. If `ENVIRONMENT` is set to `production` or `prod`, `APP_ENV` defaults to `production`.
-2. If `ENVIRONMENT` is set to `development` or `dev`, `APP_ENV` defaults to `development`.
-3. If you set `NODE_ENV` explicitly, **your value will always take precedence**. This allows you to run in a `production` container `ENVIRONMENT` (with optimized NGINX settings) while having `NODE_ENV` set to `staging`, for example.
+- If `ENVIRONMENT` is set to `development` or `dev`, `APP_ENV` defaults to `dev`.
+- Otherwise, `APP_ENV` defaults to `prod`.
+- If you set `APP_ENV` explicitly, **your value will always take precedence**. This allows you to run in a `production` container `ENVIRONMENT` (with optimized NGINX settings) while having `APP_ENV` set to `staging`, for example.
+
+**`APP_DEBUG` Derivation Logic:**
+
+Similarly, `APP_DEBUG` is derived from `ENVIRONMENT` and `PHP_PROD_DEBUG`.
+
+- If `ENVIRONMENT` is `development` or `dev`, `APP_DEBUG` defaults to `1` (true).
+- If `ENVIRONMENT` is `production` or `prod` and `PHP_PROD_DEBUG` is set to `true`, `APP_DEBUG` defaults to `1` (true).
+- If `APP_ENV` is manually set to `development` or `dev`, `APP_DEBUG` defaults to `1` (true).
+- If none of the above conditions are met, `APP_DEBUG` defaults to `0` (false).
+- If you set `APP_DEBUG` explicitly, **your value will always take precedence**.
+
+### A word on `PHP_PROD_DEBUG`
+
+The `PHP_PROD_DEBUG` variable is a special override for production environments. By default, the [x.php.prod.ini](../src/php-nginx/8.2/templates/php/x.php.prod.ini) configuration is optimized for security and performance, which means error display is turned off and opcache is locked down. While good for security and performance, this can make debugging difficult.
+For this reason, if you set `PHP_PROD_DEBUG=true`, the entrypoint script will relax several of these settings to make debugging easier, while still keeping the overall production optimizations in place. This is especially useful when you need to troubleshoot issues in a production-like environment without fully switching to a development setup.
+
+When you enable it, it modifies the php.ini:
+
+- `display_errors=On` -> Allows errors to be displayed.
+- `display_startup_errors=On` -> Allows startup errors to be displayed.
+- `error_reporting=E_ALL & ~E_DEPRECATED` -> Reports all errors except deprecated warnings.
+- `opcache.validate_timestamps=1` -> Enables opcache to check for updated scripts (meaning you don't have to restart the server for code changes to take effect).
+
+The changes will be reflected in the corresponding `PHP_PROD_*` environment variables.
 
 ### Path Composition: `PROJECT_PATH` + `SERVICE_PATH`
 
@@ -331,9 +359,9 @@ The system understands two operators: `.` (for AND) and `-or-` (for OR).
     - **Logic:** `prod` AND `https`
     - **Result:** Loaded only in a `production` environment with `https` enabled.
 
-- **`30-analytics.prod-or-env-staging.conf`** equivalent to `30-analytics.env-prod-or-env-staging.conf` 
-    -   **Logic:** `env-prod` OR `env-staging`
-    -   **Result:** Loaded if `$ENVIRONMENT` is `production` or `staging`.
+- **`30-analytics.prod-or-env-staging.conf`** equivalent to `30-analytics.env-prod-or-env-staging.conf`
+    - **Logic:** `env-prod` OR `env-staging`
+    - **Result:** Loaded if `$ENVIRONMENT` is `production` or `staging`.
 
 ### Customization Methods
 
@@ -432,6 +460,8 @@ To get you started quickly, the image includes a simple default `index.php` file
 A common challenge in Docker is that environment variables set during an entrypoint's execution are not automatically available to subsequent `docker exec` sessions or different shell environments. This image solves this problem with a "bash wrapper."
 
 During the build process, the original `/bin/bash` is moved to `/bin/_bash`, and a new `/bin/bash` script is put in its place. This wrapper does one simple thing: before executing the real bash, it sources the file at `/etc/container-vars.sh`, which is generated by the entrypoint and contains all exported variables. The `/bin/sh` shell is also symlinked to this wrapper.
+
+> The PHP CLI has a similar mechanism. The `/usr/local/bin/php` binary is moved to `/usr/local/bin/_php`, and a wrapper script is placed at `/usr/local/bin/php` that uses the above bash wrapper to execute PHP with the correct environment.
 
 **Implications for You:**
 

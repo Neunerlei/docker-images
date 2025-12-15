@@ -35,14 +35,14 @@ const child_process = require('node:child_process');
     const workflowJobs = workflowData.jobs || {};
 
     const targetJobCandidates = ['call-build-engine'];
-    if(imageTypeInput){
+    if (imageTypeInput) {
         targetJobCandidates.push(`call-build-engine-${imageTypeInput}`);
         targetJobCandidates.push(`call-${imageTypeInput}`);
     }
 
     let targetJob = null;
-    for(const candidate of targetJobCandidates){
-        if(workflowJobs[candidate]){
+    for (const candidate of targetJobCandidates) {
+        if (workflowJobs[candidate]) {
             targetJob = workflowJobs[candidate];
             break;
         }
@@ -106,7 +106,7 @@ const child_process = require('node:child_process');
         trackedVersions: 1
     });
 
-    if(buildMatrix === null){
+    if (buildMatrix === null) {
         console.error('No build matrix could be generated for the specified source version.');
         process.exit(1);
     }
@@ -118,6 +118,8 @@ const child_process = require('node:child_process');
     console.log(` - Source Image with Tag: ${buildEntry.sourceImageWithTag}`);
     console.log(` - Build Path: ${buildEntry.buildPath}`);
 
-    const dockerBuildCommand = `cd "${buildEntry.buildPath}" && docker build -t ${targetImage}:${buildEntry.tag} --build-context common=../../_common --progress=plain --build-arg SOURCE_IMAGE=${buildEntry.sourceImageWithTag} .`;
+    let commonDirPath = path.join(__dirname, '..', '..', 'src', '_common');
+
+    const dockerBuildCommand = `cd "${buildEntry.buildPath}" && docker build -t ${targetImage}:${buildEntry.tag} --build-context common="${commonDirPath}" --progress=plain --build-arg SOURCE_IMAGE=${buildEntry.sourceImageWithTag} .`;
     child_process.execSync(dockerBuildCommand, {stdio: 'inherit'});
 })();

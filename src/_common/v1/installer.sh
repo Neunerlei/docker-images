@@ -28,6 +28,9 @@ declare dependencies_to_install=(
   "nano"
   "supervisor"
   "gosu"
+  "zip"
+  "unzip"
+  "7zip"
 )
 
 # Allow the outside world to define a --no-nginx flag to skip nginx installation

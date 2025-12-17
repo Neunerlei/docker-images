@@ -41,13 +41,13 @@ function _render_location_blocks(){
       local PROXY_DEST_VALUE="${!proxy_dest_var}"
       local PROXY_REWRITE_RULE=""
       if [ -n "$PROXY_DEST_VALUE" ]; then
-          PROXY_REWRITE_RULE="rewrite ^${PROXY_LOCATION_PATH}(.*)$ ${PROXY_DEST_VALUE}\$1 break;"
+          PROXY_REWRITE_RULE="rewrite ^${PROXY_LOCATION_PATH}(?:/(.*)$|$) ${PROXY_DEST_VALUE}\$1 break;"
           echo "   - Using rewrite rule: ${PROXY_REWRITE_RULE}" >&2
       fi
 
       local KEY_LOWER=${KEY,,}
       local CURRENT_LOCATION_BLOCK=$(render_template_string "${NGINX_TEMPLATE_DIR}/proxy.location.nginx.conf")
-      location_blocks="${location_blocks}${CURRENT_LOCATION_BLOCK}"
+      location_blocks="${location_blocks}\n\n${CURRENT_LOCATION_BLOCK}"
 
       render_filtered_templates_in_dir "${NGINX_CUSTOM_PROXY_TEMPLATE_DIR}" "${NGINX_PROXY_SNIPPET_DIR}" "${KEY_LOWER}*.conf"
   done

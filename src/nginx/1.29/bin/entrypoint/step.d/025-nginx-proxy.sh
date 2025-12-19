@@ -47,7 +47,7 @@ function _render_location_blocks(){
 
       local KEY_LOWER=${KEY,,}
       local CURRENT_LOCATION_BLOCK=$(render_template_string "${NGINX_TEMPLATE_DIR}/proxy.location.nginx.conf")
-      location_blocks="${location_blocks}\n\n${CURRENT_LOCATION_BLOCK}"
+      location_blocks="${location_blocks}"$'\n\n'"${CURRENT_LOCATION_BLOCK}"
 
       render_filtered_templates_in_dir "${NGINX_CUSTOM_PROXY_TEMPLATE_DIR}" "${NGINX_PROXY_SNIPPET_DIR}" "${KEY_LOWER}*.conf"
   done

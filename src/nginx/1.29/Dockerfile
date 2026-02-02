@@ -12,7 +12,8 @@ ENV CONTAINER_BIN_DIR=/usr/bin/container
 RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=apt-lib,target=/var/lib/apt,sharing=locked\
     --mount=type=bind,from=common,source=v1,target=/tmp/installer \
-    bash /tmp/installer/installer.sh --no-nginx
+    INSTALLER_REMOVE_DEPENDENCIES="nginx" \
+    bash /tmp/installer/installer.sh
 
 SHELL ["/bin/bash", "-c"]
 WORKDIR /var/www/html

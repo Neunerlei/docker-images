@@ -20,6 +20,8 @@ const child_process = require('node:child_process');
 
     if (!imageName || !sourceVersion) {
         console.error('Image name and source version are required arguments.');
+        // Show usage
+        console.error('Usage: bin/build.sh <image-name> <source-version> [image-type]');
         process.exit(1);
     }
 

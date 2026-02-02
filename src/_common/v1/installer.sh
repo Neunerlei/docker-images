@@ -6,9 +6,10 @@ set -e
 # It should run in the Dockerfile right after the base image is set up
 # -----------------------------------------------------------------
 # Configuration:
-# - You can add the --no-nginx flag to skip nginx installation
 # - You can define the INSTALLER_EXTRA_DEPENDENCIES environment variable
 #   to add extra dependencies to install via apt (separated by spaces)
+# - You can define the INSTALLER_REMOVE_DEPENDENCIES environment variable
+#   to remove dependencies from the default list (separated by spaces)
 # -----------------------------------------------------------------
 
 declare current_directory="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
@@ -20,6 +21,7 @@ source "${entrypoint_directory}/common-env.sh"
 # A list of dependencies to install using apt
 declare dependencies_to_install=(
   "bash"
+  "nginx"
   "curl"
   "ca-certificates"
   "openssl"
@@ -33,17 +35,19 @@ declare dependencies_to_install=(
   "7zip"
 )
 
-# Allow the outside world to define a --no-nginx flag to skip nginx installation
-if [ "$1" != "--no-nginx" ]; then
-  dependencies_to_install+=("nginx")
-fi
-
 # If there is a global variable called INSTALLER_EXTRA_DEPENDENCIES, append its contents to the dependencies list, ensure there are no duplicates
 if [ -n "${INSTALLER_EXTRA_DEPENDENCIES}" ]; then
   for extra_dep in ${INSTALLER_EXTRA_DEPENDENCIES}; do
     if [[ ! " ${dependencies_to_install[@]} " =~ " ${extra_dep} " ]]; then
       dependencies_to_install+=("${extra_dep}")
     fi
+  done
+fi
+
+# If there is a global variable called INSTALLER_REMOVE_DEPENDENCIES, remove its contents from the dependencies list
+if [ -n "${INSTALLER_REMOVE_DEPENDENCIES}" ]; then
+  for remove_dep in ${INSTALLER_REMOVE_DEPENDENCIES}; do
+    dependencies_to_install=("${dependencies_to_install[@]/$remove_dep}")
   done
 fi
 

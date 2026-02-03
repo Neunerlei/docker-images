@@ -43,36 +43,40 @@ The "brain" of this image is its entrypoint script. When the container starts, t
 
 This image is configured almost entirely through environment variables. This allows you to use the same image for different purposes (web vs. worker, dev vs. prod) without rebuilding it.
 
-| Variable                     | Description                                                                                                      | Default Value                  |
-|:-----------------------------|:-----------------------------------------------------------------------------------------------------------------|:-------------------------------|
-| **General**                  |                                                                                                                  |                                |
-| `PUID`                       | The user ID to run processes as (`www-data`). Useful for matching host file permissions.                         | `33`                           |
-| `PGID`                       | The group ID to run processes as (`www-data`). Useful for matching host file permissions.                        | `33`                           |
-| `CONTAINER_MODE`             | Read-only. Automatically set to `web`, `worker` or `build`.                                                      | `web`                          |
-| `MAX_UPLOAD_SIZE`            | A convenient variable to set NGINX's `client_max_body_size`.                                                     | `100M`                         |
-| `ENVIRONMENT`                | Sets the overall environment. `dev`/`development` is non-production; all other values are considered production. | `production`                   |
-| `NODE_ENV`                   | The standard Node.js environment variable. Defaults to the value of `ENVIRONMENT`.                               | (derived)                      |
-| **Project**                  |                                                                                                                  |                                |
-| `DOCKER_PROJECT_HOST`        | The public hostname for your application (available for your app).                                               | `localhost`                    |
-| `DOCKER_PROJECT_PATH`        | The public root path of the entire project.                                                                      | `/`                            |
-| `DOCKER_PROJECT_PROTOCOL`    | The public protocol. `http` or `https`. Determines NGINX's listening mode.                                       | `http`                         |
-| `DOCKER_SERVICE_PROTOCOL`    | The protocol your service uses internally. Defaults to `DOCKER_PROJECT_PROTOCOL`.                                | (derived)                      |
-| `DOCKER_SERVICE_PATH`        | The sub-path for this specific service within the project.                                                       | `/`                            |
-| `DOCKER_SERVICE_ABS_PATH`    | Read-only. The absolute path for this service (`PROJECT_PATH` + `SERVICE_PATH`).                                 | (derived)                      |
-| **NGINX**                    |                                                                                                                  |                                |
-| `NGINX_DOC_ROOT`             | The document root NGINX serves static files from.                                                                | `/var/www/html/public`         |
-| `NGINX_CLIENT_MAX_BODY_SIZE` | Sets `client_max_body_size` in NGINX.                                                                            | Matches `MAX_UPLOAD_SIZE`      |
-| `NGINX_CERT_PATH`            | Path to the SSL certificate (if `DOCKER_SERVICE_PROTOCOL="https"`).                                              | `/etc/ssl/certs/cert.pem`      |
-| `NGINX_KEY_PATH`             | Path to the SSL key (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                      | `/etc/ssl/certs/key.pem`       |
-| **Node.js Web Mode**         |                                                                                                                  |                                |
-| `NODE_WEB_COMMAND`           | The command to start your web server application.                                                                | `node /var/www/html/server.js` |
-| `NODE_SERVICE_PORT`          | The internal port your Node.js app listens on for NGINX to proxy to.                                             | `3000`                         |
-| **Node.js Worker Mode**      |                                                                                                                  |                                |
-| `NODE_WORKER_COMMAND`        | The command to execute in worker mode. **Setting this enables worker mode.**                                     |                                |
-| `NODE_WORKER_PROCESS_COUNT`  | The number of worker processes to run (`numprocs` in Supervisor).                                                | `1`                            |
-| **Advanced/Internal**        |                                                                                                                  |                                |
-| `CONTAINER_TEMPLATE_DIR`     | The path to the container's internal template files.                                                             | `/etc/container/templates`     |
-| `CONTAINER_BIN_DIR`          | The path to the container's internal binary and script files.                                                    | `/usr/bin/container`           |
+| Variable                      | Description                                                                                                                                                                           | Default Value                  |
+|:------------------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:-------------------------------|
+| **General**                   |                                                                                                                                                                                       |                                |
+| `PUID`                        | The user ID to run processes as (`www-data`). Useful for matching host file permissions.                                                                                              | `33`                           |
+| `PGID`                        | The group ID to run processes as (`www-data`). Useful for matching host file permissions.                                                                                             | `33`                           |
+| `CONTAINER_MODE`              | Read-only. Automatically set to `web`, `worker` or `build`.                                                                                                                           | `web`                          |
+| `MAX_UPLOAD_SIZE`             | A convenient variable to set NGINX's `client_max_body_size`.                                                                                                                          | `100M`                         |
+| `ENVIRONMENT`                 | Sets the overall environment. `dev`/`development` is non-production; all other values are considered production.                                                                      | `production`                   |
+| `NODE_ENV`                    | The standard Node.js environment variable. Defaults to the value of `ENVIRONMENT`.                                                                                                    | (derived)                      |
+| **Project**                   |                                                                                                                                                                                       |                                |
+| `DOCKER_PROJECT_HOST`         | The public hostname for your application (available for your app).                                                                                                                    | `localhost`                    |
+| `DOCKER_PROJECT_PATH`         | The public root path of the entire project.                                                                                                                                           | `/`                            |
+| `DOCKER_PROJECT_PROTOCOL`     | The public protocol. `http` or `https`. Determines NGINX's listening mode.                                                                                                            | `http`                         |
+| `DOCKER_SERVICE_PROTOCOL`     | The protocol your service uses internally. Defaults to `DOCKER_PROJECT_PROTOCOL`.                                                                                                     | (derived)                      |
+| `DOCKER_SERVICE_PATH`         | The sub-path for this specific service within the project.                                                                                                                            | `/`                            |
+| `DOCKER_SERVICE_ABS_PATH`     | Read-only. The absolute path for this service (`PROJECT_PATH` + `SERVICE_PATH`).                                                                                                      | (derived)                      |
+| **NGINX**                     |                                                                                                                                                                                       |                                |
+| `NGINX_DOC_ROOT`              | The document root NGINX serves static files from.                                                                                                                                     | `/var/www/html/public`         |
+| `NGINX_CLIENT_MAX_BODY_SIZE`  | Sets `client_max_body_size` in NGINX.                                                                                                                                                 | Matches `MAX_UPLOAD_SIZE`      |
+| `NGINX_CERT_PATH`             | Path to the SSL certificate (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                   | `/etc/ssl/certs/cert.pem`      |
+| `NGINX_KEY_PATH`              | Path to the SSL key (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                           | `/etc/ssl/certs/key.pem`       |
+| `NGINX_PROXY_CONNECT_TIMEOUT` | Sets `proxy_connect_timeout` in NGINX. This value defines the timeout for establishing a connection with a proxied server.                                                            | `5s`                           |
+| `NGINX_PROXY_READ_TIMEOUT`    | Sets `proxy_read_timeout` in NGINX. This value defines the timeout for reading a response from a proxied server.                                                                      | `60s`                          |
+| `NGINX_PROXY_SEND_TIMEOUT`    | Sets `proxy_send_timeout` in NGINX. This value defines the timeout for transmitting a request to a proxied server.                                                                    | `60s`                          |
+| `NGINX_KEEPALIVE_TIMEOUT`     | Sets `keepalive_timeout` in NGINX. This value defines the timeout for keeping connections alive with clients. If omitted, automatically calculated based on the other TIMEOUT values. | (calculated)                   |
+| **Node.js Web Mode**          |                                                                                                                                                                                       |                                |
+| `NODE_WEB_COMMAND`            | The command to start your web server application.                                                                                                                                     | `node /var/www/html/server.js` |
+| `NODE_SERVICE_PORT`           | The internal port your Node.js app listens on for NGINX to proxy to.                                                                                                                  | `3000`                         |
+| **Node.js Worker Mode**       |                                                                                                                                                                                       |                                |
+| `NODE_WORKER_COMMAND`         | The command to execute in worker mode. **Setting this enables worker mode.**                                                                                                          |                                |
+| `NODE_WORKER_PROCESS_COUNT`   | The number of worker processes to run (`numprocs` in Supervisor).                                                                                                                     | `1`                            |
+| **Advanced/Internal**         |                                                                                                                                                                                       |                                |
+| `CONTAINER_TEMPLATE_DIR`      | The path to the container's internal template files.                                                                                                                                  | `/etc/container/templates`     |
+| `CONTAINER_BIN_DIR`           | The path to the container's internal binary and script files.                                                                                                                         | `/usr/bin/container`           |
 
 #### ENVIRONMENT and `NODE_ENV` Derivation
 
@@ -319,9 +323,9 @@ The system understands two operators: `.` (for AND) and `-or-` (for OR). It also
     - **Logic:** `prod` AND `https`
     - **Result:** Loaded only in a `production` environment with `https` enabled.
 
-- **`30-analytics.prod-or-env-staging.conf`** equivalent to `30-analytics.env-prod-or-env-staging.conf` 
-    -   **Logic:** `env-prod` OR `env-staging`
-    -   **Result:** Loaded if `$ENVIRONMENT` is `production` or `staging`.
+- **`30-analytics.prod-or-env-staging.conf`** equivalent to `30-analytics.env-prod-or-env-staging.conf`
+    - **Logic:** `env-prod` OR `env-staging`
+    - **Result:** Loaded if `$ENVIRONMENT` is `production` or `staging`.
 
 ### Customization Methods
 

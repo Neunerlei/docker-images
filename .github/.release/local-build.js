@@ -84,7 +84,9 @@ const child_process = require('node:child_process');
     console.log('Building image:', targetImage);
     console.log('Using source image:', sourceImage);
     console.log('Source version to build:', sourceVersion);
-    console.log('Image type:', imageType);
+    if(imageType && imageType.length > 0){
+        console.log('Image type:', imageType);
+    }
     console.log('Tracked versions:', trackedVersions);
     console.log('Deprecated version:', deprecatedVersion);
     console.log('Version precision:', versionPrecision);

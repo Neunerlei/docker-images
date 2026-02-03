@@ -7,6 +7,22 @@ for var_name in "${required_vars[@]}"; do
   fi
 done
 
+calculate_keepalive_timeout() {
+  local connect_timeout="${NGINX_PROXY_CONNECT_TIMEOUT:-5s}"
+  local read_timeout="${NGINX_PROXY_READ_TIMEOUT:-60s}"
+  local send_timeout="${NGINX_PROXY_SEND_TIMEOUT:-60s}"
+
+  # Convert timeouts to seconds
+  local connect_seconds=$(echo "$connect_timeout" | sed 's/[^0-9]//g')
+  local read_seconds=$(echo "$read_timeout" | sed 's/[^0-9]//g')
+  local send_seconds=$(echo "$send_timeout" | sed 's/[^0-9]//g')
+
+  # Calculate the maximum timeout
+  local max_timeout=$((connect_seconds + read_seconds + send_seconds))
+
+  echo "${max_timeout}s"
+}
+
 export ENVIRONMENT="$(find_environment)"
 export CONTAINER_VARS_SCRIPT="/etc/container-vars.sh"
 export CONTAINER_CERTS_DIR="/etc/ssl/certs"
@@ -25,6 +41,10 @@ export NGINX_GLOBAL_SNIPPET_DIR="${NGINX_SNIPPET_DIR}/global.d"
 export NGINX_TEMPLATE_DIR="${CONTAINER_TEMPLATE_DIR}/nginx"
 export NGINX_CUSTOM_TEMPLATE_DIR="${NGINX_TEMPLATE_DIR}/custom"
 export NGINX_CUSTOM_GLOBAL_TEMPLATE_DIR="${NGINX_CUSTOM_TEMPLATE_DIR}/global"
+export NGINX_PROXY_CONNECT_TIMEOUT="${NGINX_PROXY_CONNECT_TIMEOUT:-5s}"
+export NGINX_PROXY_READ_TIMEOUT="${NGINX_PROXY_READ_TIMEOUT:-60s}"
+export NGINX_PROXY_SEND_TIMEOUT="${NGINX_PROXY_SEND_TIMEOUT:-60s}"
+export NGINX_KEEPALIVE_TIMEOUT="${NGINX_KEEPALIVE_TIMEOUT:-$(calculate_keepalive_timeout)}"
 export DOCKER_PROJECT_HOST="${DOCKER_PROJECT_HOST:-localhost}"
 export DOCKER_PROJECT_PROTOCOL="${DOCKER_PROJECT_PROTOCOL:-http}"
 export DOCKER_PROJECT_PATH="${DOCKER_PROJECT_PATH:-/}"

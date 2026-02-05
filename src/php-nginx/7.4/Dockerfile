@@ -6,15 +6,34 @@ LABEL org.opencontainers.image.authors="Martin Neundorfer <code@neunerlei.eu>"
 LABEL org.opencontainers.image.description="Lean PHP FPM image with an nginx server based on debian"
 
 ENV TZ=UTC
-ENV CONTAINER_TEMPLATE_DIR=/etc/container/templates
-ENV CONTAINER_BIN_DIR=/usr/bin/container
 
 RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=apt-lib,target=/var/lib/apt,sharing=locked\
     --mount=type=bind,from=common,source=v1,target=/tmp/installer \
-    INSTALLER_EXTRA_DEPENDENCIES="libxml2-dev tzdata libicu-dev libedit-dev libzip-dev libwebp-dev" \
-    INSTALLER_REMOVE_DEPENDENCIES="7zip" \
-    bash /tmp/installer/installer.sh
+    bash /tmp/installer/installer.sh \
+      --env-wrap "/usr/local/bin/php" \
+      --add-dependency "libxml2-dev" \
+      --add-dependency "tzdata" \
+      --add-dependency "libicu-dev" \
+      --add-dependency "libedit-dev" \
+      --add-dependency "libzip-dev" \
+      --add-dependency "libwebp-dev" \
+      --add-dependency "webp" \
+      --remove-dependency "7zip" \
+      --tpl "php-ini" \
+        --source-dir "/container/templates/php" \
+        --source-dir "/container/custom/php" \
+        --target-dir "/usr/local/etc/php/conf.d" \
+        --pattern "*.ini" \
+      --tpl "php-fpm" \
+        --source-dir "/container/templates/php/fpm" \
+        --source-dir "/container/custom/php/fpm" \
+        --target-dir "/usr/local/etc/php-fpm.d" \
+        --pattern "*.conf"
+
+# Load image specific files
+COPY --chown=www-data:www-data container /container
+COPY --chown=www-data:www-data src /var/www/html
 
 SHELL ["/bin/bash", "-c"]
 WORKDIR /var/www/html
@@ -34,26 +53,11 @@ RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
         xmlrpc \
         zip
 
-# Load common files
-RUN --mount=type=bind,from=common,source=v1,target=/tmp/common \
-    cp -r /tmp/common/templates/* "$CONTAINER_TEMPLATE_DIR/" && \
-    cp -r /tmp/common/bin/* "$CONTAINER_BIN_DIR/" && \
-    find "$CONTAINER_BIN_DIR" -type f -name "*.sh" -exec chmod +x {} \; || true
-
-# Load image files
-COPY --chown=www-data:www-data templates/ "$CONTAINER_TEMPLATE_DIR/"
-COPY --chown=www-data:www-data --chmod=+x bin/ "$CONTAINER_BIN_DIR/"
-COPY --chown=www-data:www-data src /var/www/html
 
 # Remove default fpm pool config (This causes issues, because we want to listen to a socket, not port 9000)
 RUN rm -rf /usr/local/etc/php-fpm.d/zz-docker.conf
 
-# Create a wrapper for the php executable, to set our env vars correctly
-RUN mv /usr/local/bin/php /usr/local/bin/_php && \
-    echo -e '#!/bin/bash\n/usr/local/bin/_php "$@"' > /usr/local/bin/php && \
-    chmod +x /usr/local/bin/php
-
 EXPOSE 80
 
-ENTRYPOINT ["/usr/bin/container/entrypoint.sh"]
+ENTRYPOINT ["/container/entrypoint/entrypoint.sh"]
 CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf"]

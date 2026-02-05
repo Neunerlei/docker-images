@@ -19,18 +19,18 @@ volumes:
 
 ```yaml
 volumes:
-- ./docker/nginx:/container/custom
+  - ./docker/nginx:/container/custom
 ```
 
 ### Special Case for SSL Certificates
 
 Historically SSL certificates are stored in `./docker/certs` and mounted to `/etc/ssl/certs` in multiple containers.
-Until our infrastructure supports the new centralized mount, you can add this as an additional mount:"
+Until our infrastructure supports the new centralized mount, you can add this as an additional mount:
 
 ```yaml
 volumes:
-- ./docker/nginx:/container/custom
-- ./docker/certs:/container/custom/certs
+  - ./docker/nginx:/container/custom
+  - ./docker/certs:/container/custom/certs
 ```
 
 > This will create a mount inside the centralized mount. Only do this if you are using SSL certificates in said container.
@@ -42,6 +42,6 @@ volumes:
 3. Restart your container once with `ENVIRONMENT=development` which will automatically give you a scaffolded directory structure inside `./docker/<service-name>`.
 
 4. Move the contents of the subdirectories into the centralized directory:
-   - Move all files from `./docker/<service-name>_old/nginx` to `./docker/<service-name>/nginx`
-   - Move all files from `./docker/<service-name>_old/php` to `./docker/<service-name>/php`
-   - Move all files from `./docker/certs` to `./docker/<service-name>/certs` (if applicable -> See Special Case for SSL Certificates)
+    - Move all files from `./docker/<service-name>_old/nginx` to `./docker/<service-name>/nginx`
+    - Move all files from `./docker/<service-name>_old/php` to `./docker/<service-name>/php`
+    - Move all files from `./docker/certs` to `./docker/<service-name>/certs` (if applicable -> See Special Case for SSL Certificates)

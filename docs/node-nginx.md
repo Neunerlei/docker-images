@@ -62,23 +62,21 @@ This image is configured almost entirely through environment variables. This all
 | **NGINX**                     |                                                                                                                                                                                       |                                |
 | `NGINX_DOC_ROOT`              | The document root NGINX serves static files from.                                                                                                                                     | `/var/www/html/public`         |
 | `NGINX_CLIENT_MAX_BODY_SIZE`  | Sets `client_max_body_size` in NGINX.                                                                                                                                                 | Matches `MAX_UPLOAD_SIZE`      |
-| `NGINX_CERT_PATH`             | Path to the SSL certificate (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                   | `/etc/ssl/certs/cert.pem`      |
-| `NGINX_KEY_PATH`              | Path to the SSL key (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                           | `/etc/ssl/certs/key.pem`       |
+| `NGINX_CERT_PATH`             | Path to the SSL certificate (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                   | `/etc/ssl/certs/custom/cert.pem`      |
+| `NGINX_KEY_PATH`              | Path to the SSL key (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                           | `/etc/ssl/certs/custom/key.pem`       |
 | `NGINX_PROXY_CONNECT_TIMEOUT` | Sets `proxy_connect_timeout` in NGINX. This value defines the timeout for establishing a connection with a proxied server.                                                            | `5s`                           |
 | `NGINX_PROXY_READ_TIMEOUT`    | Sets `proxy_read_timeout` in NGINX. This value defines the timeout for reading a response from a proxied server.                                                                      | `60s`                          |
 | `NGINX_PROXY_SEND_TIMEOUT`    | Sets `proxy_send_timeout` in NGINX. This value defines the timeout for transmitting a request to a proxied server.                                                                    | `60s`                          |
 | `NGINX_KEEPALIVE_TIMEOUT`     | Sets `keepalive_timeout` in NGINX. This value defines the timeout for keeping connections alive with clients. If omitted, automatically calculated based on the other TIMEOUT values. | (calculated)                   |
+| `NGINX_TRY_FILES`             | Sets the `try_files` directive in the root location of the nginx server.                                                                                                              | `$uri @nodeproxy`              |
 | **Node.js Web Mode**          |                                                                                                                                                                                       |                                |
 | `NODE_WEB_COMMAND`            | The command to start your web server application.                                                                                                                                     | `node /var/www/html/server.js` |
 | `NODE_SERVICE_PORT`           | The internal port your Node.js app listens on for NGINX to proxy to.                                                                                                                  | `3000`                         |
 | **Node.js Worker Mode**       |                                                                                                                                                                                       |                                |
 | `NODE_WORKER_COMMAND`         | The command to execute in worker mode. **Setting this enables worker mode.**                                                                                                          |                                |
 | `NODE_WORKER_PROCESS_COUNT`   | The number of worker processes to run (`numprocs` in Supervisor).                                                                                                                     | `1`                            |
-| **Advanced/Internal**         |                                                                                                                                                                                       |                                |
-| `CONTAINER_TEMPLATE_DIR`      | The path to the container's internal template files.                                                                                                                                  | `/etc/container/templates`     |
-| `CONTAINER_BIN_DIR`           | The path to the container's internal binary and script files.                                                                                                                         | `/usr/bin/container`           |
 
-#### ENVIRONMENT and `NODE_ENV` Derivation
+### ENVIRONMENT and `NODE_ENV` Derivation
 
 The `ENVIRONMENT` variable is a high-level switch for the container's operational mode. It is shared across all images in this ecosystem and influences NGINX configurations, logging verbosity, and other entrypoint behaviors.
 
@@ -177,11 +175,11 @@ The `DOCKER_PROJECT_PROTOCOL` and `DOCKER_SERVICE_PROTOCOL` variables work toget
 1. **Direct HTTPS Exposure:**
     - **Goal:** This container handles SSL directly.
     - **Config:** `DOCKER_PROJECT_PROTOCOL="https"` (and leave `DOCKER_SERVICE_PROTOCOL` unset).
-    - **Result:** NGINX listens on port 443 with SSL, using certificates from `NGINX_CERT_PATH` and `NGINX_KEY_PATH`, and redirects HTTP traffic to HTTPS. You must mount your certificates into the container.
+    - **Result:** NGINX listens on port 443 with SSL, using certificates from `NGINX_CERT_PATH` and `NGINX_KEY_PATH`, and redirects HTTP traffic to HTTPS. You must mount your certificates into the container at `/container/custom/certs/`.
 
 2. **SSL Termination at an External Gateway (Recommended for Production):**
     - **Goal:** A different proxy (like Traefik, Caddy, or another `nginx` instance) handles SSL, and forwards plain HTTP traffic to this container.
-    - **Config:** `DOCKER_PROJECT_PROTOCOL="httpss"` (so your app can generate correct public URLs) and `DOCKER_SERVICE_PROTOCOL="http"`.
+    - **Config:** `DOCKER_PROJECT_PROTOCOL="https"` (so your app can generate correct public URLs) and `DOCKER_SERVICE_PROTOCOL="http"`.
     - **Result:** NGINX inside this container listens for plain HTTP on port 80. Your application remains simple and unaware of SSL, while still understanding that the public-facing connection is secure.
 
 > **Production Note:** For automated certificate management (e.g., via Let's Encrypt), using a dedicated reverse proxy gateway like [linuxserver/swag](https://docs.linuxserver.io/images/docker-swag) or [nginx-proxy](https://github.com/nginx-proxy/nginx-proxy) in front of this container is a highly recommended pattern. This centralizes SSL management and simplifies your application containers.
@@ -218,7 +216,7 @@ If you were to omit `DOCKER_SERVICE_PROTOCOL`, it would default to the value of 
 
 This image uses a flexible system for extending the base NGINX configuration. You can add any number of custom configuration files, and the container's entrypoint script will intelligently process and include them based on their name and your environment variables.
 
-You can learn more about this powerful feature in [Advanced Customization](#advanced-customization-templating-and-overrides), especially in the [Adding Custom NGINX Snippets](#1-adding-custom-nginx-snippets-marker-aware) section.
+You can learn more about this powerful feature in [Advanced Customization](#advanced-customization-templating-and-overrides), especially in the [Adding Custom NGINX Snippets](#1-adding-custom-nginx-snippets-marker-aware-templates) section.
 
 ## Worker Mode In-Depth
 
@@ -262,11 +260,40 @@ Learn more about it in the [Build Mode Documentation](#build-time-execution-with
 
 ## Advanced Customization: Templating and Overrides
 
-This image uses a powerful templating engine that processes **all internal configuration files** on startup. This allows for deep customization of NGINX, Supervisor, and other components.
+This image uses a powerful templating engine that processes **all internal configuration files** on startup. This allows for deep customization of NGINX, Supervisor, and other components without rebuilding the image.
+
+### The `/container/custom` Directory
+
+**All customization happens through a single mount point: `/container/custom`**
+
+This centralized approach simplifies volume management and provides a clear structure for organizing your custom configurations, scripts, and certificates.
+
+```yaml
+services:
+  app:
+    image: neunerlei/node-nginx:latest
+    volumes:
+      # Single mount for all customizations
+      - ./docker/custom:/container/custom
+```
+
+**Structure:**
+
+```
+docker/custom/
+├── nginx/              # Custom NGINX snippets (server-level)
+│   ├── global/         # Custom NGINX snippets (http-level)
+│   ├── location/       # Custom NGINX snippets (root-location-level "/")
+│   └── errorPage.html  # Optional: Custom error page template
+├── certs/              # SSL certificates (cert.pem, key.pem)
+└── entrypoint/         # Custom startup scripts
+```
+
+> **Development Mode Bonus:** When running with `ENVIRONMENT=development`, the container will automatically create this directory structure for you if `/container/custom` is mounted. This provides a clear guide for what you can customize.
 
 ### How Templating Works
 
-Every configuration file inside `/etc/container/templates/` is treated as a template. The entrypoint script will read these files, substitute placeholders with their corresponding environment variable values, and write the final config to its destination.
+Every configuration file (both built-in templates in `/container/templates/` and your custom files in `/container/custom/`) is treated as a template. The entrypoint script reads these files, substitutes placeholders with their corresponding environment variable values, and writes the final config to its destination.
 
 You can use any of the environment variables listed above as placeholders in your custom files, using the syntax `${VAR_NAME}`.
 
@@ -279,7 +306,7 @@ To see exactly which variables are available for a template, you can add the spe
 Example output:
 
 ```
-DEBUG_VARS detected in template: '/etc/container/templates/nginx/custom/my_debug.conf'. Current variables that can be substituted:
+DEBUG_VARS detected in template: '/container/custom/nginx/my_debug.conf'. Current variables that can be substituted:
   - ${CONTAINER_MODE} = web
   - ${ENVIRONMENT} = production
   - ${NGINX_DOC_ROOT} = /var/www/html/public
@@ -290,7 +317,7 @@ DEBUG_VARS detected in template: '/etc/container/templates/nginx/custom/my_debug
 
 To control *when* your custom snippets and scripts are loaded, you can embed special markers in their filenames. This creates a powerful and readable declarative system for managing configuration.
 
-The system understands two operators: `.` (for AND) and `-or-` (for OR). It also supports **wildcard markers** for dynamic conditions like environments.
+The system understands two operators: `.` (for AND) and `-or-` (for OR).
 
 > Whenever you see `MARKER-AWARE` in the headlines below, it means that these rules apply.
 
@@ -335,8 +362,8 @@ There are multiple ways to customize the container's behavior and configuration.
 
 This is the standard, additive approach for extending NGINX. It's perfect for adding headers, redirects, or custom `location` blocks.
 
-* **How it works:** Place your custom `.conf` files in a local directory and mount it to `/etc/container/templates/nginx/custom/`.
-* **Result:** These files are treated as snippets. After variable substitution, they are copied to `/etc/nginx/snippets/service.d/` and included by the main server block.
+* **How it works:** Place your custom `.conf` files in `./docker/custom/nginx/` and mount it to `/container/custom`.
+* **Result:** These files are treated as snippets. After variable substitution, they are copied to `/etc/nginx/snippets/custom.d/` and included by the main server block.
 
 ```yaml
 # docker-compose.yml
@@ -344,57 +371,170 @@ services:
   app:
     image: neunerlei/node-nginx:latest
     volumes:
-      # Mount your custom snippets into the 'custom' directory
-      - ./my-nginx-snippets:/etc/container/templates/nginx/custom
+      # Mount custom directory containing nginx/ subdirectory
+      - ./docker/custom:/container/custom
+```
+
+**Directory structure:**
+
+```
+docker/custom/
+└── nginx/
+    ├── 01-custom-headers.conf
+    ├── 02-api-proxy.prod.conf
+    └── 03-websockets.https.conf
 ```
 
 Your custom snippets can add headers, redirects, or even new `location` blocks and can look like this:
 
 ```nginx
+# docker/custom/nginx/01-custom-headers.conf
 location ^~ ${DOCKER_SERVICE_ABS_PATH}custom/ {
     root ${NGINX_DOC_ROOT};
     index index.html index.htm;
 }
 ```
 
-##### 1.1 Server Snippets (server) `MARKER-AWARE` `TEMPLATES`
-
-These snippets are included in the main `server` block and are perfect for adding global rules, headers, or `map` blocks.
-
-* **How:** Mount a directory containing your `.conf` files to `/etc/container/templates/nginx/custom/`.
-* **Result:** The files are processed and included globally.
-
-##### 1.2 Global Snippets (http) `MARKER-AWARE` `TEMPLATES`
+##### 1.1 Global NGINX Snippets (http) `MARKER-AWARE` `TEMPLATES`
 
 These snippets are included in the main `http` block and are perfect for adding global rules, headers, or `map` blocks.
 
-* **How:** Inside your custom templates directory, create a `global` sub-directory.
+* **How:** Inside your custom directory, create a `nginx/global/` sub-directory.
 * **Result:** The files are processed and included globally in the `http` block.
 
-#### 2. Overriding Core Templates (Advanced) `TEMPLATES`
+**Directory structure:**
+
+```
+docker/custom/
+└── nginx/
+    └── global/
+        ├── 01-rate-limiting.conf
+        └── 02-gzip-settings.prod.conf
+```
+
+##### 1.2 Root Location Snippets `MARKER-AWARE` `TEMPLATES`
+
+These snippets are included in the `location /` block, allowing you to add authentication, custom headers, or internal rewrites specific to the root path.
+
+**Note:** You cannot override the `try_files` directive from here. Use the `NGINX_TRY_FILES` environment variable instead.
+
+**Directory structure:**
+
+```
+docker/custom/
+└── nginx/
+    └── location/
+        ├── 01-basic-auth.prod.conf
+        └── 02-custom-rewrites.conf
+```
+
+**Example:**
+
+```nginx
+# docker/custom/nginx/location/01-basic-auth.prod.conf
+auth_basic "Restricted";
+auth_basic_user_file /etc/nginx/.htpasswd;
+```
+
+#### 2. Custom SSL Certificates `TEMPLATES`
+
+For HTTPS support, provide your SSL certificate and private key:
+
+* **How:** Place `cert.pem` and `key.pem` in `./docker/custom/certs/`.
+* **Result:** When `DOCKER_SERVICE_PROTOCOL="https"`, NGINX will use these certificates.
+
+**Directory structure:**
+
+```
+docker/custom/
+└── certs/
+    ├── cert.pem
+    └── key.pem
+```
+
+> **Warning:** If no custom certificates are found and HTTPS is enabled, the container will generate self-signed certificates and display a warning. This is only suitable for development.
+
+#### 3. Custom Error Pages `TEMPLATES`
+
+Customize the error pages shown for HTTP status codes (400, 401, 403, 404, 500, 502, 503, 504).
+
+* **How:** Place `errorPage.html` and/or `errorPage.json` in `./docker/custom/nginx/`.
+* **Result:** These templates will be used to generate all error pages. They support variable substitution including `${ERROR_CODE}`, `${ERROR_TITLE}`, and `${ERROR_DESCRIPTION}`.
+
+**Example `errorPage.html`:**
+
+```html
+<!DOCTYPE html>
+<html>
+<head><title>${ERROR_TITLE}</title></head>
+<body>
+<h1>${ERROR_CODE}</h1>
+<p>${ERROR_DESCRIPTION}</p>
+<p>Environment: ${ENVIRONMENT}</p>
+</body>
+</html>
+```
+
+#### 4. Custom Entrypoint Hooks `MARKER-AWARE`
+
+Run your own scripts when the container starts, just before the main command (`supervisord`) is executed.
+
+* **How:** Place `.sh` files in `./docker/custom/entrypoint/`.
+* **Result:** These scripts are executed during the container's startup process. All environment variables are automatically available.
+
+**Directory structure:**
+
+```
+docker/custom/
+└── entrypoint/
+    ├── 01-setup-database.mode-build.sh
+    ├── 02-clear-cache.mode-web.sh
+    └── 03-warm-cache.prod.sh
+```
+
+> **Note:** Unlike templates, entrypoint scripts are executed directly. You can use commands like `printenv | sort` to see all available variables, but the `[[DEBUG_VARS]]` helper is not available in shell scripts.
+
+**Example script:**
+
+```bash
+#!/bin/bash
+# 02-clear-cache.mode-web.sh
+echo "Clearing application cache for web mode..."
+node /var/www/html/scripts/clear-cache.js
+```
+
+#### 5. Overriding Core Templates (Advanced) `TEMPLATES`
 
 For maximum control, you can completely replace any of the container's default template files. This is an "all-or-nothing" approach best used for fundamentally changing a core component.
 
-* **How:** Identify the default template (e.g., `/etc/container/templates/nginx/nginx.conf`). In your project, create your version and mount it to the *exact same path* inside the container.
+* **How:** Identify the default template (e.g., `/container/templates/nginx/nginx.conf`). In your project, create your version and mount it to the *exact same path* inside the container.
 * **Result:** Your mounted file will completely replace the image's default. The entrypoint will then process *your* template instead.
 
 > **Note:** Filename markers do **not** apply when directly overriding a core template file.
 
-##### 2.1. Custom error pages `TEMPLATES`
+### Complete Example
 
-The `/etc/container/templates/nginx/service.errors.nginx.conf` file is responsible for handling error pages in the nginx configuration. By default, it supports custom error pages for HTTP status codes 400, 401, 403, 404, 500, 502, 503, and 504; both as HTML and JSON responses.
+Here's a complete example showing all customization types:
 
-You can customize these error pages by overriding the default templates at: `/etc/container/templates/nginx/errorPage.html` or `/etc/container/templates/nginx/errorPage.json`.
-Note, that these files are templates, so you can use any environment variables defined in the container within these files, additionally you have access to: `ERROR_CODE`, `ERROR_TITLE` and `ERROR_DESCRIPTION`, which will be replaced with the actual error code, title and description when the error page is rendered.
-
-#### 3. Custom Entrypoint Hooks `MARKER-AWARE`
-
-Additionally to service snippets, the image supports custom entrypoint hooks that allow you to run your own scripts when the container starts. The scripts will be executed, just before the main command (`supervisord`) is started.
-
-* **How it works:** Place your custom `.sh` files in a local directory and mount it to `/usr/bin/container/custom`.
-* **Result:** These files are treated as executable scripts and run during the container's startup process.
-
-> Custom entrypoint scripts use the same filename marker system described above, allowing you to conditionally execute scripts based on environment, mode, or protocol. All environment variables are automatically available in your scripts. Unlike templates, there's no `[[DEBUG_VARS]]` helper since scripts are executed directly, but you can use commands like `printenv | sort` to see all available variables.
+```
+project/
+├── docker-compose.yml
+├── docker/
+│   └── custom/
+│       ├── nginx/
+│       │   ├── global/
+│       │   │   └── 01-cors.conf
+│       │   ├── 01-api-routes.conf
+│       │   ├── errorPage.html
+│       │   └── errorPage.json
+│       ├── certs/
+│       │   ├── cert.pem
+│       │   └── key.pem
+│       └── entrypoint/
+│           └── 01-migrations.mode-build.sh
+└── src/
+    └── ... (your application code)
+```
 
 ```yaml
 # docker-compose.yml
@@ -402,9 +542,37 @@ services:
   app:
     image: neunerlei/node-nginx:latest
     volumes:
-      # Mount your custom entrypoint scripts into the 'custom' directory
-      - ./my-entrypoint-scripts:/usr/bin/container/custom
+      - ./src:/var/www/html
+      - ./docker/custom:/container/custom  # Single mount for all customizations
+    environment:
+      - ENVIRONMENT=production
+      - DOCKER_PROJECT_PROTOCOL=https
+      - DOCKER_SERVICE_PROTOCOL=http
 ```
+
+### Migration from Legacy Mount Points
+
+> **Breaking Change:** All customization paths have been centralized to `/container/custom`.
+
+If you're upgrading from an older version that used individual mount points like `/etc/ssl/certs`, `/etc/container/templates/nginx/custom`, etc., your container will **fail to start** and display a clear error message with migration instructions.
+
+**Old structure (no longer supported):**
+
+```yaml
+volumes:
+  - ./docker/certs:/etc/ssl/certs
+  - ./docker/nginx:/etc/container/templates/nginx/custom
+  - ./docker/entrypoint:/usr/bin/container/custom
+```
+
+**New structure:**
+
+```yaml
+volumes:
+  - ./docker/custom:/container/custom
+```
+
+See the [Migration Guide](https://github.com/Neunerlei/docker-images/blob/main/docs/migration/migrate-to-centralized-container-dir.md) for detailed instructions.
 
 ## Default Script (`server.js`)
 
@@ -416,12 +584,12 @@ You can replace this file with your own application code by mounting your projec
 
 A common challenge in Docker is that environment variables set during an entrypoint's execution are not automatically available to subsequent `docker exec` sessions or different shell environments. This image solves this problem with a "bash wrapper."
 
-During the build process, the original `/bin/bash` is moved to `/bin/_bash`, and a new `/bin/bash` script is put in its place. This wrapper does one simple thing: before executing the real bash, it sources the file at `/etc/container-vars.sh`, which is generated by the entrypoint and contains all exported variables. The `/bin/sh` shell is also symlinked to this wrapper.
+During the build process, the original `/bin/bash` is moved to `/bin/_bash`, and a new `/bin/bash` script is put in its place. This wrapper does one simple thing: before executing the real bash, it sources the file at `/container/work/container-vars.sh`, which is generated by the entrypoint and contains all exported variables. The `/bin/sh` shell is also symlinked to this wrapper.
 
 **Implications for You:**
 
 - **Seamless `exec`:** Variables like `DOCKER_SERVICE_ABS_PATH` will be available in `docker exec my-container env` or `docker exec my-container bash`.
-- **Other Shells (e.g., `zsh`):** If you install and use a different shell, it will **not** inherit these variables automatically. To get the same behavior, you would need to configure your `~/.zshrc` (or equivalent) to source `/etc/container-vars.sh` upon startup.
+- **Other Shells (e.g., `zsh`):** If you install and use a different shell, it will **not** inherit these variables automatically. To get the same behavior, you would need to configure your `~/.zshrc` (or equivalent) to source `/container/work/container-vars.sh` upon startup.
 
 ## Build-Time Execution with Multi-Stage Builds
 
@@ -433,7 +601,7 @@ This feature allows you to leverage the container's fully configured environment
 
 Build Mode is activated automatically:
 
-> When you execute the entrypoint script (`/usr/bin/container/entrypoint.sh`) inside a `Dockerfile` `RUN` instruction **without** providing any command, the framework detects this and sets `CONTAINER_MODE="build"`.
+> When you execute the entrypoint script (`/container/entrypoint/entrypoint.sh`) inside a `Dockerfile` `RUN` instruction **without** providing any command, the framework detects this and sets `CONTAINER_MODE="build"`.
 
 It then proceeds to run all the normal setup steps, making variables like `DOCKER_SERVICE_ABS_PATH` available to subsequent `RUN` commands. Crucially, it skips the final `exec` step, allowing the Docker build to continue.
 
@@ -461,11 +629,11 @@ COPY --chown=www-data:www-data ./src ./src
 
 # === Build-Time Execution ===
 # 1. Run the entrypoint to set up the environment.
-RUN /usr/bin/container/entrypoint.sh
+RUN /container/entrypoint/entrypoint.sh
 
 # 2. Run your build commands. They now have access to all container variables.
 #    For example, your `vite.config.js` or `webpack.config.js` can now
-#    read PUBLIC_HOST, PUBLIC_PATH, etc., from `process.env`.
+#    read DOCKER_PROJECT_HOST, DOCKER_SERVICE_ABS_PATH, etc., from `process.env`.
 RUN npm ci
 RUN npm run build
 

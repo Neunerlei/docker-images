@@ -243,10 +243,32 @@ echo "[INSTALLER] Manifest created successfully at ${CONTAINER_TEMPLATE_MANIFEST
 # -----------------------------------------------------------------
 # Copy container directory
 # -----------------------------------------------------------------
-echo "[INSTALLER] Copying built-in container files"
+echo "[INSTALLER] Copying common container files"
 
 cp -R "${current_dir}/container/." "${CONTAINER_DIR}/"
 chmod +x "${CONTAINER_ENTRYPOINT_SCRIPT}"
+
+# -----------------------------------------------------------------
+# Ensure home permissions for www-data
+# -----------------------------------------------------------------
+echo "[INSTALLER] Ensuring home directory permissions for www-data user"
+# If www-data user does not exist, die
+if ! id -u www-data >/dev/null 2>&1; then
+    echo "[INSTALLER] Error: www-data user does not exist in the container. Cannot set home directory permissions." >&2
+    exit 1
+fi
+if [ ! -d "/var/www" ]; then
+    mkdir -p "/var/www"
+fi
+chown -R www-data:www-data "/var/www"
+if [ ! -d "/var/www/html" ]; then
+    mkdir -p "/var/www/html"
+fi
+chown -R www-data:www-data "/var/www/html"
+
+# In some root images, the /var/www/html directory might already contain files (e.g. index.html), which can cause permission issues and are not needed in our setup, so we clean it up to be safe
+echo "[INSTALLER] Cleaning up the html directory"
+rm -rf /var/www/html/*
 
 # -----------------------------------------------------------------
 # Install common dependencies

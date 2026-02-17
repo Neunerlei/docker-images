@@ -1,0 +1,40 @@
+name: Python Nginx
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - src/python-nginx/**
+      - src/_common/**
+  schedule:
+    - cron: '0 2 * * 2,5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+  id-token: write
+  packages: write
+  attestations: write
+
+jobs:
+  call-build-engine:
+    uses: ./.github/workflows/build-engine.yml
+    with:
+      image-name: 'python-nginx'
+      image-type: ''
+      source-image-namespace: 'library'
+      source-image-name: 'python'
+      source-image-type: 'slim'
+      tracked-versions: '4'
+      deprecated: ''
+      version-precision: '2'
+      latest-tag: 'true'
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+  workflow-keepalive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: liskin/gh-workflow-keepalive@v1

@@ -17,6 +17,9 @@ declare dependencies_to_install=()
 # Array to collect executables that need the environment wrapper.
 declare -a scripts_to_wrap=()
 
+# Array to collect commands to run after dependencies are installed ---
+declare -a commands_to_exec_after_deps=()
+
 # These flags will be prepended to the command-line arguments
 # to ensure that certain default templates are always registered.
 declare -a default_flags=(
@@ -232,6 +235,10 @@ while [[ "$#" -gt 0 ]]; do
         scripts_to_wrap+=("$2")
         shift 2
         ;;
+    --exec-after-dependencies)
+        commands_to_exec_after_deps+=("$2")
+        shift 2
+        ;;
     *)
         shift
         ;;
@@ -266,10 +273,6 @@ if [ ! -d "/var/www/html" ]; then
 fi
 chown -R www-data:www-data "/var/www/html"
 
-# In some root images, the /var/www/html directory might already contain files (e.g. index.html), which can cause permission issues and are not needed in our setup, so we clean it up to be safe
-echo "[INSTALLER] Cleaning up the html directory"
-rm -rf /var/www/html/*
-
 # -----------------------------------------------------------------
 # Install common dependencies
 # -----------------------------------------------------------------
@@ -293,6 +296,28 @@ apt install -y "${dependencies_to_install[@]}"
 if [ $? -ne 0 ]; then
     echo "[INSTALLER] apt install failed!"
     exit 1
+fi
+
+
+# In some root images, the /var/www/html directory might already contain files (e.g. index.html), which can cause permission issues and are not needed in our setup, so we clean it up to be safe
+# Also, some dependencies we install (e.g. nginx) might also add files to this directory, which we do not need and can cause issues, so we clean it up again after installing dependencies to be safe
+echo "[INSTALLER] Cleaning up the html directory"
+rm -rf /var/www/html/*
+
+# -----------------------------------------------------------------
+# Execute post-dependency commands
+# -----------------------------------------------------------------
+if [[ ${#commands_to_exec_after_deps[@]} -gt 0 ]]; then
+    echo "[INSTALLER] Executing post-dependency commands..."
+    for cmd in "${commands_to_exec_after_deps[@]}"; do
+        echo "  -> Running: ${cmd}"
+        # Use 'bash -c' to properly handle commands with spaces, pipes, etc.
+        bash -c "${cmd}"
+        if [ $? -ne 0 ]; then
+            echo "[INSTALLER] Error: Command failed: '${cmd}'" >&2
+            exit 1
+        fi
+    done
 fi
 
 # -----------------------------------------------------------------

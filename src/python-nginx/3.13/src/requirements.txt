@@ -1,0 +1,4 @@
+# The Python packages required for the default application.
+# Users will provide their own requirements.txt for their apps.
+gunicorn
+flask

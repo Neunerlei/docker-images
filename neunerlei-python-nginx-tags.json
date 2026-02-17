@@ -1,0 +1,11 @@
+{
+  "image": "neunerlei/python-nginx",
+  "imageName": "neunerlei/python-nginx",
+  "deprecated": false,
+  "maintainedTags": [
+    "latest",
+    "3.14",
+    "3.13"
+  ],
+  "availableTags": []
+}

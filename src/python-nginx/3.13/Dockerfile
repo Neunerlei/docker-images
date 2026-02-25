@@ -19,6 +19,7 @@ RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
       --exec-after-dependencies "python3 -m venv /opt/venv && chown -R www-data:www-data /opt/venv" \
       --env-wrap "/opt/venv/bin/python" \
       --env-wrap "/opt/venv/bin/pip" \
+      --www-data-wrap "/opt/venv/bin/pip" \
       --tpl "gunicorn-conf" \
         --source "/container/templates/python/gunicorn.conf.py" \
         --target "/etc/gunicorn.conf.py"

@@ -32,6 +32,12 @@ services:
 
 Place your Python project in the `./your-python-project` directory. Ensure your application's entrypoint is `server:app` (or adjust `PYTHON_APP_MODULE`) and your dependencies are in `requirements.txt`. Then run `docker-compose up`. You can now access your application at `http://localhost:8080`.
 
+## pip
+
+A tiny heads-up regarding the `pip` package manager: 
+
+> pip is configured to ALWAYS run as `www-data`, so you do not need to worry about permissions when running commands as root or another user. However, if you want to use pip as a different user, simply call `_pip` instead, which is the original pip binary without the user switch.
+
 ## Core Concepts: The Smart Entrypoint
 
 The "brain" of this image is its entrypoint script. When the container starts, it reads your environment variables to decide how to configure itself. It operates in one of two primary modes:

@@ -1,4 +1,4 @@
-# Python Images - with NGINX
+# Node.js Images - with NGINX
 
 Welcome to the `node-nginx` images!
 

@@ -40,9 +40,9 @@ RUN ln -s /opt/venv /var/www/venv
 
 # Ensure we are using the latest pip in the virtual environment before installing dependencies.
 # This ensures we have the latest features and security fixes from pip when installing our project dependencies.
-RUN gosu www-data pip install --no-cache-dir --upgrade pip
+RUN pip install --no-cache-dir --upgrade pip
 # Install Python dependencies from our requirements.txt into the virtual environment.
-RUN gosu www-data pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 SHELL ["/bin/bash", "-c"]
 EXPOSE 80

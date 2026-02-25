@@ -32,6 +32,12 @@ services:
 
 Place your Node.js project in the `./your-node-project` directory, ensure your main server file is at `/var/www/html/server.js` (or adjust `NODE_WEB_COMMAND`), and run `docker-compose up`. You can now access your application at `http://localhost:8080`.
 
+## npm and pnpm
+
+This image includes both `npm` and `pnpm` package managers. You can use either one to manage your dependencies. Both are available in the container's PATH, so you can run commands like `npm install` or `pnpm install` directly in the container.
+
+> BOTH npm and pnpm are configure to ALWAYS run as `www-data`, so you do not need to worry about permissions when running commands as root or another user. However, if you want to install global packages, you might run into permission issues, especially when installing global binaries. To avoid this, or for whatever reason you want to not use the `www-data` user, simply call `_npm` or `_pnpm` instead of `npm` or `pnpm`, which are the original binaries without the user switch.
+
 ## Core Concepts: The Smart Entrypoint
 
 The "brain" of this image is its entrypoint script. When the container starts, this script reads your environment variables to decide how to configure itself. It operates in one of two primary modes:

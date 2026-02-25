@@ -7,11 +7,15 @@ LABEL org.opencontainers.image.description="Lean PHP FPM image with an nginx ser
 
 ENV TZ=UTC
 
+# Add Composer (MUST be done before the installer)
+COPY --from=index.docker.io/library/composer:latest /usr/bin/composer /usr/bin/composer
+
 RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=apt-lib,target=/var/lib/apt,sharing=locked\
     --mount=type=bind,from=common,source=v1,target=/tmp/installer \
     bash /tmp/installer/installer.sh \
       --env-wrap "/usr/local/bin/php" \
+      --www-data-wrap "/usr/bin/composer" \
       --add-dependency "libxml2-dev" \
       --add-dependency "tzdata" \
       --add-dependency "libicu-dev" \
@@ -37,21 +41,31 @@ COPY --chown=www-data:www-data src /var/www/html
 SHELL ["/bin/bash", "-c"]
 WORKDIR /var/www/html
 
+# @todo remove xmlrpc in the next release with breaking changes, it is a niche remnant from the TYPO3 era and not really used anymore.
 RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,id=apt-lib,target=/var/lib/apt,sharing=locked\
+    --mount=type=cache,id=apt-lib,target=/var/lib/apt,sharing=locked \
     --mount=type=bind,from=mlocati/php-extension-installer:latest,source=/usr/bin/install-php-extensions,target=/usr/local/bin/install-php-extensions \
     install-php-extensions \
         apcu \
         bcmath \
         bz2 \
+        ctype \
+        curl \
         exif \
         gd \
+        iconv \
         intl \
+        mbstring \
+        mysqli \
         opcache \
+        pcntl \
         pdo_mysql \
+        pdo_pgsql \
+        pdo_sqlite \
+        pgsql \
+        redis \
         xmlrpc \
         zip
-
 
 # Remove default fpm pool config (This causes issues, because we want to listen to a socket, not port 9000)
 RUN rm -rf /usr/local/etc/php-fpm.d/zz-docker.conf

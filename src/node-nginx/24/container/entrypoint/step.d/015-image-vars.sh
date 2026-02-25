@@ -40,4 +40,5 @@ fi
 
 user_owned_directories_registry+=(
   "/var/www/.npm"
+  "/usr/local/lib/node_modules"
 )

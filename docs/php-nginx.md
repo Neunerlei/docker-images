@@ -34,6 +34,24 @@ services:
 
 Place your PHP project (with a `public/index.php`) in the `./your-php-project` directory and run `docker-compose up`. You can now access your application at `http://localhost:8080`.
 
+## Installed extensions
+
+The image comes with a wide range of commonly used PHP extensions pre-installed and ready to use.
+Additional, to those already in the [official PHP images](https://hub.docker.com/_/php#default-extensions), the following extensions are included:
+
+`apcu`, `bcmath`, `bz2`, `ctype`, `curl`, `exif`, `gd`, `iconv`, `intl`, `mbstring`, `mysqli`, `opcache`, `opcache`, `pcntl`, `pdo_mysql`, `pdo_pgsql`, `pdo_sqlite`, `pgsql`, `redis`, `xmlrpc`, `zip`
+
+> DEPRECATION NOTE: **xmlrpc** is included for legacy reasons, but considered DEPRECATED in this image. I will remove it in the next release that has a breaking change.
+> After that you can still use it by installing it manually in your image with: `RUN docker-php-ext-install xmlrpc`.
+
+## Composer
+
+Composer is pre-installed globally in the image, so you can run `composer` commands directly in your container without needing to install it yourself.
+
+> Composer is configured to ALWAYS run as `www-data` user, so you do not need to worry about permissions when running composer commands.
+> If you want to use composer as a different user, execute `_composer` instead, which is the original composer binary without the user switch.
+
+
 ## Core Concepts: The Smart Entrypoint
 
 The "brain" of this image is its entrypoint script. When the container starts, this script reads your environment variables to decide how to configure itself. It operates in one of two primary modes:

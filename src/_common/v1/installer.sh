@@ -2,8 +2,156 @@
 
 set -e
 
-# The generic installer script that sets up common dependencies and directories
-# It should run in the Dockerfile right after the base image is set up
+# =============================================================================
+# Container Image Installer
+# =============================================================================
+#
+# A build-time setup script that provisions the container with dependencies,
+# configuration templates, and executable wrappers. It is designed to run
+# exactly once during `docker build`, invoked from within a Dockerfile's
+# RUN instruction with the common layer bind-mounted:
+#
+#   RUN --mount=type=bind,from=common,source=v1,target=/tmp/installer \
+#       bash /tmp/installer/installer.sh [FLAGS...]
+#
+# The installer performs the following tasks, in order:
+#
+#   1. Parses all flags (both built-in defaults and caller-provided overrides)
+#   2. Generates a template manifest for the entrypoint's runtime templating
+#   3. Copies the common container scaffolding into /container/
+#   4. Installs system packages via apt
+#   5. Executes post-dependency commands (--exec-after-dependencies)
+#   6. Generates executable wrappers (--env-wrap, --www-data-wrap)
+#
+# -----------------------------------------------------------------------------
+# FLAGS
+# -----------------------------------------------------------------------------
+#
+# --add-dependency PACKAGE
+#
+#     Registers a system package to be installed via apt. Duplicates are
+#     silently ignored. The installer ships with a set of default packages
+#     (bash, nginx, curl, ca-certificates, openssl, openssh-client, git,
+#     nano, supervisor, gosu, zip, unzip, 7zip) that are always installed
+#     unless explicitly removed.
+#
+#     Example:
+#       --add-dependency "python3-pip"
+#       --add-dependency "python3-venv"
+#
+#
+# --remove-dependency PACKAGE
+#
+#     Removes a package from the installation list. This allows child images
+#     to exclude default packages they don't need. If the package is not in
+#     the list, a warning is printed and execution continues.
+#
+#     Example:
+#       --remove-dependency "nano"
+#
+#
+# --env-wrap PATH
+#
+#     Wraps an executable so that the container's runtime environment
+#     variables are available when the binary is invoked — even from
+#     "docker exec" sessions that bypass the entrypoint.
+#
+#     The original binary is moved to PATH_orig, and a shell wrapper is
+#     generated at the original PATH. The wrapper sources the variable
+#     file written by the entrypoint (/container/work/container-vars.sh)
+#     before exec-ing the original binary.
+#
+#     /bin/bash is wrapped by default. Its wrapper uses a special shebang
+#     (#!/bin/bash_orig) to avoid infinite recursion. /bin/sh is symlinked
+#     to the wrapped /bin/bash.
+#
+#     Example:
+#       --env-wrap "/opt/venv/bin/python"
+#       --env-wrap "/opt/venv/bin/pip"
+#
+#
+# --www-data-wrap PATH
+#
+#     Wraps an executable so that it always runs as the www-data user via
+#     gosu. Can be combined with --env-wrap on the same binary; a single
+#     unified wrapper is generated that handles both concerns.
+#
+#     Example:
+#       --www-data-wrap "/usr/bin/composer"
+#
+#
+# --exec-after-dependencies COMMAND
+#
+#     Registers a shell command to run after all apt packages have been
+#     installed. Commands are executed in registration order via bash -c.
+#     Useful for setup steps that depend on installed packages (e.g.,
+#     creating a Python virtual environment after python3-venv is available).
+#
+#     Example:
+#       --exec-after-dependencies "python3 -m venv /opt/venv"
+#       --exec-after-dependencies "chown -R www-data:www-data /opt/venv"
+#
+#
+# --tpl NAME [SUB-FLAGS...]
+#
+#     Registers a named template with the runtime templating system. At
+#     container startup, the entrypoint processes registered templates by
+#     substituting ${VAR_NAME} placeholders with environment variable values
+#     and writing the result to the configured target location.
+#
+#     Templates are identified by NAME, which is used both as a key in the
+#     manifest and as the working directory name under /container/work/NAME.
+#     The target path is symlinked to the work path, so changes are reflected
+#     automatically after the entrypoint renders the template.
+#
+#     Sub-flags (parsed until the next --tpl or top-level flag):
+#
+#       --source FILE
+#           Path to a single template source file. Can be specified multiple
+#           times for layered rendering (later sources can override earlier
+#           ones). Mutually exclusive with --source-dir.
+#
+#       --source-dir DIR
+#           Path to a directory of template source files. Can be specified
+#           multiple times. Files are processed using the filename marker
+#           system (e.g., .prod., .dev., .https.). Mutually exclusive
+#           with --source.
+#
+#       --target FILE
+#           The final destination path for a single-file template. Exactly
+#           one of --target or --target-dir is required.
+#
+#       --target-dir DIR
+#           The final destination directory for a directory-type template.
+#           Exactly one of --target or --target-dir is required.
+#
+#       --pattern GLOB
+#           Filename glob pattern for directory-type templates.
+#           Default: "*"
+#
+#     If neither --source nor --source-dir is provided, the template is
+#     a "callback" type (cb_file or cb_dir). These have no default
+#     rendering behavior and require a callback function to be passed
+#     to process_tpl at runtime.
+#
+#     Examples:
+#
+#       # Single file template
+#       --tpl "nginx-conf" \
+#         --source "/container/templates/nginx/nginx.conf" \
+#         --target "/etc/nginx/nginx.conf"
+#
+#       # Directory of templates with filename filtering
+#       --tpl "supervisor-config" \
+#         --source-dir "/container/templates/supervisor/conf.d" \
+#         --target-dir "/etc/supervisor/conf.d" \
+#         --pattern "*.conf"
+#
+#       # Callback template (rendered by custom logic at runtime)
+#       --tpl "nginx-error-pages" \
+#         --target-dir "/var/www/errors"
+#
+# =============================================================================
 
 declare current_dir="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 declare entrypoint_dir="${current_dir}/container/entrypoint"
@@ -14,8 +162,9 @@ source "${entrypoint_dir}/common-env.sh"
 # A list of dependencies to install using apt
 declare dependencies_to_install=()
 
-# Array to collect executables that need the environment wrapper.
-declare -a scripts_to_wrap=()
+# Arrays to collect script paths that need to be wrapped for various reasons.
+declare -A scripts_wrap_env=()
+declare -A scripts_wrap_www_data=()
 
 # Array to collect commands to run after dependencies are installed ---
 declare -a commands_to_exec_after_deps=()
@@ -76,6 +225,8 @@ declare -a default_flags=(
     "--source-dir" "${CONTAINER_TEMPLATES_DIR}/supervisor/conf.d"
     "--target-dir" "${SUPERVISOR_DIR}/conf.d"
     "--pattern" "*.conf"
+    # Default script wrappers
+    "--env-wrap" "/bin/bash"
 )
 
 # Prepend the default registrations to the command-line arguments.
@@ -232,7 +383,11 @@ while [[ "$#" -gt 0 ]]; do
         shift 2
         ;;
     --env-wrap)
-        scripts_to_wrap+=("$2")
+        scripts_wrap_env["$2"]=1
+        shift 2
+        ;;
+    --www-data-wrap)
+        scripts_wrap_www_data["$2"]=1
         shift 2
         ;;
     --exec-after-dependencies)
@@ -321,41 +476,66 @@ if [[ ${#commands_to_exec_after_deps[@]} -gt 0 ]]; then
 fi
 
 # -----------------------------------------------------------------
-# Install bash wrapper
+# Script Wrappers
 # -----------------------------------------------------------------
-echo "[INSTALLER] Installing bash wrapper"
+echo "[INSTALLER] Processing script wrappers..."
 
-# IMPORTANT: This is black magic!
-# Because we create environment variables in our entrypoint.sh they do not automatically
-# become available in the default shell (which seems to be always "sh"), an neither in bash
-# if you run a command like docker exec container_name npm run...
-# Therefore I wrap bash with a custom script, that always loads our generated env variables
-# And symlink sh into bash to work in both cases out of the box.
+declare -A scripts_to_wrap=()
+for path in "${!scripts_wrap_env[@]}"; do scripts_to_wrap["$path"]=1; done
+for path in "${!scripts_wrap_www_data[@]}"; do scripts_to_wrap["$path"]=1; done
 
-mv /bin/bash /bin/_bash
-cat <<EOF >/bin/bash
-#!/bin/_bash
-[ -f "${CONTAINER_VARS_SCRIPT}" ] && . "${CONTAINER_VARS_SCRIPT}"
-exec /bin/_bash "\$@"
-EOF
-chmod +x /bin/bash
-rm -f /bin/sh
-ln -s /bin/bash /bin/sh
-
-# -----------------------------------------------------------------
-# Additional bash wrappers
-# -----------------------------------------------------------------
 if [[ ${#scripts_to_wrap[@]} -gt 0 ]]; then
-    echo "[INSTALLER] Applying wrappers to: ${scripts_to_wrap[*]}"
-    for script_path in "${scripts_to_wrap[@]}"; do
-        if [ -f "${script_path}" ]; then
-            # Move the original executable
-            mv "${script_path}" "${script_path}_orig"
-            # Create the new wrapper script that invokes the original via our wrapped bash
-            echo -e "#!/bin/bash\nexec ${script_path}_orig \"\$@\"" >"${script_path}"
-            chmod +x "${script_path}"
-        else
+    echo "[INSTALLER] Wrapping scripts: ${!scripts_to_wrap[*]}"
+    for script_path in "${!scripts_to_wrap[@]}"; do
+        if [ ! -f "${script_path}" ]; then
             echo "[INSTALLER] Warning: Cannot wrap non-existent script '${script_path}'. Skipping." >&2
+            continue
         fi
+
+        declare script_path_orig="${script_path%/*}/_${script_path##*/}"
+
+        mv "${script_path}" "${script_path_orig}"
+
+        exec_cmd="${script_path_orig}"
+
+        # Compose the exec command based on registered feature flags
+        if [[ -n "${scripts_wrap_www_data[$script_path]}" ]]; then
+            exec_cmd="gosu www-data ${exec_cmd}"
+        fi
+
+        # Build and write the wrapper
+        cat <<WRAPPER > "${script_path}"
+#!/bin/_bash
+# ==========================================================================
+# AUTO-GENERATED WRAPPER — DO NOT EDIT
+# ==========================================================================
+# This file was generated by the container installer script at build time.
+# The original executable has been moved to:
+#   ${script_path_orig}
+#
+# Purpose: Wrapper scripts solve a fundamental Docker problem. Environment
+# variables exported during the entrypoint boot sequence are NOT available
+# in subsequent "docker exec" sessions or direct binary invocations, because
+# those bypass the entrypoint entirely.
+#
+# This wrapper bridges that gap by sourcing the container's exported
+# variables before executing the original binary. It may also enforce
+# user context (e.g., running as www-data via gosu).
+#
+# The variable file is written by the entrypoint at:
+#   ${CONTAINER_VARS_SCRIPT}
+#
+# For details, see: installer.sh in the image source repository.
+# ==========================================================================
+$(if [[ -n "${scripts_wrap_env[$script_path]}" ]]; then
+    echo "[ -f \"${CONTAINER_VARS_SCRIPT}\" ] && . \"${CONTAINER_VARS_SCRIPT}\""
+fi)
+exec ${exec_cmd} "\$@"
+WRAPPER
+        chmod +x "${script_path}"
     done
 fi
+
+# Ensure /bin/sh always resolves through our wrapped bash
+rm -f /bin/sh
+ln -s /bin/bash /bin/sh

@@ -1,14 +1,14 @@
-# Python Images - with Nginx
+# Python Images - with NGINX
 
 Welcome to the `python-nginx` images!
 
-These images are designed as self-contained, high-performance services. The philosophy is to provide a complete, production-ready Python application runtime that includes a pre-configured Nginx web server as a reverse proxy for the **Gunicorn** application server.
+These images are designed as self-contained, high-performance services. The philosophy is to provide a complete, production-ready Python application runtime that includes a pre-configured NGINX web server as a reverse proxy and **Gunicorn** as the WSGI application server.
 
 Think of this image as a "service-in-a-box." You put your code in, configure it with environment variables, and it just works—whether in local development or behind a production load balancer.
 
 ## Tags
 
-Here you can find [all available tags](https://docker.neunerlei.eu/neunerlei-python-nginx-tags.html) of this image. (You'll need to create this page later).
+Here you can find [all available tags](https://docker.neunerlei.eu/neunerlei-python-nginx-tags.html) of this image.
 
 ## Quick Start
 
@@ -30,73 +30,80 @@ services:
       - MAX_UPLOAD_SIZE=250M
 ```
 
-Place your Python project in the `./your-python-project` directory. Ensure your application's entrypoint is `server:app` (or adjust `PYTHON_APP_MODULE`) and your dependencies are in `requirements.txt`. Then run `docker-compose up`. You can now access your application at `http://localhost:8080`.
+Place your Python project in the `./your-python-project` directory, ensure your WSGI application callable lives at `/var/www/html/server.py` and is named `app` (or adjust `PYTHON_APP_MODULE`), and run `docker-compose up`. You can now access your application at `http://localhost:8080`.
 
-## pip
-
-A tiny heads-up regarding the `pip` package manager: 
-
-> pip is configured to ALWAYS run as `www-data`, so you do not need to worry about permissions when running commands as root or another user. However, if you want to use pip as a different user, simply call `_pip` instead, which is the original pip binary without the user switch.
+> **Important:** The image uses a Python virtual environment located at `/opt/venv` (symlinked to `/var/www/venv` for convenience). All dependencies are installed into this venv, and the `PATH` is pre-configured so that `python` and `pip` resolve to the venv's binaries automatically.
 
 ## Core Concepts: The Smart Entrypoint
 
-The "brain" of this image is its entrypoint script. When the container starts, it reads your environment variables to decide how to configure itself. It operates in one of two primary modes:
+The "brain" of this image is its entrypoint script. When the container starts, this script reads your environment variables to decide how to configure itself. It operates in one of two primary modes:
 
-1. **Web Mode (Default):** This is the standard mode. The script starts and configures both Nginx (as a reverse proxy) and **Gunicorn** (as the application server) to serve your Python application over HTTP.
-2. **Worker Mode:** Activated by setting the `PYTHON_WORKER_COMMAND` variable. In this mode, Nginx and Gunicorn are disabled, and Supervisor is configured to run your specified command instead. This is perfect for running queue workers (like Celery), schedulers, or other long-running background tasks.
+1.  **Web Mode (Default):** This is the standard mode. The script starts and configures both NGINX (as a reverse proxy) and **Gunicorn** (as the WSGI application server) to serve traffic over HTTP. NGINX proxies requests to Gunicorn via a Unix socket.
+2.  **Worker Mode:** Activated by setting the `PYTHON_WORKER_COMMAND` variable. In this mode, NGINX is disabled, and Supervisor is configured to run your specified command instead. This is perfect for running queue workers, schedulers, or other long-running background tasks.
 
 ## Configuration via Environment Variables
 
 This image is configured almost entirely through environment variables. This allows you to use the same image for different purposes (web vs. worker, dev vs. prod) without rebuilding it.
 
-| Variable                      | Description                                                                                                                                                                           | Default Value                    |
-|:------------------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------------------------------|
-| **General**                   |                                                                                                                                                                                       |                                  |
-| `PUID`                        | The user ID to run processes as (`www-data`). Useful for matching host file permissions.                                                                                              | `33`                             |
-| `PGID`                        | The group ID to run processes as (`www-data`). Useful for matching host file permissions.                                                                                             | `33`                             |
-| `CONTAINER_MODE`              | Read-only. Automatically set to `web`, `worker` or `build`.                                                                                                                           | `web`                            |
-| `MAX_UPLOAD_SIZE`             | A convenient variable to set NGINX's `client_max_body_size`.                                                                                                                          | `100M`                           |
-| `ENVIRONMENT`                 | Sets the overall environment. `dev`/`development` is non-production; all other values are considered production.                                                                      | `production`                     |
-| `NODE_ENV`                    | The standard Node.js environment variable. Defaults to the value of `ENVIRONMENT`.                                                                                                    | (derived)                        |
-| **Project**                   |                                                                                                                                                                                       |                                  |
-| `DOCKER_PROJECT_HOST`         | The public hostname for your application (available for your app).                                                                                                                    | `localhost`                      |
-| `DOCKER_PROJECT_PATH`         | The public root path of the entire project.                                                                                                                                           | `/`                              |
-| `DOCKER_PROJECT_PROTOCOL`     | The public protocol. `http` or `https`. Determines NGINX's listening mode.                                                                                                            | `http`                           |
-| `DOCKER_SERVICE_PROTOCOL`     | The protocol your service uses internally. Defaults to `DOCKER_PROJECT_PROTOCOL`.                                                                                                     | (derived)                        |
-| `DOCKER_SERVICE_PATH`         | The sub-path for this specific service within the project.                                                                                                                            | `/`                              |
-| `DOCKER_SERVICE_ABS_PATH`     | Read-only. The absolute path for this service (`PROJECT_PATH` + `SERVICE_PATH`).                                                                                                      | (derived)                        |
-| **NGINX**                     |                                                                                                                                                                                       |                                  |
-| `NGINX_DOC_ROOT`              | The document root NGINX serves static files from.                                                                                                                                     | `/var/www/html/public`           |
-| `NGINX_CLIENT_MAX_BODY_SIZE`  | Sets `client_max_body_size` in NGINX.                                                                                                                                                 | Matches `MAX_UPLOAD_SIZE`        |
-| `NGINX_CERT_PATH`             | Path to the SSL certificate (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                   | `/etc/ssl/certs/custom/cert.pem` |
-| `NGINX_KEY_PATH`              | Path to the SSL key (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                           | `/etc/ssl/certs/custom/key.pem`  |
-| `NGINX_PROXY_CONNECT_TIMEOUT` | Sets `proxy_connect_timeout` in NGINX. This value defines the timeout for establishing a connection with a proxied server.                                                            | `5s`                             |
-| `NGINX_PROXY_READ_TIMEOUT`    | Sets `proxy_read_timeout` in NGINX. This value defines the timeout for reading a response from a proxied server.                                                                      | `60s`                            |
-| `NGINX_PROXY_SEND_TIMEOUT`    | Sets `proxy_send_timeout` in NGINX. This value defines the timeout for transmitting a request to a proxied server.                                                                    | `60s`                            |
-| `NGINX_KEEPALIVE_TIMEOUT`     | Sets `keepalive_timeout` in NGINX. This value defines the timeout for keeping connections alive with clients. If omitted, automatically calculated based on the other TIMEOUT values. | (calculated)                     |
-| `NGINX_TRY_FILES`             | Sets the `try_files` directive in the root location of the nginx server.                                                                                                              | `$uri @nodeproxy`                |
-| **Node.js Web Mode**          |                                                                                                                                                                                       |                                  |
-| `NODE_WEB_COMMAND`            | The command to start your web server application.                                                                                                                                     | `node /var/www/html/server.js`   |
-| `NODE_SERVICE_PORT`           | The internal port your Node.js app listens on for NGINX to proxy to.                                                                                                                  | `3000`                           |
-| **Node.js Worker Mode**       |                                                                                                                                                                                       |                                  |
-| `NODE_WORKER_COMMAND`         | The command to execute in worker mode. **Setting this enables worker mode.**                                                                                                          |                                  |
-| `NODE_WORKER_PROCESS_COUNT`   | The number of worker processes to run (`numprocs` in Supervisor).                                                                                                                     | `1`                              |
+| Variable                      | Description                                                                                                                                                                           | Default Value                          |
+|:------------------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------------------------------------|
+| **General**                   |                                                                                                                                                                                       |                                        |
+| `PUID`                        | The user ID to run processes as (`www-data`). Useful for matching host file permissions.                                                                                              | `33`                                   |
+| `PGID`                        | The group ID to run processes as (`www-data`). Useful for matching host file permissions.                                                                                             | `33`                                   |
+| `CONTAINER_MODE`              | Read-only. Automatically set to `web`, `worker` or `build`.                                                                                                                           | `web`                                  |
+| `MAX_UPLOAD_SIZE`             | A convenient variable to set NGINX's `client_max_body_size`.                                                                                                                          | `100M`                                 |
+| `ENVIRONMENT`                 | Sets the overall environment. `dev`/`development` is non-production; all other values are considered production.                                                                      | `production`                           |
+| `APP_ENV`                     | The application environment flag. Derived from `ENVIRONMENT` if not explicitly set.                                                                                                   | (derived)                              |
+| `FLASK_ENV`                   | The Flask environment variable. Derived from `ENVIRONMENT` if not explicitly set.                                                                                                     | (derived)                              |
+| `APP_DEBUG`                   | Debug flag for the application. Derived from `ENVIRONMENT` / `APP_ENV` if not explicitly set.                                                                                         | (derived: `1` in dev, `0` otherwise)   |
+| **Project**                   |                                                                                                                                                                                       |                                        |
+| `DOCKER_PROJECT_HOST`         | The public hostname for your application (available for your app).                                                                                                                    | `localhost`                            |
+| `DOCKER_PROJECT_PATH`         | The public root path of the entire project.                                                                                                                                           | `/`                                    |
+| `DOCKER_PROJECT_PROTOCOL`     | The public protocol. `http` or `https`. Determines NGINX's listening mode.                                                                                                            | `http`                                 |
+| `DOCKER_SERVICE_PROTOCOL`     | The protocol your service uses internally. Defaults to `DOCKER_PROJECT_PROTOCOL`.                                                                                                     | (derived)                              |
+| `DOCKER_SERVICE_PATH`         | The sub-path for this specific service within the project.                                                                                                                            | `/`                                    |
+| `DOCKER_SERVICE_ABS_PATH`     | Read-only. The absolute path for this service (`PROJECT_PATH` + `SERVICE_PATH`).                                                                                                      | (derived)                              |
+| **NGINX**                     |                                                                                                                                                                                       |                                        |
+| `NGINX_DOC_ROOT`              | The document root NGINX serves static files from.                                                                                                                                     | `/var/www/html/public`                 |
+| `NGINX_CLIENT_MAX_BODY_SIZE`  | Sets `client_max_body_size` in NGINX.                                                                                                                                                 | Matches `MAX_UPLOAD_SIZE`              |
+| `NGINX_CERT_PATH`             | Path to the SSL certificate (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                   | `/etc/ssl/certs/custom/cert.pem`       |
+| `NGINX_KEY_PATH`              | Path to the SSL key (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                           | `/etc/ssl/certs/custom/key.pem`        |
+| `NGINX_PROXY_CONNECT_TIMEOUT` | Sets `proxy_connect_timeout` in NGINX. This value defines the timeout for establishing a connection with a proxied server.                                                            | `5s`                                   |
+| `NGINX_PROXY_READ_TIMEOUT`    | Sets `proxy_read_timeout` in NGINX. This value defines the timeout for reading a response from a proxied server.                                                                      | `60s`                                  |
+| `NGINX_PROXY_SEND_TIMEOUT`    | Sets `proxy_send_timeout` in NGINX. This value defines the timeout for transmitting a request to a proxied server.                                                                    | `60s`                                  |
+| `NGINX_KEEPALIVE_TIMEOUT`     | Sets `keepalive_timeout` in NGINX. This value defines the timeout for keeping connections alive with clients. If omitted, automatically calculated based on the other TIMEOUT values.  | (calculated)                           |
+| `NGINX_TRY_FILES`             | Sets the `try_files` directive in the root location of the nginx server.                                                                                                              | `/static/$uri @pythonproxy`            |
+| **Gunicorn (Web Mode)**       |                                                                                                                                                                                       |                                        |
+| `PYTHON_APP_MODULE`           | The WSGI application module in `module:callable` format. This tells Gunicorn where to find your application.                                                                          | `server:app`                           |
+| `GUNICORN_WORKERS`            | The number of Gunicorn worker processes.                                                                                                                                              | `4`                                    |
+| `GUNICORN_WORKER_CLASS`       | The type of Gunicorn worker processes (e.g., `sync`, `gevent`, `uvicorn.workers.UvicornWorker`).                                                                                      | `sync`                                 |
+| `GUNICORN_LOG_LEVEL`          | The Gunicorn log level (e.g., `debug`, `info`, `warning`, `error`, `critical`).                                                                                                       | `info`                                 |
+| `GUNICORN_SOCKET`             | Read-only. The path to the Unix socket Gunicorn binds to and NGINX proxies to.                                                                                                        | `/run/gunicorn.sock`                   |
+| **Python Worker Mode**        |                                                                                                                                                                                       |                                        |
+| `PYTHON_WORKER_COMMAND`       | The command to execute in worker mode. **Setting this enables worker mode.**                                                                                                          |                                        |
+| `PYTHON_WORKER_PROCESS_COUNT` | The number of worker processes to run (`numprocs` in Supervisor).                                                                                                                     | `1`                                    |
 
-### ENVIRONMENT and `NODE_ENV` Derivation
+### ENVIRONMENT, `APP_ENV`, and `FLASK_ENV` Derivation
 
 The `ENVIRONMENT` variable is a high-level switch for the container's operational mode. It is shared across all images in this ecosystem and influences NGINX configurations, logging verbosity, and other entrypoint behaviors.
 
-- **Possible Values:** `production` (or `prod`) and `development` (or `dev`).
-- **Default:** `production`.
-- **Rule:** Any value other than `development` or `dev` is treated as a production environment.
+-   **Possible Values:** `production` (or `prod`) and `development` (or `dev`).
+-   **Default:** `production`.
+-   **Rule:** Any value other than `development` or `dev` is treated as a production environment.
 
-**`NODE_ENV` Derivation Logic:**
+**`APP_ENV` and `FLASK_ENV` Derivation Logic:**
 
-To align with standard Node.js practices, the `NODE_ENV` variable is automatically derived from `ENVIRONMENT`. You generally do not need to set it yourself.
+To align with standard Python/Flask practices, the `APP_ENV` and `FLASK_ENV` variables are automatically derived from `ENVIRONMENT`. You generally do not need to set them yourself.
 
-1. If `ENVIRONMENT` is set to `production` or `prod`, `NODE_ENV` defaults to `production`.
-2. If `ENVIRONMENT` is set to `development` or `dev`, `NODE_ENV` defaults to `development`.
-3. If you set `NODE_ENV` explicitly, **your value will always take precedence**. This allows you to run in a `production` container `ENVIRONMENT` (with optimized NGINX settings) while having `NODE_ENV` set to `staging`, for example.
+1.  If `ENVIRONMENT` is set to `production` or `prod`, `APP_ENV` defaults to `prod` and `FLASK_ENV` defaults to `production`.
+2.  If `ENVIRONMENT` is set to `development` or `dev`, `APP_ENV` defaults to `dev` and `FLASK_ENV` defaults to `development`.
+3.  If you set `APP_ENV` explicitly, **your value will always take precedence**. This allows you to run in a `production` container `ENVIRONMENT` (with optimized NGINX settings) while having `APP_ENV` set to `staging`, for example.
+
+Additionally, `APP_DEBUG` is automatically derived:
+
+-   It is set to `1` when `ENVIRONMENT` or `APP_ENV` is `development` or `dev`.
+-   It is set to `0` otherwise.
+-   You can override it by setting `APP_DEBUG` explicitly.
 
 ### Path Composition: `PROJECT_PATH` + `SERVICE_PATH`
 
@@ -167,7 +174,16 @@ Your entire project, including a frontend and backend, must live under a specifi
 
 ## Web Mode In-Depth
 
-In `web` mode, the entrypoint script configures NGINX to serve your application. By default, it operates over plain HTTP, but enabling SSL for HTTPS is controlled via a single environment variable. This process is known as **SSL Termination**, where NGINX handles the performance-intensive work of encrypting and decrypting traffic, freeing your application to communicate over plain HTTP internally.
+In `web` mode, the entrypoint script configures NGINX and Gunicorn to serve your application. NGINX acts as the front-facing server, handling static files and proxying dynamic requests to Gunicorn over a **Unix socket** (`/run/gunicorn.sock`). By default, it operates over plain HTTP, but enabling SSL for HTTPS is controlled via a single environment variable.
+
+**How NGINX and Gunicorn Work Together:**
+
+1.  A request arrives at NGINX on port 80 (or 443 for HTTPS).
+2.  NGINX first attempts to serve the request as a static file from the `/var/www/html/static/` directory (controlled by `NGINX_TRY_FILES`).
+3.  If no static file matches, NGINX proxies the request to Gunicorn via the Unix socket at `/run/gunicorn.sock`.
+4.  Gunicorn passes the request to your Flask (or other WSGI) application and returns the response through NGINX to the client.
+
+This process is known as **SSL Termination** when HTTPS is enabled, where NGINX handles the performance-intensive work of encrypting and decrypting traffic, freeing your application to communicate over plain HTTP internally.
 
 **Controlling the Protocol:**
 
@@ -226,21 +242,21 @@ You can learn more about this powerful feature in [Advanced Customization](#adva
 
 ## Worker Mode In-Depth
 
-If you provide the `NODE_WORKER_COMMAND` environment variable, the image switches to worker mode. This is the idiomatic way to run background tasks using the exact same Node.js environment as your web application.
+If you provide the `PYTHON_WORKER_COMMAND` environment variable, the image switches to worker mode. This is the idiomatic way to run background tasks using the exact same Python environment as your web application.
 
 **Example 1: Running a background processing script**
 
 ```yaml
 services:
   my-app-worker:
-    image: neunerlei/node-nginx:latest
+    image: neunerlei/python-nginx:latest
     volumes:
-      - ./your-node-project:/var/www/html
+      - ./your-python-project:/var/www/html
     environment:
       # This enables worker mode and defines the command
-      - NODE_WORKER_COMMAND=node /var/www/html/dist/queue-worker.js
+      - PYTHON_WORKER_COMMAND=python /var/www/html/queue_worker.py
       # Optional: run 4 worker processes
-      - NODE_WORKER_PROCESS_COUNT=4
+      - PYTHON_WORKER_PROCESS_COUNT=4
 ```
 
 **Example 2: Running a "cron" task**
@@ -250,13 +266,15 @@ For simple scheduled tasks without a full cron daemon, you can use a loop manage
 ```yaml
 services:
   my-app-scheduler:
-    image: neunerlei/node-nginx:latest
+    image: neunerlei/python-nginx:latest
     volumes:
-      - ./your-node-project:/var/www/html
+      - ./your-python-project:/var/www/html
     environment:
       # This simple loop will be managed and kept alive by Supervisor
-      - NODE_WORKER_COMMAND=while true; do node /var/www/html/my_task.js; sleep 300; done
+      - PYTHON_WORKER_COMMAND=while true; do python /var/www/html/my_task.py; sleep 300; done
 ```
+
+> **Note:** Because the venv's `python` and `pip` are on the `PATH`, you can reference them directly in your worker commands without specifying the full `/opt/venv/bin/python` path.
 
 ## Build Mode at a Glance
 
@@ -266,7 +284,7 @@ Learn more about it in the [Build Mode Documentation](#build-time-execution-with
 
 ## Advanced Customization: Templating and Overrides
 
-This image uses a powerful templating engine that processes **all internal configuration files** on startup. This allows for deep customization of NGINX, Supervisor, and other components without rebuilding the image.
+This image uses a powerful templating engine that processes **all internal configuration files** on startup. This allows for deep customization of NGINX, Supervisor, Gunicorn, and other components without rebuilding the image.
 
 ### The `/container/custom` Directory
 
@@ -277,7 +295,7 @@ This centralized approach simplifies volume management and provides a clear stru
 ```yaml
 services:
   app:
-    image: neunerlei/node-nginx:latest
+    image: neunerlei/python-nginx:latest
     volumes:
       # Single mount for all customizations
       - ./docker/custom:/container/custom
@@ -316,6 +334,8 @@ DEBUG_VARS detected in template: '/container/custom/nginx/my_debug.conf'. Curren
   - ${CONTAINER_MODE} = web
   - ${ENVIRONMENT} = production
   - ${NGINX_DOC_ROOT} = /var/www/html/public
+  - ${GUNICORN_WORKERS} = 4
+  - ${PYTHON_APP_MODULE} = server:app
   ...
 ```
 
@@ -375,7 +395,7 @@ This is the standard, additive approach for extending NGINX. It's perfect for ad
 # docker-compose.yml
 services:
   app:
-    image: neunerlei/node-nginx:latest
+    image: neunerlei/python-nginx:latest
     volumes:
       # Mount custom directory containing nginx/ subdirectory
       - ./docker/custom:/container/custom
@@ -405,8 +425,8 @@ location ^~ ${DOCKER_SERVICE_ABS_PATH}custom/ {
 
 These snippets are included in the main `http` block and are perfect for adding global rules, headers, or `map` blocks.
 
-* **How:** Inside your custom directory, create a `nginx/global/` sub-directory.
-* **Result:** The files are processed and included globally in the `http` block.
+*   **How:** Inside your custom directory, create a `nginx/global/` sub-directory.
+*   **Result:** The files are processed and included globally in the `http` block.
 
 **Directory structure:**
 
@@ -493,7 +513,7 @@ Run your own scripts when the container starts, just before the main command (`s
 ```
 docker/custom/
 └── entrypoint/
-    ├── 01-setup-database.mode-build.sh
+    ├── 01-run-migrations.mode-build.sh
     ├── 02-clear-cache.mode-web.sh
     └── 03-warm-cache.prod.sh
 ```
@@ -506,14 +526,14 @@ docker/custom/
 #!/bin/bash
 # 02-clear-cache.mode-web.sh
 echo "Clearing application cache for web mode..."
-node /var/www/html/scripts/clear-cache.js
+python /var/www/html/scripts/clear_cache.py
 ```
 
 #### 5. Overriding Core Templates (Advanced) `TEMPLATES`
 
 For maximum control, you can completely replace any of the container's default template files. This is an "all-or-nothing" approach best used for fundamentally changing a core component.
 
-* **How:** Identify the default template (e.g., `/container/templates/nginx/nginx.conf`). In your project, create your version and mount it to the *exact same path* inside the container.
+*   **How:** Identify the default template (e.g., `/container/templates/nginx/nginx.conf` or `/container/templates/python/gunicorn.conf.py`). In your project, create your version and mount it to the *exact same path* inside the container.
 * **Result:** Your mounted file will completely replace the image's default. The entrypoint will then process *your* template instead.
 
 > **Note:** Filename markers do **not** apply when directly overriding a core template file.
@@ -546,7 +566,7 @@ project/
 # docker-compose.yml
 services:
   app:
-    image: neunerlei/node-nginx:latest
+    image: neunerlei/python-nginx:latest
     volumes:
       - ./src:/var/www/html
       - ./docker/custom:/container/custom  # Single mount for all customizations
@@ -580,11 +600,28 @@ volumes:
 
 See the [Migration Guide](https://github.com/Neunerlei/docker-images/blob/main/docs/migration/migrate-to-centralized-container-dir.md) for detailed instructions.
 
-## Default Script (`server.js`)
+## Default Application (`server.py`)
 
-To get you started quickly, the image includes a simple `server.js` file at `/var/www/html/server.js`. This file starts a basic web server that displays a welcome message and, if `NODE_ENV` is `development`, a list of environment variables.
+To get you started quickly, the image includes a simple Flask application at `/var/www/html/server.py`. This file provides a WSGI callable named `app` that Gunicorn serves by default. It displays a welcome message and, if `APP_ENV` is not `prod`, a list of environment variables.
 
-You can replace this file with your own application code by mounting your project into `/var/www/html`. NGINX is configured to serve static files from `/var/www/html/public` first, and if a file is not found, it will proxy the request to your Node.js application. If you don't want the `server.js` file as entrypoint, simply set the `NODE_WEB_COMMAND` environment variable to your desired start command.
+The default `requirements.txt` includes **gunicorn** and **flask**. You can replace both files with your own application code by mounting your project into `/var/www/html`.
+
+NGINX is configured to serve static files from `/var/www/html/static/` first (via the `try_files` directive), and if a file is not found, it proxies the request to Gunicorn. If your WSGI application module is not `server:app`, set the `PYTHON_APP_MODULE` environment variable to point to the correct `module:callable` (e.g., `myapp.wsgi:application`).
+
+### Installing Custom Dependencies
+
+When building your own image on top of this one, add your `requirements.txt` and install it into the virtual environment:
+
+```dockerfile
+FROM neunerlei/python-nginx:latest
+
+COPY --chown=www-data:www-data ./requirements.txt /var/www/html/requirements.txt
+RUN gosu www-data pip install --no-cache-dir -r /var/www/html/requirements.txt
+
+COPY --chown=www-data:www-data ./src /var/www/html
+```
+
+The venv's `pip` and `python` are already on the `PATH`, so you can use them directly. A convenience symlink at `/var/www/venv` points to the venv at `/opt/venv`.
 
 ## The Shell Environment and the Bash Wrapper
 
@@ -592,16 +629,18 @@ A common challenge in Docker is that environment variables set during an entrypo
 
 During the build process, the original `/bin/bash` is moved to `/bin/_bash`, and a new `/bin/bash` script is put in its place. This wrapper does one simple thing: before executing the real bash, it sources the file at `/container/work/container-vars.sh`, which is generated by the entrypoint and contains all exported variables. The `/bin/sh` shell is also symlinked to this wrapper.
 
+Additionally, the venv's `python` and `pip` executables are wrapped in a similar fashion, ensuring they always have access to the container's environment variables.
+
 **Implications for You:**
 
-- **Seamless `exec`:** Variables like `DOCKER_SERVICE_ABS_PATH` will be available in `docker exec my-container env` or `docker exec my-container bash`.
-- **Other Shells (e.g., `zsh`):** If you install and use a different shell, it will **not** inherit these variables automatically. To get the same behavior, you would need to configure your `~/.zshrc` (or equivalent) to source `/container/work/container-vars.sh` upon startup.
+-   **Seamless `exec`:** Variables like `DOCKER_SERVICE_ABS_PATH`, `PYTHON_APP_MODULE`, and `GUNICORN_WORKERS` will be available in `docker exec my-container env` or `docker exec my-container bash`.
+-   **Other Shells (e.g., `zsh`):** If you install and use a different shell, it will **not** inherit these variables automatically. To get the same behavior, you would need to configure your `~/.zshrc` (or equivalent) to source `/container/work/container-vars.sh` upon startup.
 
 ## Build-Time Execution with Multi-Stage Builds
 
 Beyond running as a web or worker service, this image includes a powerful **"Build Mode"** designed to be used inside your `Dockerfile` during a `docker build` process.
 
-This feature allows you to leverage the container's fully configured environment—including all its environment variables, helper scripts, and logic—to perform build tasks like compiling frontend assets, running database migrations, or running unit tests.
+This feature allows you to leverage the container's fully configured environment—including all its environment variables, helper scripts, and logic—to perform build tasks like compiling assets, running database migrations, or running unit tests.
 
 ### How It Works
 
@@ -615,11 +654,11 @@ It then proceeds to run all the normal setup steps, making variables like `DOCKE
 
 This is the most common use case. In a multi-stage Docker build, you can use one stage to build your application and a final, clean stage to run it.
 
-Here is a typical `Dockerfile` for a Node.js application:
+Here is a typical `Dockerfile` for a Python application:
 
 ```dockerfile
 # Start from your application's base image
-FROM neunerlei/node-nginx:latest AS builder
+FROM neunerlei/python-nginx:latest AS builder
 
 # Pass in build-time arguments (e.g., from your CI/CD system)
 ARG DOCKER_PROJECT_PROTOCOL
@@ -630,31 +669,30 @@ ENV DOCKER_PROJECT_PROTOCOL=${DOCKER_PROJECT_PROTOCOL}
 ENV DOCKER_PROJECT_HOST=${DOCKER_PROJECT_HOST}
 
 # Copy your application source code
-COPY --chown=www-data:www-data ./package*.json ./
+COPY --chown=www-data:www-data ./requirements.txt ./requirements.txt
 COPY --chown=www-data:www-data ./src ./src
 
 # === Build-Time Execution ===
 # 1. Run the entrypoint to set up the environment.
 RUN /container/entrypoint/entrypoint.sh
 
-# 2. Run your build commands. They now have access to all container variables.
-#    For example, your `vite.config.js` or `webpack.config.js` can now
-#    read DOCKER_PROJECT_HOST, DOCKER_SERVICE_ABS_PATH, etc., from `process.env`.
-RUN npm ci
-RUN npm run build
+# 2. Install dependencies and run build commands.
+#    They now have access to all container variables.
+RUN gosu www-data pip install --no-cache-dir -r requirements.txt
+RUN python -m pytest tests/
 
 # --- Final Production Stage ---
-FROM neunerlei/node-nginx:latest
+FROM neunerlei/python-nginx:latest
 
 WORKDIR /var/www/html
 
-# Copy only the necessary build artifacts from the builder stage.
-COPY --from=builder /var/www/html/dist ./dist
-COPY --from=builder /var/www/html/package*.json ./
-COPY --from=builder /var/www/html/node_modules ./node_modules
+# Copy only the necessary artifacts from the builder stage.
+COPY --from=builder /var/www/html ./
+COPY --from=builder /opt/venv /opt/venv
 
-# The final image now contains your compiled app but not the source code
-# or build-time dependencies, making it smaller and more secure.
+# The final image now contains your app with all dependencies installed
+# but not test fixtures or build-time-only packages,
+# making it smaller and more secure.
 # The standard CMD and ENTRYPOINT will take over from here.
 ```
 

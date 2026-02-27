@@ -107,7 +107,7 @@ const child_process = require('node:child_process');
     console.log('Using image filter for tags:', imageFilter);
 
     const allSourceTags = await getAllTags(sourceImage);
-    const sourceVersions = parseVersionTags(allSourceTags, versionPrecision, sourceImageType);
+    const sourceVersions = parseVersionTags(allSourceTags, versionPrecision, imageFilter);
 
     console.log(`Found ${sourceVersions.size} source versions:`, Array.from(sourceVersions.keys()));
 

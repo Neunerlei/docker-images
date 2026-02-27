@@ -10,3 +10,6 @@ node_modules
 !.idea/copyright/*
 !.idea/codeStyles/
 !.idea/codeStyles/*
+
+# Pipeline files
+.github/.release/build

@@ -1,0 +1,30 @@
+name: Check Debian Stable Version
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-and-update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup release environment
+        uses: ./.github/actions/setup-release-environment
+
+      - name: Check and update Debian stable
+        working-directory: .github/.release
+        run: node check-debian-stable.js
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  workflow-keepalive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: liskin/gh-workflow-keepalive@v1

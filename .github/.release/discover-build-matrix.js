@@ -2,6 +2,7 @@ const core = require('@actions/core');
 const {getAllTags, parseVersionTags} = require('.//util/docker-version-utils');
 const {generateBuildMatrix} = require('.//util/build-matrix-generation');
 const constants = require('.//util/constants');
+const {buildImageByArgs, buildImageNameByArgs, buildTagFilterByArgs} = require('./util/docker-version-utils');
 
 (async () => {
 
@@ -25,13 +26,19 @@ const constants = require('.//util/constants');
      * The name of the source image to discover versions from (e.g. nginx)
      * @type {string}
      */
-    const sourceImageNameInput = core.getInput('source-image-name', {required: true});
+    const sourceImageNameInput = core.getInput('source-image-name');
     /**
      * Allows for filtering the tags for a certain type (e.g. "alpine" to get only alpine variants)
      * When using this, we assume the image tags are structured like: "1.23.4-alpine", "1.23.4-fpm-alpine", etc.
      * @type {string}
      */
     const sourceImageTypeInput = core.getInput('source-image-type');
+    /**
+     * Pin the OS variant for the source image tag filter (e.g., 'bookworm', 'trixie').
+     * When set, it is appended to source-image-type to form the effective filter.
+     * @type {string}
+     */
+    const sourceImageOsInput = core.getInput('source-image-os');
     /**
      * Number of most recent versions to track/build (default: 3)
      * @type {string}
@@ -58,8 +65,14 @@ const constants = require('.//util/constants');
      */
     const detectLatestVersion = core.getBooleanInput('latest-tag') || false;
 
-    const sourceImage = `${sourceImageNamespaceInput}/${sourceImageNameInput}`;
-    const targetImage = `${constants.IMAGE_NAMESPACE}/${targetImageNameInput}`;
+    const sourceImage = buildImageNameByArgs({
+        namespace: sourceImageNamespaceInput,
+        name: sourceImageNameInput
+    });
+    const targetImage = buildImageNameByArgs({
+        namespace: constants.IMAGE_NAMESPACE,
+        name: targetImageNameInput
+    });
     core.info(`Starting build matrix discovery for image: ${targetImage} based on source image: ${sourceImage}`);
 
     core.info(`Discovering available tags...`);
@@ -71,8 +84,13 @@ const constants = require('.//util/constants');
     const precision = (versionPrecisionInput && !isNaN(parseInt(versionPrecisionInput, 10))) ? parseInt(versionPrecisionInput, 10) : 3;
     core.info(`Using version precision: ${precision}`);
 
+    const imageFilter = buildTagFilterByArgs({
+        type: sourceImageTypeInput,
+        os: sourceImageOsInput
+    });
+
     core.info(`Discovered ${allSourceTags.length} tags for source image ${sourceImage}`);
-    const sourceVersions = parseVersionTags(allSourceTags, precision, sourceImageTypeInput);
+    const sourceVersions = parseVersionTags(allSourceTags, precision, imageFilter);
     core.info(`Parsed ${sourceVersions.size} unique versions from source image tags`);
 
     core.info(`There are currently ${allTargetImageTags.length} tags for target image ${targetImage}`);

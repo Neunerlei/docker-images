@@ -169,5 +169,6 @@ function generateBuildMatrix(options) {
 }
 
 module.exports = {
-    generateBuildMatrix
+    generateBuildMatrix,
+    findBuildPath
 };

@@ -190,11 +190,44 @@ function parseVersionTags(tags, precision = 3, filter = '') {
     return versions;
 }
 
+/**
+ * Builds the docker image string based on the given arguments
+ * @param {{namespace: string, name: string}} args
+ * @return {string} The fully qualified image name (e.g., 'library/nginx')
+ */
+function buildImageNameByArgs(args){
+    if(!args.namespace || !args.name){
+        throw new Error('Both namespace and name are required to build the full image name.');
+    }
+    return `${args.namespace}/${args.name}`;
+}
+
+/**
+ * Builds a filter string for Docker tags based on the given arguments
+ * @param {{type: string, os: string}} args
+ * @return {string} The filter string to apply to tags (e.g., 'alpine-bookworm')
+ */
+function buildTagFilterByArgs(args){
+    let filter = '';
+    if(args.type){
+        filter += args.type;
+    }
+    if(args.os){
+        if(filter.length > 0){
+            filter += '-';
+        }
+        filter += args.os;
+    }
+    return filter;
+}
+
 module.exports = {
     getAllTags,
     parseVersionTags,
     sortVersionList,
     sortVersionListReverse,
     isVersionGte,
-    isVersionLte
+    isVersionLte,
+    buildTagFilterByArgs,
+    buildImageNameByArgs
 };

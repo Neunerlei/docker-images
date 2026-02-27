@@ -22,8 +22,16 @@ on:
         type: string
       source-image-type:
         description: |
-          Allows for filtering the tags for a certain type (e.g. "alpine" to get only alpine variants)When using this,
-          we assume the image tags are structured like: "1.23.4-alpine", "1.23.4-fpm-alpine", etc.
+          Allows for filtering the tags for a certain type (e.g. "alpine" to get only alpine variants)
+          When using this, we assume the image tags are structured like: "1.23.4-alpine", "1.23.4-fpm-alpine", etc.
+        type: string
+        default: ''
+      source-image-os:
+        description: |
+          Pin the Debian (or OS) variant for the source image (e.g., 'bookworm', 'trixie').
+          When set, the tag filter becomes '{source-image-type}-{source-image-os}'
+          (or just '{source-image-os}' if source-image-type is empty).
+          Leave empty for non-Debian images (e.g., Alpine variants).
         type: string
         default: ''
       tracked-versions:
@@ -81,6 +89,7 @@ jobs:
           INPUT_SOURCE-IMAGE-NAMESPACE: ${{ inputs.source-image-namespace }}
           INPUT_SOURCE-IMAGE-NAME: ${{ inputs.source-image-name }}
           INPUT_SOURCE-IMAGE-TYPE: ${{ inputs.source-image-type }}
+          INPUT_SOURCE-IMAGE-OS: ${{ inputs.source-image-os }}
           INPUT_TRACKED-VERSIONS: ${{ inputs.tracked-versions }}
           INPUT_VERSION-PRECISION: ${{ inputs.version-precision }}
           INPUT_DEPRECATED: ${{ inputs.deprecated }}

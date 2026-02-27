@@ -2,7 +2,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const yaml = require('yaml');
 const constants = require('./util/constants');
-const {getAllTags, parseVersionTags} = require('./util/docker-version-utils');
+const {getAllTags, parseVersionTags, buildImageNameByArgs, buildTagFilterByArgs} = require('./util/docker-version-utils');
 const {generateBuildMatrix} = require('./util/build-matrix-generation');
 const child_process = require('node:child_process');
 
@@ -71,6 +71,7 @@ const child_process = require('node:child_process');
     }
 
     const sourceImageType = jobWith['source-image-type'] || '';
+    const sourceImageOs = jobWith['source-image-os'] || '';
     const trackedVersions = parseInt(jobWith['tracked-versions'] || '3', 10);
     const deprecatedVersion = jobWith['deprecated'] || '';
     const versionPrecision = parseInt(jobWith['version-precision'] || '3', 10);
@@ -78,13 +79,19 @@ const child_process = require('node:child_process');
         ? jobWith['latest-tag']
         : (jobWith['latest-tag'] || 'false').toLowerCase() === 'true';
 
-    const sourceImage = `${sourceImageNamespace}/${sourceImageName}`;
-    const targetImage = `${constants.IMAGE_NAMESPACE}/${imageName}`;
+    const sourceImage = buildImageNameByArgs({
+        namespace: sourceImageNamespace,
+        name: sourceImageName
+    });
+    const targetImage = buildImageNameByArgs({
+        namespace: constants.IMAGE_NAMESPACE,
+        name: imageName
+    });
 
     console.log('Building image:', targetImage);
     console.log('Using source image:', sourceImage);
     console.log('Source version to build:', sourceVersion);
-    if(imageType && imageType.length > 0){
+    if (imageType && imageType.length > 0) {
         console.log('Image type:', imageType);
     }
     console.log('Tracked versions:', trackedVersions);
@@ -92,8 +99,17 @@ const child_process = require('node:child_process');
     console.log('Version precision:', versionPrecision);
     console.log('Detect latest version:', detectLatestVersion);
 
+    const imageFilter = buildTagFilterByArgs({
+        type: sourceImageType,
+        os: sourceImageOs
+    });
+
+    console.log('Using image filter for tags:', imageFilter);
+
     const allSourceTags = await getAllTags(sourceImage);
     const sourceVersions = parseVersionTags(allSourceTags, versionPrecision, sourceImageType);
+
+    console.log(`Found ${sourceVersions.size} source versions:`, Array.from(sourceVersions.keys()));
 
     if (!sourceVersions.has(sourceVersion)) {
         console.error(`Source version "${sourceVersion}" not found among available source image tags.`);

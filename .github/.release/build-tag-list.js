@@ -4,6 +4,7 @@ const core = require('@actions/core');
 const semver = require('semver');
 const fs = require('fs');
 const {sortVersionList} = require('./util/docker-version-utils');
+const {escapeRegex} = require('./util/escape-regex');
 
 /**
  * Expects the OUTPUT<image> of discover-build-matrix.js, which contains the full docker image name without the tag
@@ -58,15 +59,6 @@ if(latestTagBuiltInput){
 
 core.info(`Maintained Tags (${maintainedTags.length}): ${maintainedTags.join(', ')}`);
 core.info(`Available Tags (${availableTags.length}): ${availableTags.join(', ')}`);
-
-/**
- * Escapes special characters in a string for use in a regular expression.
- * @param string
- * @return {string}
- */
-function escapeRegex(string) {
-    return string.replace(/[/\-\\^$*+?.()|[\]{}]/g, '\\$&');
-}
 
 /**
  * Renders a template file with the provided data.

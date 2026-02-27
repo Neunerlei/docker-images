@@ -25,6 +25,7 @@ jobs:
       source-image-namespace: 'library'
       source-image-name: 'node'
       source-image-type: ''
+      source-image-os: 'bookworm'
       tracked-versions: '3'
       deprecated: ''
       version-precision: '1'

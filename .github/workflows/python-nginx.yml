@@ -25,6 +25,7 @@ jobs:
       source-image-namespace: 'library'
       source-image-name: 'python'
       source-image-type: 'slim'
+      source-image-os: 'bookworm'
       tracked-versions: '4'
       deprecated: ''
       version-precision: '2'

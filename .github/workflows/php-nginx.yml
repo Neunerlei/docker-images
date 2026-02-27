@@ -25,6 +25,7 @@ jobs:
       source-image-namespace: 'library'
       source-image-name: 'php'
       source-image-type: 'fpm'
+      source-image-os: 'bookworm'
       tracked-versions: '4'
       deprecated: ''
       version-precision: '2'

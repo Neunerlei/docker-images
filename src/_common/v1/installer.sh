@@ -453,7 +453,6 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-
 # In some root images, the /var/www/html directory might already contain files (e.g. index.html), which can cause permission issues and are not needed in our setup, so we clean it up to be safe
 # Also, some dependencies we install (e.g. nginx) might also add files to this directory, which we do not need and can cause issues, so we clean it up again after installing dependencies to be safe
 echo "[INSTALLER] Cleaning up the html directory"
@@ -496,15 +495,8 @@ if [[ ${#scripts_to_wrap[@]} -gt 0 ]]; then
 
         mv "${script_path}" "${script_path_orig}"
 
-        exec_cmd="${script_path_orig}"
-
-        # Compose the exec command based on registered feature flags
-        if [[ -n "${scripts_wrap_www_data[$script_path]}" ]]; then
-            exec_cmd="gosu www-data ${exec_cmd}"
-        fi
-
         # Build and write the wrapper
-        cat <<WRAPPER > "${script_path}"
+        cat <<WRAPPER >"${script_path}"
 #!/bin/_bash
 # ==========================================================================
 # AUTO-GENERATED WRAPPER — DO NOT EDIT
@@ -513,24 +505,38 @@ if [[ ${#scripts_to_wrap[@]} -gt 0 ]]; then
 # The original executable has been moved to:
 #   ${script_path_orig}
 #
-# Purpose: Wrapper scripts solve a fundamental Docker problem. Environment
-# variables exported during the entrypoint boot sequence are NOT available
-# in subsequent "docker exec" sessions or direct binary invocations, because
-# those bypass the entrypoint entirely.
-#
-# This wrapper bridges that gap by sourcing the container's exported
-# variables before executing the original binary. It may also enforce
-# user context (e.g., running as www-data via gosu).
-#
-# The variable file is written by the entrypoint at:
-#   ${CONTAINER_VARS_SCRIPT}
+$(if [[ -n "${scripts_wrap_env[$script_path]}" ]]; then
+    echo "# This wrapper is responsible for sourcing the container's environment variables before executing the original binary."
+    echo "# This ensures that any variables exported during the entrypoint boot sequence are available, even in contexts that bypass"
+    echo "# the entrypoint (e.g., docker exec)."
+    echo "#"
+    echo "# The variable file is written by the entrypoint at:"
+    echo "#   ${CONTAINER_VARS_SCRIPT}"
+fi
+if [[ -n "${scripts_wrap_www_data[$script_path]}" ]]; then
+    if [[ -n "${scripts_wrap_env[$script_path]}" ]]; then
+        echo "# Additionally, this wrapper enforces that the command always runs as the www-data user via gosu,"
+        echo "# unless the current user is already www-data."
+    else
+        echo "# This wrapper is responsible for enforcing that the command always runs as the www-data user via gosu,"
+        echo "# unless the current user is already www-data."
+    fi
+fi)
 #
 # For details, see: installer.sh in the image source repository.
 # ==========================================================================
 $(if [[ -n "${scripts_wrap_env[$script_path]}" ]]; then
-    echo "[ -f \"${CONTAINER_VARS_SCRIPT}\" ] && . \"${CONTAINER_VARS_SCRIPT}\""
-fi)
-exec ${exec_cmd} "\$@"
+            echo "[ -f \"${CONTAINER_VARS_SCRIPT}\" ] && . \"${CONTAINER_VARS_SCRIPT}\""
+        fi)
+$(if [[ -n "${scripts_wrap_www_data[$script_path]}" ]]; then
+            echo "if [ \"\$(id -u)" -eq "\$(id -u www-data)\" ]; then"
+            echo "  exec ${script_path_orig} \"\$@\""
+            echo "else"
+            echo "  gosu www-data ${script_path_orig} \"\$@\""
+            echo "fi"
+        else
+            echo "exec ${script_path_orig} \"\$@\""
+        fi)
 WRAPPER
         chmod +x "${script_path}"
     done

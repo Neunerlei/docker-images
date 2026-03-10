@@ -98,7 +98,7 @@ Variables are managed in four layers, in declaration order:
 3. **Project-specific variables** (`/container/custom/env/`): The canonical place for downstream
    projects to declare derived or dynamic variables — things that are computed from other
    variables, fetched at runtime, or simply don't belong in a Dockerfile `ENV`. Two file types
-   are supported (both loaded by `step.d/015-custom-env.sh`, before any service is configured):
+   are supported (both loaded by `step.d/017-custom-env.sh`, before any service is configured):
    - `*.env` — plain `KEY=VALUE` files; all assignments are auto-exported.
    - `*.env.sh` — full shell scripts for dynamic logic; must `export` explicitly.
    See [Custom Environment Variables](#custom-environment-variables) for details.
@@ -155,7 +155,7 @@ The `step.d/` directory enforces a predictable bootstrap sequence. Scripts are e
 entrypoint/step.d/
 ├── 005-init-custom-on-dev.sh  # Dev skeleton creation
 ├── 010-fail-on-legacy-mounts.sh
-├── 015-custom-env.sh          # Project variables (custom/env/)
+├── 017-custom-env.sh          # Project variables (custom/env/)
 ├── 020-nginx.sh               # Web server setup
 ├── 040-supervisor.sh          # Process manager
 ├── 060-user-setup.sh          # Permission handling
@@ -266,7 +266,7 @@ COPY --chmod=+x bin/ "$CONTAINER_BIN_DIR/"
 
 `/container/custom/env/` (pointed to by `$CONTAINER_CUSTOM_ENV_DIR`) is the single,
 discoverable place for all project-level environment variable declarations. It is loaded by
-`step.d/015-custom-env.sh`, which runs **before** any service configuration step (`020-nginx.sh`,
+`step.d/017-custom-env.sh`, which runs **before** any service configuration step (`020-nginx.sh`,
 `040-supervisor.sh`, …), so every variable declared here is available to templates and all
 subsequent steps.
 

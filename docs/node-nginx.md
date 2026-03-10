@@ -287,6 +287,7 @@ services:
 
 ```
 docker/custom/
+├── env/                # Custom environment variable declarations (*.env, *.env.sh)
 ├── nginx/              # Custom NGINX snippets (server-level)
 │   ├── global/         # Custom NGINX snippets (http-level)
 │   ├── location/       # Custom NGINX snippets (root-location-level "/")
@@ -481,7 +482,37 @@ Customize the error pages shown for HTTP status codes (400, 401, 403, 404, 500, 
 </html>
 ```
 
-#### 4. Custom Entrypoint Hooks `MARKER-AWARE`
+#### 4. Custom Environment Variables `MARKER-AWARE`
+
+Declare project-specific environment variables that are derived from other variables or computed
+at runtime. These are loaded **before** any service configuration runs, so they are available to
+all NGINX templates and entrypoint hooks.
+
+* **How:** Place `*.env` (plain key=value) or `*.env.sh` (shell scripts) files in `./docker/custom/env/`.
+* **Result:** Variables in `*.env` files are automatically exported. Variables in `*.env.sh` files must be exported explicitly and can contain arbitrary shell logic.
+
+**Directory structure:**
+
+```
+docker/custom/
+└── env/
+    ├── 10-routing.env           # derives APP_URL from APP_HOST / APP_PROTOCOL
+    ├── 10-routing.prod.env      # production-only override
+    └── 20-dynamic.env.sh        # runtime lookups (e.g. from a secrets manager)
+```
+
+**Example `10-routing.env`:**
+
+```dotenv
+# docker/custom/env/10-routing.env
+APP_URL=${APP_PROTOCOL}://${APP_HOST}
+VITE_REVERB_HOST=${APP_HOST}
+VITE_REVERB_SCHEME=${APP_PROTOCOL}
+```
+
+Filename markers work here too — `10-routing.prod.env` is only loaded when `ENVIRONMENT=production`.
+
+#### 5. Custom Entrypoint Hooks `MARKER-AWARE`
 
 Run your own scripts when the container starts, just before the main command (`supervisord`) is executed.
 
@@ -509,7 +540,7 @@ echo "Clearing application cache for web mode..."
 node /var/www/html/scripts/clear-cache.js
 ```
 
-#### 5. Overriding Core Templates (Advanced) `TEMPLATES`
+#### 6. Overriding Core Templates (Advanced) `TEMPLATES`
 
 For maximum control, you can completely replace any of the container's default template files. This is an "all-or-nothing" approach best used for fundamentally changing a core component.
 
@@ -527,6 +558,8 @@ project/
 ├── docker-compose.yml
 ├── docker/
 │   └── custom/
+│       ├── env/
+│       │   └── 10-routing.env
 │       ├── nginx/
 │       │   ├── global/
 │       │   │   └── 01-cors.conf

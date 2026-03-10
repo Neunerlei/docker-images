@@ -88,12 +88,28 @@ feature_registry="${feature_registry} nginx supervisor"
 
 ### 4. **Environment Variable Management System**
 
-Variables are managed in three layers:
-1. **Build-time**: `common-env.sh` provides defaults during both build and runtime
-2. **Runtime**: Entrypoint steps can override/extend variables
-3. **Shell Integration**: Bash wrapper ensures variables are available in all shell contexts
+Variables are managed in four layers, in declaration order:
 
-**Rationale**: Docker's environment variable inheritance is inconsistent across different execution contexts (`docker exec`, interactive shells, etc.). Our system ensures consistent variable availability.
+1. **Framework defaults** (`common-env.sh`): Exports well-known directory paths and service
+   settings (routing, Nginx timeouts, …). Runs before *every* entrypoint step and also during
+   `installer.sh` — keep this file dependency-free.
+2. **Image-specific defaults** (e.g. `step.d/015-image-vars.sh`): Each base image exports its
+   own defaults (e.g. `GUNICORN_WORKERS`, `PHP_MEMORY_LIMIT`) and populates `feature_registry`.
+3. **Project-specific variables** (`/container/custom/env/`): The canonical place for downstream
+   projects to declare derived or dynamic variables — things that are computed from other
+   variables, fetched at runtime, or simply don't belong in a Dockerfile `ENV`. Two file types
+   are supported (both loaded by `step.d/015-custom-env.sh`, before any service is configured):
+   - `*.env` — plain `KEY=VALUE` files; all assignments are auto-exported.
+   - `*.env.sh` — full shell scripts for dynamic logic; must `export` explicitly.
+   See [Custom Environment Variables](#custom-environment-variables) for details.
+4. **Shell integration**: The Bash wrapper ensures variables are available in all shell contexts
+   including `docker exec` sessions.
+
+**Rationale**: Docker's environment variable inheritance is inconsistent across different
+execution contexts (`docker exec`, interactive shells, etc.). Our system ensures consistent
+variable availability, and `custom/env/` provides a single, discoverable location for all
+project-level variable declarations instead of scattering them across Dockerfiles, Compose
+files, custom entrypoint scripts, and `-e` flags.
 
 ### 5. **Template Rendering Engine**
 
@@ -137,11 +153,15 @@ The `step.d/` directory enforces a predictable bootstrap sequence. Scripts are e
 
 ```
 entrypoint/step.d/
-├── 010-common-vars.sh     # Base configuration
-├── 020-nginx.sh           # Web server setup  
-├── 040-supervisor.sh      # Process manager
-├── 060-user-setup.sh      # Permission handling
-└── 100-execute-command.sh # Final command execution
+├── 005-init-custom-on-dev.sh  # Dev skeleton creation
+├── 010-fail-on-legacy-mounts.sh
+├── 015-custom-env.sh          # Project variables (custom/env/)
+├── 020-nginx.sh               # Web server setup
+├── 040-supervisor.sh          # Process manager
+├── 060-user-setup.sh          # Permission handling
+├── 080-custom.sh              # Custom entrypoint scripts (custom/entrypoint/)
+├── 090-export-custom-vars.sh
+└── 100-execute-command.sh     # Final command execution
 ```
 
 **Rationale**: Complex initialization broken into logical stages that execute in order. Each image can:
@@ -241,6 +261,66 @@ COPY --chmod=+x bin/ "$CONTAINER_BIN_DIR/"
 ```
 
 ## Extension Patterns
+
+### Custom Environment Variables
+
+`/container/custom/env/` (pointed to by `$CONTAINER_CUSTOM_ENV_DIR`) is the single,
+discoverable place for all project-level environment variable declarations. It is loaded by
+`step.d/015-custom-env.sh`, which runs **before** any service configuration step (`020-nginx.sh`,
+`040-supervisor.sh`, …), so every variable declared here is available to templates and all
+subsequent steps.
+
+**Why here instead of the Dockerfile or Compose file?**
+
+Putting derived or dynamic values in a Dockerfile `ENV` or a Compose `environment:` block works,
+but it scatters "what is my project's environment?" across multiple files and makes the dependency
+between variables invisible. For example, `APP_URL` depends on `APP_PROTOCOL` and `APP_HOST`, but
+a Dockerfile reader has to hunt across files to see that relationship. Declaring it here keeps that
+logic in one place, version-controlled alongside the rest of the project's container configuration.
+
+**Plain `.env` files** — for static derived values, no shell required:
+
+```dotenv
+# docker/env/10-routing.env
+APP_URL=${APP_PROTOCOL}://${APP_HOST}
+VITE_REVERB_HOST=${APP_HOST}
+VITE_REVERB_SCHEME=${APP_PROTOCOL}
+```
+
+Every assignment is automatically exported. Variable references to already-exported variables
+(like `${APP_HOST}`) are expanded by bash at source time.
+
+**`.env.sh` files** — for dynamic lookups or any logic that needs real shell:
+
+```bash
+# docker/env/20-dynamic.env.sh
+export CACHE_TTL=$(redis-cli get cache_ttl 2>/dev/null || echo "3600")
+export BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+```
+
+Must `export` explicitly — `set -a` is *not* active for `.env.sh` files.
+
+**Load order:** plain `.env` files are sourced first (alphabetically), then `.env.sh` files
+(alphabetically). Use numeric prefixes to control order within each group. Because both passes
+go through `for_each_filtered_file_in_dir`, the full marker DSL works on env files too:
+
+```
+docker/env/
+├── 10-routing.env           # always loaded — derives APP_URL from APP_HOST / APP_PROTOCOL
+├── 10-routing.prod.env      # production only — overrides / extends 10-routing.env
+├── 20-services.env          # always loaded — derives DATABASE_URL
+└── 30-dynamic.env.sh        # runtime lookups (secrets manager, redis, …)
+```
+
+Mount the directory (or its parent) in your Compose file:
+
+```yaml
+volumes:
+  - ./docker:/container/custom
+```
+
+In **development mode** the `005-init-custom-on-dev.sh` step automatically creates the
+`custom/env/` skeleton so it shows up in your mount even on first run.
 
 ### Adding Custom Markers
 

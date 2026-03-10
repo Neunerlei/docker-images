@@ -62,6 +62,16 @@ declare -g -a user_owned_directories_registry=(
     "/var/www" # This is important because this is the home directory for the www-data user, and we want to ensure it has the correct ownership and permissions.
     "${NGINX_DOC_ROOT}"
 )
+# Custom directory children
+# The set of sub-directories that should exist inside CONTAINER_CUSTOM_DIR.
+# Used by 005-init-custom-on-dev.sh to create the skeleton on first startup in development.
+# Keys are the full paths; values are always 1.
+# Image-specific step files can extend this registry by adding entries, just like feature_registry.
+declare -gA container_custom_dir_child_registry=(
+    ["${CONTAINER_CUSTOM_ENV_DIR}"]=1
+    ["${CONTAINER_CUSTOM_ENTRYPOINT_DIR}"]=1
+)
+
 # Load the template manifest into memory for fast lookups.
 # This avoids costly disk I/O in the process_tpl function.
 if [ -f "${CONTAINER_TEMPLATE_MANIFEST}" ]; then
@@ -74,6 +84,16 @@ if [ -f "${CONTAINER_TEMPLATE_MANIFEST}" ]; then
             continue
         fi
         template_manifest["$name"]="$line"
+        # Collect custom-dir children from dir-type manifest entries.
+        if [[ "$type" == "dir" ]]; then
+            IFS='|' read -r -a _source_paths <<< "$sources"
+            for _source_path in "${_source_paths[@]}"; do
+                if [[ "$_source_path" == "${CONTAINER_CUSTOM_DIR}"* ]]; then
+                    container_custom_dir_child_registry["$_source_path"]=1
+                fi
+            done
+            unset _source_paths _source_path
+        fi
     done <"${CONTAINER_TEMPLATE_MANIFEST}"
 fi
 

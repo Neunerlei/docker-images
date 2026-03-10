@@ -13,44 +13,18 @@ if [[ "${ENVIRONMENT}" == "development" ]]; then
     return
   fi
 
-  # Use an associative array to prevent trying to create the same directory multiple times.
-  declare -A custom_dirs_to_create
-
-  # Built in directories to always ensure exist
-  custom_dirs_to_create["${CONTAINER_CUSTOM_ENTRYPOINT_DIR}"]=1
-
-  # Loop through our in-memory manifest to find all relevant source directories.
-  for line in "${template_manifest[@]}"; do
-    IFS=$'\t' read -r type _ sources_str _ <<< "$line"
-
-    # We only care about registrations that have source directories.
-    if [[ "$type" != "dir" ]]; then
-      continue
-    fi
-
-    declare -a source_paths=()
-    IFS='|' read -r -a source_paths <<< "$sources_str"
-
-    for source_path in "${source_paths[@]}"; do
-      # Check if the source path is within our main custom directory.
-      if [[ "$source_path" == "${CONTAINER_CUSTOM_DIR}"* ]]; then
-        # Add the path to our list of directories to create.
-        # The key-based nature of the associative array handles duplicates automatically.
-        custom_dirs_to_create["$source_path"]=1
-      fi
-    done
-  done
-
-  # Now, create any directories that don't already exist.
-  if (( ${#custom_dirs_to_create[@]} > 0 )); then
+  # container_custom_dir_child_registry is populated in entrypoint.sh from the static
+  # built-in entries (env/, entrypoint/) and from dir-type template manifest entries.
+  # Image-specific step files can extend it further before this script runs.
+  if (( ${#container_custom_dir_child_registry[@]} > 0 )); then
     echo "[ENTRYPOINT.dev-setup] Ensuring custom directories exist:"
-    for dir in "${!custom_dirs_to_create[@]}"; do
+    for dir in "${!container_custom_dir_child_registry[@]}"; do
       if [[ ! -d "$dir" ]]; then
         echo "  -> Creating missing custom directory: ${dir}"
         mkdir -p "$dir"
       fi
     done
   else
-    echo "[ENTRYPOINT.dev-setup] No custom source directories found in manifest."
+    echo "[ENTRYPOINT.dev-setup] No custom source directories found in registry."
   fi
 fi

@@ -532,7 +532,7 @@ $(if [[ -n "${scripts_wrap_env[$script_path]}" ]]; then
             echo "[ -f \"${CONTAINER_VARS_SCRIPT}\" ] && . \"${CONTAINER_VARS_SCRIPT}\""
         fi)
 $(if [[ -n "${scripts_wrap_www_data[$script_path]}" ]]; then
-            echo "if [ \"\$(id -u)" -eq "\$(id -u www-data)\" ]; then"
+            echo "if [ \"\$(id -u)\" -eq \"\$(id -u www-data)\" ]; then"
             echo "  exec ${script_path_orig} \"\$@\""
             echo "else"
             echo "  gosu www-data ${script_path_orig} \"\$@\""

@@ -11,4 +11,5 @@
 if [[ "$ENVIRONMENT" == "dev" ]]; then
     echo "[ENTRYPOINT] Setting up Git configuration for development environment..."
     git config --global --add safe.directory /var/www/html
+    gosu www-data git config --global --add safe.directory /var/www/html
 fi

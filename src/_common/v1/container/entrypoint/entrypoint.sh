@@ -82,3 +82,14 @@ source_files_in_dir_alphabetically "$util_dir"
 
 # Iterate all the steps to configure the container
 source_files_in_dir_alphabetically "$step_dir"
+
+# If running in BUILD mode, export all variables for the next command,
+# but remove the "CONTAINER_VARS_SCRIPT" script, so it does not pollute the next run.
+if [ "$CONTAINER_MODE" == "build" ]; then
+    echo "[ENTRYPOINT] Running in BUILD mode, exporting variables for the next command..."
+    export -p > "${CONTAINER_VARS_SCRIPT}"
+    rm -f "${CONTAINER_VARS_SCRIPT}"
+else
+    echo "[ENTRYPOINT] Running in NORMAL mode, executing entrypoint command: $entrypoint_command"
+    exec $entrypoint_command
+fi

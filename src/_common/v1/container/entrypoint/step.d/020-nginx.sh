@@ -70,6 +70,7 @@ if [[ "${feature_registry}" == *"nginx"* ]]; then
     process_tpl "nginx-conf"
     process_tpl "nginx-mime-types"
     process_tpl "nginx-snippets-root"
+    process_tpl "nginx-snippets-resolver"
     process_tpl "nginx-custom-snippets"
     process_tpl "nginx-custom-snippets-global"
     process_tpl "nginx-error-pages" _process_nginx_error_pages

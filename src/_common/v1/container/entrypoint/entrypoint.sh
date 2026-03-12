@@ -97,10 +97,6 @@ if [ -f "${CONTAINER_TEMPLATE_MANIFEST}" ]; then
     done <"${CONTAINER_TEMPLATE_MANIFEST}"
 fi
 
-# Flush the CONTAINER_WORK_DIR directory, to ensure a clean state on every startup.
-echo "[ENTRYPOINT] Flushing working directory: ${CONTAINER_WORK_DIR}"
-rm -rf "${CONTAINER_WORK_DIR:?}"/*
-
 # Load utility scripts first
 source_files_in_dir_alphabetically "$util_dir"
 

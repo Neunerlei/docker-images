@@ -18,12 +18,12 @@ function process_tpl() {
     local name="$1"
     local callback="$2"
 
-    if [[ -n "${processed_tpl_names[$name]}" ]]; then
+    if [[ -n "${processed_tpl_registry[$name]}" ]]; then
         echo "[TEMPLATE] Warning: Template '$name' has already been processed. Skipping." >&2
         return 0
     fi
 
-    local line="${template_manifest[$name]}"
+    local line="${template_registry[$name]}"
     if [[ -z "$line" ]]; then
         echo "[TEMPLATE] Error: No registration for '$name'." >&2
         exit 1
@@ -74,7 +74,7 @@ function process_tpl() {
         ;;
     esac
 
-    processed_tpl_names[$name]=1
+    processed_tpl_registry[$name]=1
 }
 
 # Allows a previously processed template to be re-processed.
@@ -84,5 +84,5 @@ function process_tpl() {
 #   allow_reprocessing_tpl "template-name"
 function allow_reprocessing_tpl() {
     local name="$1"
-    unset processed_tpl_names[$name]
+    unset processed_tpl_registry[$name]
 }

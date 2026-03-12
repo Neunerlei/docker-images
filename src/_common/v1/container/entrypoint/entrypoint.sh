@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/_bash
 set -e
 
 echo "[ENTRYPOINT] Starting bootstrapping process..."
@@ -34,14 +34,14 @@ function source_files_in_dir_alphabetically() {
 }
 
 # Registries for feature promotion
-# Template Manifest
+# Template Registry
 # Key: Template Name (e.g., "nginx-conf")
-# Value: The full, tab-separated line from the manifest file.
-declare -gA template_manifest
+# Value: The full, tab-separated registration line (type, name, sources, extra).
+declare -gA template_registry
 # A set to track which templates have already been processed.
 # Key: Template Name
 # Value: 1 (if processed)
-declare -gA processed_tpl_names
+declare -gA processed_tpl_registry
 # File Markers
 # The keys will be the marker strings (e.g., "prod"), and the values
 # will be the names of the condition functions to call for that marker.
@@ -72,29 +72,33 @@ declare -gA container_custom_dir_child_registry=(
     ["${CONTAINER_CUSTOM_ENTRYPOINT_DIR}"]=1
 )
 
-# Load the template manifest into memory for fast lookups.
-# This avoids costly disk I/O in the process_tpl function.
-if [ -f "${CONTAINER_TEMPLATE_MANIFEST}" ]; then
-    echo "[ENTRYPOINT] Loading template manifest into memory..."
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        [[ -z "$line" ]] && continue  # Skip empty lines
-        IFS=$'\t' read -r type name sources extra <<<"$line"
-        if [[ -z "$type" || -z "$name" ]]; then
-            echo "[ENTRYPOINT] Warning: Malformed manifest line: $line" >&2
-            continue
-        fi
-        template_manifest["$name"]="$line"
-        # Collect custom-dir children from dir-type manifest entries.
-        if [[ "$type" == "dir" ]]; then
-            IFS='|' read -r -a _source_paths <<< "$sources"
-            for _source_path in "${_source_paths[@]}"; do
-                if [[ "$_source_path" == "${CONTAINER_CUSTOM_DIR}"* ]]; then
-                    container_custom_dir_child_registry["$_source_path"]=1
-                fi
-            done
-            unset _source_paths _source_path
-        fi
-    done <"${CONTAINER_TEMPLATE_MANIFEST}"
+# Reset the working directory to the clean build-time state.
+# On the very first boot, CONTAINER_WORK_CLEAN_DIR does not exist yet.
+# We snapshot the current contents of CONTAINER_WORK_DIR (which includes
+# everything written during the Docker build, e.g. PHP extension .ini files)
+# into CONTAINER_WORK_CLEAN_DIR so subsequent boots can restore from it.
+# On every later boot, we wipe everything in CONTAINER_WORK_DIR except
+# CONTAINER_WORK_CLEAN_DIR itself, then copy the snapshot back.
+if [ -d "${CONTAINER_WORK_CLEAN_DIR}" ]; then
+    echo "[ENTRYPOINT] Resetting working directory from clean-state snapshot..."
+    # Remove everything in CONTAINER_WORK_DIR except the clean-state directory
+    find "${CONTAINER_WORK_DIR}" -mindepth 1 -maxdepth 1 ! -name "$(basename "${CONTAINER_WORK_CLEAN_DIR}")" -exec rm -rf {} +
+    # Restore from the snapshot
+    cp -a "${CONTAINER_WORK_CLEAN_DIR}/." "${CONTAINER_WORK_DIR}/"
+    echo "[ENTRYPOINT] Working directory reset complete."
+elif [ -d "${CONTAINER_WORK_DIR}" ]; then
+    echo "[ENTRYPOINT] First boot detected — creating clean-state snapshot..."
+    mkdir -p "${CONTAINER_WORK_CLEAN_DIR}"
+    # Copy everything except the clean-state directory itself to avoid recursive copy
+    find "${CONTAINER_WORK_DIR}" -mindepth 1 -maxdepth 1 ! -name "$(basename "${CONTAINER_WORK_CLEAN_DIR}")" -exec cp -a {} "${CONTAINER_WORK_CLEAN_DIR}/" \;
+    echo "[ENTRYPOINT] Clean-state snapshot created."
+fi
+
+# Source the installer registry script to populate the in-memory registries
+# (template_registry, container_custom_dir_child_registry).
+if [ -f "${CONTAINER_INSTALLER_REGISTRY_SCRIPT}" ]; then
+    echo "[ENTRYPOINT] Sourcing installer registry..."
+    source "${CONTAINER_INSTALLER_REGISTRY_SCRIPT}"
 fi
 
 # Load utility scripts first

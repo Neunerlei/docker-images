@@ -238,10 +238,13 @@ declare -a default_flags=(
 set -- "${default_flags[@]}" "$@"
 
 # -----------------------------------------------------------------
-# Argument Parsing & Manifest Generation
+# Argument Parsing & Template Collection
 # -----------------------------------------------------------------
-echo "[INSTALLER] Parsing template registrations and creating manifest..."
-mkdir -p "$(dirname "$CONTAINER_TEMPLATE_MANIFEST")" && : >"$CONTAINER_TEMPLATE_MANIFEST"
+echo "[INSTALLER] Parsing template registrations..."
+
+# Collected template registrations. Each entry is a tab-separated string:
+#   type \t name \t sources_str \t extra
+declare -a tpl_registrations=()
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
@@ -253,7 +256,6 @@ while [[ "$#" -gt 0 ]]; do
         tpl_name="$2"
         shift 2
 
-        # --- THIS IS THE KEY CHANGE: Use local arrays to collect sources ---
         declare -a tpl_sources=()
         declare -a tpl_source_dirs=()
         tpl_target=""
@@ -305,7 +307,7 @@ while [[ "$#" -gt 0 ]]; do
             exit 1
         fi
 
-        # --- Determine Type, Serialize Sources, and Write Manifest ---
+        # --- Determine Type, Serialize Sources ---
         tpl_type=""
         final_target_path=""
         sources_str=""
@@ -314,7 +316,6 @@ while [[ "$#" -gt 0 ]]; do
         if ((${#tpl_source_dirs[@]} > 0)); then
             tpl_type="dir"
             final_target_path="$tpl_target_dir"
-            # Serialize the array into a |-separated string
             printf -v sources_str '%s|' "${tpl_source_dirs[@]}"
             sources_str="${sources_str%?}"
         elif ((${#tpl_sources[@]} > 0)); then
@@ -334,10 +335,17 @@ while [[ "$#" -gt 0 ]]; do
             extra=""
         fi
 
-        # Write to manifest
-        printf "%s\t%s\t%s\t%s\n" "$tpl_type" "$tpl_name" "$sources_str" "$extra" >>"$CONTAINER_TEMPLATE_MANIFEST"
+        # Collect the registration for later registry script generation.
+        # Fields are separated by ASCII unit separator (0x1F) to avoid conflicts with
+        # both | (used inside sources_str) and \t (ambiguous with empty extra field).
+        tpl_registrations+=("${tpl_type}"$'\x1F'"${tpl_name}"$'\x1F'"${sources_str}"$'\x1F'"${extra}"$'\x1F'"${final_target_path}")
 
-        # --- Create Dummy Files/Dirs and Symlinks ---
+        # --- Create dummy work entry and symlink ---
+        # The work directory entry serves as the symlink target. Subsequent build
+        # steps (e.g., installing PHP extensions) may write files into the target
+        # path, which now resolves through the symlink into CONTAINER_WORK_DIR.
+        # The clean-state snapshot is taken on first boot by the entrypoint, so
+        # all files written during the build are captured correctly.
         work_path="${CONTAINER_WORK_DIR}/${tpl_name}"
         if [[ "$tpl_type" == "file" || "$tpl_type" == "cb_file" ]]; then
             echo "[INSTALLER] Creating dummy file at work path: ${work_path}"
@@ -348,16 +356,12 @@ while [[ "$#" -gt 0 ]]; do
             mkdir -p "$work_path"
         fi
 
-        # Create the symlink
+        # Create the symlink from the target location to the work directory.
+        # If the target already exists we must preserve its content by moving
+        # it into the work path before replacing the target with a symlink.
         echo "[INSTALLER] Creating symlink: ${final_target_path} -> ${work_path}"
         mkdir -p "$(dirname "$final_target_path")"
-
-        # CRITICAL: If $final_target_path is a directory, we can not simply remove it
-        # we must first move its content to the work_path, so that existing files are still there after linking
-        # If $final_target_path is a file, we again must move it to the work_path (replacing our dummy file),
-        # so that existing content is preserved until the entrypoint replaces it with the rendered template
         if [[ -d "$final_target_path" ]]; then
-            # Move existing content into the work_path
             mkdir -p "$work_path"
             shopt -s dotglob
             mv "${final_target_path}/"* "$work_path/" 2>/dev/null || true
@@ -365,9 +369,9 @@ while [[ "$#" -gt 0 ]]; do
         elif [[ -f "$final_target_path" ]]; then
             mv "$final_target_path" "$work_path"
         fi
-
         rm -rf "$final_target_path"
         ln -s "$work_path" "$final_target_path"
+
         ;;
     --add-dependency)
         if [[ ! " ${dependencies_to_install[@]} " =~ " ${2} " ]]; then
@@ -403,7 +407,59 @@ while [[ "$#" -gt 0 ]]; do
     esac
 done
 
-echo "[INSTALLER] Manifest created successfully at ${CONTAINER_TEMPLATE_MANIFEST}"
+# -----------------------------------------------------------------
+# Generate installer-registry.sh
+# -----------------------------------------------------------------
+# Instead of writing a text manifest that has to be parsed back at runtime,
+# we generate a self-contained shell script that populates the in-memory
+# registries when sourced. It contains:
+#   1. template_registry assignments (the associative array used by process_tpl)
+#   2. container_custom_dir_child_registry extensions for dir-type custom sources
+echo "[INSTALLER] Generating installer registry script at ${CONTAINER_INSTALLER_REGISTRY_SCRIPT}..."
+mkdir -p "$(dirname "$CONTAINER_INSTALLER_REGISTRY_SCRIPT")"
+
+cat > "$CONTAINER_INSTALLER_REGISTRY_SCRIPT" <<'REGISTRY_HEADER'
+#!/bin/bash
+# ==========================================================================
+# AUTO-GENERATED by installer.sh — DO NOT EDIT
+# ==========================================================================
+# This script is sourced at container startup by the entrypoint. It
+# populates the template_registry associative array and extends the
+# container_custom_dir_child_registry with entries discovered from
+# dir-type template registrations.
+# ==========================================================================
+
+REGISTRY_HEADER
+
+{
+    echo "# --- 1. Populate template_registry ---"
+    for reg in "${tpl_registrations[@]}"; do
+        IFS=$'\x1F' read -r _type _name _sources _extra _target <<<"$reg"
+        # Build the registry value: tab-separated (type, name, sources, extra) as expected by process_tpl
+        _reg_value="$(printf '%s\t%s\t%s\t%s' "$_type" "$_name" "$_sources" "$_extra")"
+        # Escape single quotes in values (defensive; paths normally don't contain them)
+        _name_esc="${_name//\'/\'\\\'\'}"
+        _value_esc="${_reg_value//\'/\'\\\'\'}"
+        echo "template_registry['${_name_esc}']='${_value_esc}'"
+    done
+
+    echo ""
+    echo "# --- 2. Extend container_custom_dir_child_registry ---"
+    for reg in "${tpl_registrations[@]}"; do
+        IFS=$'\x1F' read -r _type _name _sources _extra _target <<<"$reg"
+        if [[ "$_type" == "dir" ]]; then
+            IFS='|' read -r -a _source_paths <<<"$_sources"
+            for _source_path in "${_source_paths[@]}"; do
+                if [[ "$_source_path" == "${CONTAINER_CUSTOM_DIR}"* ]]; then
+                    echo "container_custom_dir_child_registry['${_source_path}']=1"
+                fi
+            done
+        fi
+    done
+} >> "$CONTAINER_INSTALLER_REGISTRY_SCRIPT"
+
+echo "[INSTALLER] Installer registry script generated successfully."
+
 
 # -----------------------------------------------------------------
 # Copy container directory

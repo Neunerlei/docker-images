@@ -43,8 +43,32 @@ export NGINX_ERROR_ROOT="/var/www/errors"
 export SSL_CERTS_DIR="/etc/ssl/certs"
 export SUPERVISOR_DIR="/etc/supervisor"
 
+# Calculate max upload size defaults
+parse_filesize_string_to_bytes() {
+    local size="${1^^}"  # uppercase the whole input (requires bash 4+)
+    local number="${size//[^0-9]/}"
+    local unit="${size//[0-9]/}"
+
+    case "$unit" in
+        K)  echo $((number * 1024)) ;;
+        M)  echo $((number * 1024 * 1024)) ;;
+        G)  echo $((number * 1024 * 1024 * 1024)) ;;
+        "")  echo "$number" ;;
+        *)
+            echo "Unsupported unit: '$unit'" >&2
+            return 1
+            ;;
+    esac
+}
+export MAX_UPLOAD_SIZE="${MAX_UPLOAD_SIZE:-"100M"}"
+if ! MAX_UPLOAD_SIZE_BYTES="$(parse_filesize_string_to_bytes "${MAX_UPLOAD_SIZE}")" || [ -z "${MAX_UPLOAD_SIZE_BYTES}" ]; then
+    echo "[ENTRYPOINT] Warning: Failed to parse MAX_UPLOAD_SIZE '${MAX_UPLOAD_SIZE}'. Defaulting to 104857600 bytes (100M)." >&2
+    MAX_UPLOAD_SIZE_BYTES=104857600
+fi
+export MAX_UPLOAD_SIZE_BYTES
+
 # Define Nginx settings
-export NGINX_CLIENT_MAX_BODY_SIZE="${NGINX_CLIENT_MAX_BODY_SIZE:-${MAX_UPLOAD_SIZE:-"100M"}}"
+export NGINX_CLIENT_MAX_BODY_SIZE="${NGINX_CLIENT_MAX_BODY_SIZE:-${MAX_UPLOAD_SIZE}}"
 export NGINX_CERT_PATH="${NGINX_CERT_PATH:-"${SSL_CERTS_DIR}/custom/cert.pem"}"
 export NGINX_KEY_PATH="${NGINX_KEY_PATH:-"${SSL_CERTS_DIR}/custom/key.pem"}"
 

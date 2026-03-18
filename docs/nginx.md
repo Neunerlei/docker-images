@@ -66,6 +66,7 @@ The proxy is configured almost entirely through declarative environment variable
 | `PGID`                        | The group ID to run processes as (`www-data`). Useful for matching host file permissions.                                                                                             | `33`                             |
 | `CONTAINER_MODE`              | Read-only. Automatically set to `proxy` or `static`.                                                                                                                                  | `static`                         |
 | `MAX_UPLOAD_SIZE`             | A convenient variable to set the global `client_max_body_size`. This applies only if in "proxy" mode, as all uploads need to pass through the proxy.                                  | `100M`                           |
+| `MAX_UPLOAD_SIZE_BYTES`       | Read-only. The byte value of `MAX_UPLOAD_SIZE`, calculated by the entrypoint script.                                                                                                  | (calculated)                     |
 | `ENVIRONMENT`                 | Sets the overall environment. `dev`/`development` is non-production; all other values are considered production.                                                                      | `production`                     |
 | **Project**                   |                                                                                                                                                                                       |                                  |
 | `DOCKER_PROJECT_HOST`         | The public hostname for your application (available for your app).                                                                                                                    | `localhost`                      |
@@ -76,7 +77,7 @@ The proxy is configured almost entirely through declarative environment variable
 | `DOCKER_SERVICE_ABS_PATH`     | Read-only. The absolute path for this service (`PROJECT_PATH` + `SERVICE_PATH`).                                                                                                      | (derived)                        |
 | **NGINX**                     |                                                                                                                                                                                       |                                  |
 | `NGINX_DOC_ROOT`              | The document root NGINX serves static files from.                                                                                                                                     | `/var/www/html/public`           |
-| `NGINX_CLIENT_MAX_BODY_SIZE`  | Sets `client_max_body_size` in NGINX.                                                                                                                                                 | Matches `MAX_UPLOAD_SIZE`        |
+| `NGINX_CLIENT_MAX_BODY_SIZE`  | Sets `client_max_body_size` in NGINX. **Please prefer `MAX_UPLOAD_SIZE`**                                                                                                             | Matches `MAX_UPLOAD_SIZE`        |
 | `NGINX_CERT_PATH`             | Path to the SSL certificate (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                   | `/etc/ssl/certs/custom/cert.pem` |
 | `NGINX_KEY_PATH`              | Path to the SSL key (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                           | `/etc/ssl/certs/custom/key.pem`  |
 | `NGINX_PROXY_CONNECT_TIMEOUT` | Sets `proxy_connect_timeout` in NGINX. This value defines the timeout for establishing a connection with a proxied server.                                                            | `5s`                             |
@@ -91,6 +92,16 @@ The `ENVIRONMENT` variable is a high-level switch for the container's operationa
 - **Possible Values:** `production` (or `prod`) and `development` (or `dev`).
 - **Default:** `production`.
 - **Rule:** Any value other than `development` or `dev` is treated as a production environment.
+
+
+### MAX_UPLOAD_SIZE and friends
+
+The `MAX_UPLOAD_SIZE` variable is a convenient way to set related limits in one place. If you leave it undefined it defaults to `100M`. If you set `MAX_UPLOAD_SIZE`, it will automatically configure:
+- `client_max_body_size` in NGINX (possible override: `NGINX_CLIENT_MAX_BODY_SIZE`)
+
+You MAY override any of these individually if you need different values, but in most cases, setting `MAX_UPLOAD_SIZE` is the simplest way to ensure all related limits are consistent. As a rule of thumb: **Use `MAX_UPLOAD_SIZE` whenever possible, and only override the individual settings if you have a specific need for different values.**
+
+> My app wants bytes, not human-readable sizes! The `MAX_UPLOAD_SIZE_BYTES` variable is a read-only variable that the entrypoint script calculates from `MAX_UPLOAD_SIZE`. If you need to work with byte values in your application, you can use this variable directly.
 
 ## Proxy Mode In-Depth
 

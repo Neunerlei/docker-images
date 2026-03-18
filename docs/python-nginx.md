@@ -38,72 +38,73 @@ Place your Python project in the `./your-python-project` directory, ensure your 
 
 The "brain" of this image is its entrypoint script. When the container starts, this script reads your environment variables to decide how to configure itself. It operates in one of two primary modes:
 
-1.  **Web Mode (Default):** This is the standard mode. The script starts and configures both NGINX (as a reverse proxy) and **Gunicorn** (as the WSGI application server) to serve traffic over HTTP. NGINX proxies requests to Gunicorn via a Unix socket.
-2.  **Worker Mode:** Activated by setting the `PYTHON_WORKER_COMMAND` variable. In this mode, NGINX is disabled, and Supervisor is configured to run your specified command instead. This is perfect for running queue workers, schedulers, or other long-running background tasks.
+1. **Web Mode (Default):** This is the standard mode. The script starts and configures both NGINX (as a reverse proxy) and **Gunicorn** (as the WSGI application server) to serve traffic over HTTP. NGINX proxies requests to Gunicorn via a Unix socket.
+2. **Worker Mode:** Activated by setting the `PYTHON_WORKER_COMMAND` variable. In this mode, NGINX is disabled, and Supervisor is configured to run your specified command instead. This is perfect for running queue workers, schedulers, or other long-running background tasks.
 
 ## Configuration via Environment Variables
 
 This image is configured almost entirely through environment variables. This allows you to use the same image for different purposes (web vs. worker, dev vs. prod) without rebuilding it.
 
-| Variable                      | Description                                                                                                                                                                           | Default Value                          |
-|:------------------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------------------------------------|
-| **General**                   |                                                                                                                                                                                       |                                        |
-| `PUID`                        | The user ID to run processes as (`www-data`). Useful for matching host file permissions.                                                                                              | `33`                                   |
-| `PGID`                        | The group ID to run processes as (`www-data`). Useful for matching host file permissions.                                                                                             | `33`                                   |
-| `CONTAINER_MODE`              | Read-only. Automatically set to `web`, `worker` or `build`.                                                                                                                           | `web`                                  |
-| `MAX_UPLOAD_SIZE`             | A convenient variable to set NGINX's `client_max_body_size`.                                                                                                                          | `100M`                                 |
-| `ENVIRONMENT`                 | Sets the overall environment. `dev`/`development` is non-production; all other values are considered production.                                                                      | `production`                           |
-| `APP_ENV`                     | The application environment flag. Derived from `ENVIRONMENT` if not explicitly set.                                                                                                   | (derived)                              |
-| `FLASK_ENV`                   | The Flask environment variable. Derived from `ENVIRONMENT` if not explicitly set.                                                                                                     | (derived)                              |
-| `APP_DEBUG`                   | Debug flag for the application. Derived from `ENVIRONMENT` / `APP_ENV` if not explicitly set.                                                                                         | (derived: `1` in dev, `0` otherwise)   |
-| **Project**                   |                                                                                                                                                                                       |                                        |
-| `DOCKER_PROJECT_HOST`         | The public hostname for your application (available for your app).                                                                                                                    | `localhost`                            |
-| `DOCKER_PROJECT_PATH`         | The public root path of the entire project.                                                                                                                                           | `/`                                    |
-| `DOCKER_PROJECT_PROTOCOL`     | The public protocol. `http` or `https`. Determines NGINX's listening mode.                                                                                                            | `http`                                 |
-| `DOCKER_SERVICE_PROTOCOL`     | The protocol your service uses internally. Defaults to `DOCKER_PROJECT_PROTOCOL`.                                                                                                     | (derived)                              |
-| `DOCKER_SERVICE_PATH`         | The sub-path for this specific service within the project.                                                                                                                            | `/`                                    |
-| `DOCKER_SERVICE_ABS_PATH`     | Read-only. The absolute path for this service (`PROJECT_PATH` + `SERVICE_PATH`).                                                                                                      | (derived)                              |
-| **NGINX**                     |                                                                                                                                                                                       |                                        |
-| `NGINX_DOC_ROOT`              | The document root NGINX serves static files from.                                                                                                                                     | `/var/www/html/public`                 |
-| `NGINX_CLIENT_MAX_BODY_SIZE`  | Sets `client_max_body_size` in NGINX.                                                                                                                                                 | Matches `MAX_UPLOAD_SIZE`              |
-| `NGINX_CERT_PATH`             | Path to the SSL certificate (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                   | `/etc/ssl/certs/custom/cert.pem`       |
-| `NGINX_KEY_PATH`              | Path to the SSL key (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                           | `/etc/ssl/certs/custom/key.pem`        |
-| `NGINX_PROXY_CONNECT_TIMEOUT` | Sets `proxy_connect_timeout` in NGINX. This value defines the timeout for establishing a connection with a proxied server.                                                            | `5s`                                   |
-| `NGINX_PROXY_READ_TIMEOUT`    | Sets `proxy_read_timeout` in NGINX. This value defines the timeout for reading a response from a proxied server.                                                                      | `60s`                                  |
-| `NGINX_PROXY_SEND_TIMEOUT`    | Sets `proxy_send_timeout` in NGINX. This value defines the timeout for transmitting a request to a proxied server.                                                                    | `60s`                                  |
-| `NGINX_KEEPALIVE_TIMEOUT`     | Sets `keepalive_timeout` in NGINX. This value defines the timeout for keeping connections alive with clients. If omitted, automatically calculated based on the other TIMEOUT values.  | (calculated)                           |
-| `NGINX_TRY_FILES`             | Sets the `try_files` directive in the root location of the nginx server.                                                                                                              | `/static/$uri @pythonproxy`            |
-| **Gunicorn (Web Mode)**       |                                                                                                                                                                                       |                                        |
-| `PYTHON_APP_MODULE`           | The WSGI application module in `module:callable` format. This tells Gunicorn where to find your application.                                                                          | `server:app`                           |
-| `GUNICORN_WORKERS`            | The number of Gunicorn worker processes.                                                                                                                                              | `4`                                    |
-| `GUNICORN_WORKER_CLASS`       | The type of Gunicorn worker processes (e.g., `sync`, `gevent`, `uvicorn.workers.UvicornWorker`).                                                                                      | `sync`                                 |
-| `GUNICORN_LOG_LEVEL`          | The Gunicorn log level (e.g., `debug`, `info`, `warning`, `error`, `critical`).                                                                                                       | `info`                                 |
-| `GUNICORN_SOCKET`             | Read-only. The path to the Unix socket Gunicorn binds to and NGINX proxies to.                                                                                                        | `/run/gunicorn.sock`                   |
-| **Python Worker Mode**        |                                                                                                                                                                                       |                                        |
-| `PYTHON_WORKER_COMMAND`       | The command to execute in worker mode. **Setting this enables worker mode.**                                                                                                          |                                        |
-| `PYTHON_WORKER_PROCESS_COUNT` | The number of worker processes to run (`numprocs` in Supervisor).                                                                                                                     | `1`                                    |
+| Variable                      | Description                                                                                                                                                                           | Default Value                        |
+|:------------------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:-------------------------------------|
+| **General**                   |                                                                                                                                                                                       |                                      |
+| `PUID`                        | The user ID to run processes as (`www-data`). Useful for matching host file permissions.                                                                                              | `33`                                 |
+| `PGID`                        | The group ID to run processes as (`www-data`). Useful for matching host file permissions.                                                                                             | `33`                                 |
+| `CONTAINER_MODE`              | Read-only. Automatically set to `web`, `worker` or `build`.                                                                                                                           | `web`                                |
+| `MAX_UPLOAD_SIZE`             | A convenient variable to set NGINX's `client_max_body_size`.                                                                                                                          | `100M`                               |
+| `MAX_UPLOAD_SIZE_BYTES`       | Read-only. The byte value of `MAX_UPLOAD_SIZE`, calculated by the entrypoint script.                                                                                                  | (calculated)                         |
+| `ENVIRONMENT`                 | Sets the overall environment. `dev`/`development` is non-production; all other values are considered production.                                                                      | `production`                         |
+| `APP_ENV`                     | The application environment flag. Derived from `ENVIRONMENT` if not explicitly set.                                                                                                   | (derived)                            |
+| `FLASK_ENV`                   | The Flask environment variable. Derived from `ENVIRONMENT` if not explicitly set.                                                                                                     | (derived)                            |
+| `APP_DEBUG`                   | Debug flag for the application. Derived from `ENVIRONMENT` / `APP_ENV` if not explicitly set.                                                                                         | (derived: `1` in dev, `0` otherwise) |
+| **Project**                   |                                                                                                                                                                                       |                                      |
+| `DOCKER_PROJECT_HOST`         | The public hostname for your application (available for your app).                                                                                                                    | `localhost`                          |
+| `DOCKER_PROJECT_PATH`         | The public root path of the entire project.                                                                                                                                           | `/`                                  |
+| `DOCKER_PROJECT_PROTOCOL`     | The public protocol. `http` or `https`. Determines NGINX's listening mode.                                                                                                            | `http`                               |
+| `DOCKER_SERVICE_PROTOCOL`     | The protocol your service uses internally. Defaults to `DOCKER_PROJECT_PROTOCOL`.                                                                                                     | (derived)                            |
+| `DOCKER_SERVICE_PATH`         | The sub-path for this specific service within the project.                                                                                                                            | `/`                                  |
+| `DOCKER_SERVICE_ABS_PATH`     | Read-only. The absolute path for this service (`PROJECT_PATH` + `SERVICE_PATH`).                                                                                                      | (derived)                            |
+| **NGINX**                     |                                                                                                                                                                                       |                                      |
+| `NGINX_DOC_ROOT`              | The document root NGINX serves static files from.                                                                                                                                     | `/var/www/html/public`               |
+| `NGINX_CLIENT_MAX_BODY_SIZE`  | Sets `client_max_body_size` in NGINX. **Please prefer `MAX_UPLOAD_SIZE`**                                                                                                             | Matches `MAX_UPLOAD_SIZE`            |
+| `NGINX_CERT_PATH`             | Path to the SSL certificate (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                   | `/etc/ssl/certs/custom/cert.pem`     |
+| `NGINX_KEY_PATH`              | Path to the SSL key (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                           | `/etc/ssl/certs/custom/key.pem`      |
+| `NGINX_PROXY_CONNECT_TIMEOUT` | Sets `proxy_connect_timeout` in NGINX. This value defines the timeout for establishing a connection with a proxied server.                                                            | `5s`                                 |
+| `NGINX_PROXY_READ_TIMEOUT`    | Sets `proxy_read_timeout` in NGINX. This value defines the timeout for reading a response from a proxied server.                                                                      | `60s`                                |
+| `NGINX_PROXY_SEND_TIMEOUT`    | Sets `proxy_send_timeout` in NGINX. This value defines the timeout for transmitting a request to a proxied server.                                                                    | `60s`                                |
+| `NGINX_KEEPALIVE_TIMEOUT`     | Sets `keepalive_timeout` in NGINX. This value defines the timeout for keeping connections alive with clients. If omitted, automatically calculated based on the other TIMEOUT values. | (calculated)                         |
+| `NGINX_TRY_FILES`             | Sets the `try_files` directive in the root location of the nginx server.                                                                                                              | `/static/$uri @pythonproxy`          |
+| **Gunicorn (Web Mode)**       |                                                                                                                                                                                       |                                      |
+| `PYTHON_APP_MODULE`           | The WSGI application module in `module:callable` format. This tells Gunicorn where to find your application.                                                                          | `server:app`                         |
+| `GUNICORN_WORKERS`            | The number of Gunicorn worker processes.                                                                                                                                              | `4`                                  |
+| `GUNICORN_WORKER_CLASS`       | The type of Gunicorn worker processes (e.g., `sync`, `gevent`, `uvicorn.workers.UvicornWorker`).                                                                                      | `sync`                               |
+| `GUNICORN_LOG_LEVEL`          | The Gunicorn log level (e.g., `debug`, `info`, `warning`, `error`, `critical`).                                                                                                       | `info`                               |
+| `GUNICORN_SOCKET`             | Read-only. The path to the Unix socket Gunicorn binds to and NGINX proxies to.                                                                                                        | `/run/gunicorn.sock`                 |
+| **Python Worker Mode**        |                                                                                                                                                                                       |                                      |
+| `PYTHON_WORKER_COMMAND`       | The command to execute in worker mode. **Setting this enables worker mode.**                                                                                                          |                                      |
+| `PYTHON_WORKER_PROCESS_COUNT` | The number of worker processes to run (`numprocs` in Supervisor).                                                                                                                     | `1`                                  |
 
 ### ENVIRONMENT, `APP_ENV`, and `FLASK_ENV` Derivation
 
 The `ENVIRONMENT` variable is a high-level switch for the container's operational mode. It is shared across all images in this ecosystem and influences NGINX configurations, logging verbosity, and other entrypoint behaviors.
 
--   **Possible Values:** `production` (or `prod`) and `development` (or `dev`).
--   **Default:** `production`.
--   **Rule:** Any value other than `development` or `dev` is treated as a production environment.
+- **Possible Values:** `production` (or `prod`) and `development` (or `dev`).
+- **Default:** `production`.
+- **Rule:** Any value other than `development` or `dev` is treated as a production environment.
 
 **`APP_ENV` and `FLASK_ENV` Derivation Logic:**
 
 To align with standard Python/Flask practices, the `APP_ENV` and `FLASK_ENV` variables are automatically derived from `ENVIRONMENT`. You generally do not need to set them yourself.
 
-1.  If `ENVIRONMENT` is set to `production` or `prod`, `APP_ENV` defaults to `prod` and `FLASK_ENV` defaults to `production`.
-2.  If `ENVIRONMENT` is set to `development` or `dev`, `APP_ENV` defaults to `dev` and `FLASK_ENV` defaults to `development`.
-3.  If you set `APP_ENV` explicitly, **your value will always take precedence**. This allows you to run in a `production` container `ENVIRONMENT` (with optimized NGINX settings) while having `APP_ENV` set to `staging`, for example.
+1. If `ENVIRONMENT` is set to `production` or `prod`, `APP_ENV` defaults to `prod` and `FLASK_ENV` defaults to `production`.
+2. If `ENVIRONMENT` is set to `development` or `dev`, `APP_ENV` defaults to `dev` and `FLASK_ENV` defaults to `development`.
+3. If you set `APP_ENV` explicitly, **your value will always take precedence**. This allows you to run in a `production` container `ENVIRONMENT` (with optimized NGINX settings) while having `APP_ENV` set to `staging`, for example.
 
 Additionally, `APP_DEBUG` is automatically derived:
 
--   It is set to `1` when `ENVIRONMENT` or `APP_ENV` is `development` or `dev`.
--   It is set to `0` otherwise.
--   You can override it by setting `APP_DEBUG` explicitly.
+- It is set to `1` when `ENVIRONMENT` or `APP_ENV` is `development` or `dev`.
+- It is set to `0` otherwise.
+- You can override it by setting `APP_DEBUG` explicitly.
 
 ### Path Composition: `PROJECT_PATH` + `SERVICE_PATH`
 
@@ -172,16 +173,25 @@ Your entire project, including a frontend and backend, must live under a specifi
 * `DOCKER_SERVICE_PATH: /api/`
 * **Resulting Path:** `DOCKER_SERVICE_ABS_PATH` is `/project-alpha/api/`.
 
+### MAX_UPLOAD_SIZE and friends
+
+The `MAX_UPLOAD_SIZE` variable is a convenient way to set related limits in one place. If you leave it undefined it defaults to `100M`. If you set `MAX_UPLOAD_SIZE`, it will automatically configure:
+- `client_max_body_size` in NGINX (possible override: `NGINX_CLIENT_MAX_BODY_SIZE`)
+
+You MAY override any of these individually if you need different values, but in most cases, setting `MAX_UPLOAD_SIZE` is the simplest way to ensure all related limits are consistent. As a rule of thumb: **Use `MAX_UPLOAD_SIZE` whenever possible, and only override the individual settings if you have a specific need for different values.**
+
+> My app wants bytes, not human-readable sizes! The `MAX_UPLOAD_SIZE_BYTES` variable is a read-only variable that the entrypoint script calculates from `MAX_UPLOAD_SIZE`. If you need to work with byte values in your application, you can use this variable directly.
+
 ## Web Mode In-Depth
 
 In `web` mode, the entrypoint script configures NGINX and Gunicorn to serve your application. NGINX acts as the front-facing server, handling static files and proxying dynamic requests to Gunicorn over a **Unix socket** (`/run/gunicorn.sock`). By default, it operates over plain HTTP, but enabling SSL for HTTPS is controlled via a single environment variable.
 
 **How NGINX and Gunicorn Work Together:**
 
-1.  A request arrives at NGINX on port 80 (or 443 for HTTPS).
-2.  NGINX first attempts to serve the request as a static file from the `/var/www/html/static/` directory (controlled by `NGINX_TRY_FILES`).
-3.  If no static file matches, NGINX proxies the request to Gunicorn via the Unix socket at `/run/gunicorn.sock`.
-4.  Gunicorn passes the request to your Flask (or other WSGI) application and returns the response through NGINX to the client.
+1. A request arrives at NGINX on port 80 (or 443 for HTTPS).
+2. NGINX first attempts to serve the request as a static file from the `/var/www/html/static/` directory (controlled by `NGINX_TRY_FILES`).
+3. If no static file matches, NGINX proxies the request to Gunicorn via the Unix socket at `/run/gunicorn.sock`.
+4. Gunicorn passes the request to your Flask (or other WSGI) application and returns the response through NGINX to the client.
 
 This process is known as **SSL Termination** when HTTPS is enabled, where NGINX handles the performance-intensive work of encrypting and decrypting traffic, freeing your application to communicate over plain HTTP internally.
 
@@ -426,8 +436,8 @@ location ^~ ${DOCKER_SERVICE_ABS_PATH}custom/ {
 
 These snippets are included in the main `http` block and are perfect for adding global rules, headers, or `map` blocks.
 
-*   **How:** Inside your custom directory, create a `nginx/global/` sub-directory.
-*   **Result:** The files are processed and included globally in the `http` block.
+* **How:** Inside your custom directory, create a `nginx/global/` sub-directory.
+* **Result:** The files are processed and included globally in the `http` block.
 
 **Directory structure:**
 
@@ -563,7 +573,7 @@ python /var/www/html/scripts/clear_cache.py
 
 For maximum control, you can completely replace any of the container's default template files. This is an "all-or-nothing" approach best used for fundamentally changing a core component.
 
-*   **How:** Identify the default template (e.g., `/container/templates/nginx/nginx.conf` or `/container/templates/python/gunicorn.conf.py`). In your project, create your version and mount it to the *exact same path* inside the container.
+* **How:** Identify the default template (e.g., `/container/templates/nginx/nginx.conf` or `/container/templates/python/gunicorn.conf.py`). In your project, create your version and mount it to the *exact same path* inside the container.
 * **Result:** Your mounted file will completely replace the image's default. The entrypoint will then process *your* template instead.
 
 > **Note:** Filename markers do **not** apply when directly overriding a core template file.
@@ -665,8 +675,8 @@ Additionally, the venv's `python` and `pip` executables are wrapped in a similar
 
 **Implications for You:**
 
--   **Seamless `exec`:** Variables like `DOCKER_SERVICE_ABS_PATH`, `PYTHON_APP_MODULE`, and `GUNICORN_WORKERS` will be available in `docker exec my-container env` or `docker exec my-container bash`.
--   **Other Shells (e.g., `zsh`):** If you install and use a different shell, it will **not** inherit these variables automatically. To get the same behavior, you would need to configure your `~/.zshrc` (or equivalent) to source `/container/work/container-vars.sh` upon startup.
+- **Seamless `exec`:** Variables like `DOCKER_SERVICE_ABS_PATH`, `PYTHON_APP_MODULE`, and `GUNICORN_WORKERS` will be available in `docker exec my-container env` or `docker exec my-container bash`.
+- **Other Shells (e.g., `zsh`):** If you install and use a different shell, it will **not** inherit these variables automatically. To get the same behavior, you would need to configure your `~/.zshrc` (or equivalent) to source `/container/work/container-vars.sh` upon startup.
 
 ## Build-Time Execution with Multi-Stage Builds
 

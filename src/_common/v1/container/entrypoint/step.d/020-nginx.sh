@@ -16,6 +16,9 @@ _process_ssl_cert_templates() {
             -out "${output_path}/cert.pem" \
             -subj "/C=US/ST=Denial/L=Springfield/O=Dis/CN=www.example.com"
     fi
+
+    # Ensure the generated or copied certificates are owned by www-data
+    chown -R www-data:www-data "${output_path}"
 }
 
 _process_nginx_default_ssl_conf() {

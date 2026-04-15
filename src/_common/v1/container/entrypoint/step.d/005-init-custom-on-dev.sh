@@ -22,6 +22,8 @@ if [[ "${ENVIRONMENT}" == "development" ]]; then
       if [[ ! -d "$dir" ]]; then
         echo "  -> Creating missing custom directory: ${dir}"
         mkdir -p "$dir"
+      else
+        echo "  -> Custom directory already exists: ${dir}"
       fi
     done
   else

@@ -18,7 +18,6 @@ if [ -z "${CONTAINER_MODE}" ]; then
     if [ -n "${NODE_WORKER_COMMAND}" ]; then
         export CONTAINER_MODE="worker"
     else
-        export NODE_WEB_COMMAND="${NODE_WEB_COMMAND:-${default_node_web_command}}"
         export CONTAINER_MODE="web"
         feature_registry="${feature_registry} nginx"
     fi
@@ -43,6 +42,8 @@ elif [ "${CONTAINER_MODE}" = "web" ]; then
             echo "[ENTRYPOINT] ERROR: NODE_WEB_COMMAND is not set, but CONTAINER_MODE is 'web'. Exiting..."
             exit 1
         fi
+    else
+        echo "[ENTRYPOINT] INFO: CONTAINER_MODE is 'web' and NODE_WEB_COMMAND is set to '${NODE_WEB_COMMAND}'"
     fi
 fi
 

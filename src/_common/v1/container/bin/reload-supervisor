@@ -1,0 +1,5 @@
+#!/bin/bash
+# Restarts all supervisor-managed services.
+# Useful after changing a service config (e.g. nginx, node).
+echo "Reloading supervisor-managed services..."
+exec supervisorctl -c /etc/supervisor/supervisord.conf restart all

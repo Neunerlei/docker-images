@@ -26,8 +26,10 @@ All images share a common base layer located in the `_common/v1/` directory:
 ```
 _common/v1/
 ├── installer.sh           # Single build-time installer
-├── bin/entrypoint/        # Runtime orchestration system
-├── templates/             # Base configuration templates
+└── container/             # Copied verbatim to /container/ inside the image
+    ├── bin/               # Utility commands (added to PATH automatically)
+    ├── entrypoint/        # Runtime orchestration system
+    └── templates/         # Base configuration templates
 ```
 
 **Rationale**: Rather than duplicating common functionality across images, we extract shared components into a reusable layer. This reduces maintenance burden and ensures consistency across all images.
@@ -392,6 +394,44 @@ if [[ "$feature_registry" == *"my-feature"* ]]; then
   # Your configuration logic
 fi
 ```
+
+### Adding Utility Commands
+
+Utility commands are shell scripts placed in a `container/bin/` directory. `/container/bin` is part of `PATH` in every container (set via `CONTAINER_BIN_DIR` in `common-env.sh`), so any executable dropped there is immediately available as a regular shell command — no copying, no Dockerfile changes, and fully compatible with read-only filesystems.
+
+**Common commands (available in all images):**
+
+Place the script in `_common/v1/container/bin/<command-name>`. It is copied to `/container/bin/` by the installer alongside all other common container files.
+
+```bash
+# _common/v1/container/bin/my-command
+#!/bin/bash
+# Brief description of what the command does.
+exec some-tool --some-flag
+```
+
+**Image-specific commands:**
+
+Place the script in the image's own `container/bin/<command-name>`. It lands in `/container/bin/` via the standard `COPY container /container` step in the image's Dockerfile.
+
+```bash
+# src/my-image/1.0/container/bin/my-command
+#!/bin/bash
+exec some-image-specific-tool
+```
+
+After a rebuild, the command is callable from any shell inside the container:
+
+```bash
+docker exec my-container my-command
+```
+
+**Guidelines:**
+
+- Keep commands small and focused on a single task.
+- Only add a command to `_common` if it is genuinely useful across *all* images. Prefer the image-specific location otherwise.
+- The command name is taken verbatim from the filename. Use `kebab-case` (e.g. `reload-supervisor`).
+- No `.sh` extension — the filename is the command name.
 
 ## How to Create a New Base Image (e.g., Python)
 

@@ -19,6 +19,11 @@ set_owner_and_group() {
   chown -R "${expected_owner}:${expected_group}" "${path}"
 }
 
+# Ensure all container bin scripts are executable
+if [ -d "${CONTAINER_BIN_DIR}" ]; then
+  chmod +x "${CONTAINER_BIN_DIR}/"*
+fi
+
 # Set up ownership of user owned directories (or create them if missing)
 for dir in "${user_owned_directories_registry[@]}"; do
   if [ ! -d "${dir}" ]; then

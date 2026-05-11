@@ -292,6 +292,22 @@ Automatically activated when no command is provided. This mode sets up the full 
 
 Learn more about it in the [Build Mode Documentation](#build-time-execution-with-multi-stage-builds)
 
+## Utility Commands
+
+The following helper commands are available inside every container at runtime.
+
+### `reload-supervisor`
+
+Restarts all Supervisor-managed services (e.g. NGINX, Gunicorn) in one step:
+
+```bash
+docker exec my-container reload-supervisor
+```
+
+Useful when you have changed an NGINX snippet or want to bounce the Gunicorn workers after a code change in development.
+
+> Under the hood this runs `supervisorctl restart all`, so all registered processes are stopped and restarted in one go. The Supervisor daemon itself keeps running.
+
 ## Advanced Customization: Templating and Overrides
 
 This image uses a powerful templating engine that processes **all internal configuration files** on startup. This allows for deep customization of NGINX, Supervisor, Gunicorn, and other components without rebuilding the image.

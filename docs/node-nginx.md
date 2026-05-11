@@ -274,6 +274,25 @@ Automatically activated when no command is provided. This mode sets up the full 
 
 Learn more about it in the [Build Mode Documentation](#build-time-execution-with-multi-stage-builds)
 
+## Utility Commands
+
+The following helper commands are available inside every container at runtime.
+
+### `reload-supervisor`
+
+Restarts all Supervisor-managed services (e.g. NGINX, the Node.js server, a worker process) in one step:
+
+```bash
+docker exec my-container reload-supervisor
+```
+
+This is the quickest way to apply a changed service configuration without restarting the entire container. Typical use cases:
+
+- You edited an NGINX snippet and want the new config to take effect.
+- You want to bounce the Node.js process after code changes in development.
+
+> Under the hood this runs `supervisorctl restart all`, so all registered processes are stopped and restarted in one go. The Supervisor daemon itself keeps running.
+
 ## Advanced Customization: Templating and Overrides
 
 This image uses a powerful templating engine that processes **all internal configuration files** on startup. This allows for deep customization of NGINX, Supervisor, and other components without rebuilding the image.

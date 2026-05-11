@@ -18,6 +18,8 @@ export DOCKER_SERVICE_ABS_PATH="$(join_paths "${DOCKER_PROJECT_PATH:-/}" "${DOCK
 
 # Define static, well-known directories inside the container
 export CONTAINER_DIR="/container"
+export CONTAINER_BIN_DIR="${CONTAINER_DIR}/bin"
+export PATH="${CONTAINER_BIN_DIR}:${PATH}"
 export CONTAINER_TEMPLATES_DIR="${CONTAINER_DIR}/templates"
 export CONTAINER_TEMPLATES_NGINX_DIR="${CONTAINER_TEMPLATES_DIR}/nginx"
 export CONTAINER_TEMPLATES_NGINX_SNIPPETS_DIR="${CONTAINER_TEMPLATES_NGINX_DIR}/snippets"

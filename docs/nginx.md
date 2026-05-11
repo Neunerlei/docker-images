@@ -273,6 +273,22 @@ This image uses a flexible system for extending the base NGINX configuration. Yo
 
 You can learn more about this powerful feature in [Advanced Customization](#advanced-customization-templating-and-overrides), especially in the [Adding Custom NGINX Snippets](#1-adding-custom-nginx-snippets-marker-aware) section.
 
+## Utility Commands
+
+The following helper commands are available inside every container at runtime.
+
+### `reload-supervisor`
+
+Restarts all Supervisor-managed services (e.g. NGINX) in one step:
+
+```bash
+docker exec my-container reload-supervisor
+```
+
+Useful when you have changed an NGINX configuration and want the new config to take effect without restarting the entire container.
+
+> Under the hood this runs `supervisorctl restart all`, so all registered processes are stopped and restarted in one go. The Supervisor daemon itself keeps running.
+
 ## Advanced Customization: Templating and Overrides
 
 This image uses a powerful templating engine that processes **all internal configuration files** on startup. This allows for deep customization of NGINX, Supervisor, and other components without rebuilding the image.

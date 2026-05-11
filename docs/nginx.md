@@ -59,31 +59,32 @@ The "brain" of this image is its entrypoint script. When the container starts, i
 
 The proxy is configured almost entirely through declarative environment variables.
 
-| Variable                      | Description                                                                                                                                                                           | Default Value                    |
-|-------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------|
-| **General**                   |                                                                                                                                                                                       |                                  |
-| `PUID`                        | The user ID to run processes as (`www-data`). Useful for matching host file permissions.                                                                                              | `33`                             |
-| `PGID`                        | The group ID to run processes as (`www-data`). Useful for matching host file permissions.                                                                                             | `33`                             |
-| `CONTAINER_MODE`              | Read-only. Automatically set to `proxy` or `static`.                                                                                                                                  | `static`                         |
-| `MAX_UPLOAD_SIZE`             | A convenient variable to set the global `client_max_body_size`. This applies only if in "proxy" mode, as all uploads need to pass through the proxy.                                  | `100M`                           |
-| `MAX_UPLOAD_SIZE_BYTES`       | Read-only. The byte value of `MAX_UPLOAD_SIZE`, calculated by the entrypoint script.                                                                                                  | (calculated)                     |
-| `ENVIRONMENT`                 | Sets the overall environment. `dev`/`development` is non-production; all other values are considered production.                                                                      | `production`                     |
-| **Project**                   |                                                                                                                                                                                       |                                  |
-| `DOCKER_PROJECT_HOST`         | The public hostname for your application (available for your app).                                                                                                                    | `localhost`                      |
-| `DOCKER_PROJECT_PATH`         | The public root path of the entire project.                                                                                                                                           | `/`                              |
-| `DOCKER_PROJECT_PROTOCOL`     | The public protocol. `http` or `https`. Determines NGINX's listening mode.                                                                                                            | `http`                           |
-| `DOCKER_SERVICE_PROTOCOL`     | The protocol your service uses internally. Defaults to `DOCKER_PROJECT_PROTOCOL`.                                                                                                     | (derived)                        |
-| `DOCKER_SERVICE_PATH`         | The sub-path for this specific service within the project.                                                                                                                            | `/`                              |
-| `DOCKER_SERVICE_ABS_PATH`     | Read-only. The absolute path for this service (`PROJECT_PATH` + `SERVICE_PATH`).                                                                                                      | (derived)                        |
-| **NGINX**                     |                                                                                                                                                                                       |                                  |
-| `NGINX_DOC_ROOT`              | The document root NGINX serves static files from.                                                                                                                                     | `/var/www/html/public`           |
-| `NGINX_CLIENT_MAX_BODY_SIZE`  | Sets `client_max_body_size` in NGINX. **Please prefer `MAX_UPLOAD_SIZE`**                                                                                                             | Matches `MAX_UPLOAD_SIZE`        |
-| `NGINX_CERT_PATH`             | Path to the SSL certificate (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                   | `/etc/ssl/certs/custom/cert.pem` |
-| `NGINX_KEY_PATH`              | Path to the SSL key (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                           | `/etc/ssl/certs/custom/key.pem`  |
-| `NGINX_PROXY_CONNECT_TIMEOUT` | Sets `proxy_connect_timeout` in NGINX. This value defines the timeout for establishing a connection with a proxied server.                                                            | `5s`                             |
-| `NGINX_PROXY_READ_TIMEOUT`    | Sets `proxy_read_timeout` in NGINX. This value defines the timeout for reading a response from a proxied server.                                                                      | `60s`                            |
-| `NGINX_PROXY_SEND_TIMEOUT`    | Sets `proxy_send_timeout` in NGINX. This value defines the timeout for transmitting a request to a proxied server.                                                                    | `60s`                            |
-| `NGINX_KEEPALIVE_TIMEOUT`     | Sets `keepalive_timeout` in NGINX. This value defines the timeout for keeping connections alive with clients. If omitted, automatically calculated based on the other TIMEOUT values. | (calculated)                     |
+| Variable                      | Description                                                                                                                                                                           | Default Value                            |
+|-------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------|
+| **General**                   |                                                                                                                                                                                       |                                          |
+| `PUID`                        | The user ID to run processes as (`www-data`). Useful for matching host file permissions.                                                                                              | `33`                                     |
+| `PGID`                        | The group ID to run processes as (`www-data`). Useful for matching host file permissions.                                                                                             | `33`                                     |
+| `CONTAINER_MODE`              | Read-only. Automatically set to `proxy` or `static`.                                                                                                                                  | `static`                                 |
+| `MAX_UPLOAD_SIZE`             | A convenient variable to set the global `client_max_body_size`. This applies only if in "proxy" mode, as all uploads need to pass through the proxy.                                  | `100M`                                   |
+| `MAX_UPLOAD_SIZE_BYTES`       | Read-only. The byte value of `MAX_UPLOAD_SIZE`, calculated by the entrypoint script.                                                                                                  | (calculated)                             |
+| `ENVIRONMENT`                 | Sets the overall environment. `dev`/`development` is non-production; all other values are considered production.                                                                      | `production`                             |
+| **Project**                   |                                                                                                                                                                                       |                                          |
+| `DOCKER_PROJECT_HOST`         | The public hostname for your application (available for your app).                                                                                                                    | `localhost`                              |
+| `DOCKER_PROJECT_PATH`         | The public root path of the entire project.                                                                                                                                           | `/`                                      |
+| `DOCKER_PROJECT_PROTOCOL`     | The public protocol. `http` or `https`. Determines NGINX's listening mode.                                                                                                            | `http`                                   |
+| `DOCKER_SERVICE_PROTOCOL`     | The protocol your service uses internally. Defaults to `DOCKER_PROJECT_PROTOCOL`.                                                                                                     | (derived)                                |
+| `DOCKER_SERVICE_PATH`         | The sub-path for this specific service within the project.                                                                                                                            | `/`                                      |
+| `DOCKER_SERVICE_ABS_PATH`     | Read-only. The absolute path for this service (`PROJECT_PATH` + `SERVICE_PATH`).                                                                                                      | (derived)                                |
+| **NGINX**                     |                                                                                                                                                                                       |                                          |
+| `NGINX_DOC_ROOT`              | The document root NGINX serves static files from.                                                                                                                                     | `/var/www/html/public`                   |
+| `NGINX_CLIENT_MAX_BODY_SIZE`  | Sets `client_max_body_size` in NGINX. **Please prefer `MAX_UPLOAD_SIZE`**                                                                                                             | Matches `MAX_UPLOAD_SIZE`                |
+| `NGINX_CERT_PATH`             | Path to the SSL certificate (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                   | `/etc/ssl/certs/custom/cert.pem`         |
+| `NGINX_KEY_PATH`              | Path to the SSL key (if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                           | `/etc/ssl/certs/custom/key.pem`          |
+| `NGINX_PROXY_CONNECT_TIMEOUT` | Sets `proxy_connect_timeout` in NGINX. This value defines the timeout for establishing a connection with a proxied server.                                                            | `5s`                                     |
+| `NGINX_PROXY_READ_TIMEOUT`    | Sets `proxy_read_timeout` in NGINX. This value defines the timeout for reading a response from a proxied server.                                                                      | `60s`                                    |
+| `NGINX_PROXY_SEND_TIMEOUT`    | Sets `proxy_send_timeout` in NGINX. This value defines the timeout for transmitting a request to a proxied server.                                                                    | `60s`                                    |
+| `NGINX_KEEPALIVE_TIMEOUT`     | Sets `keepalive_timeout` in NGINX. This value defines the timeout for keeping connections alive with clients. If omitted, automatically calculated based on the other TIMEOUT values. | (calculated)                             |
+| `NGINX_TRY_FILES`             | (static only) Sets the `try_files` directive in the root location of the nginx server.                                                                                                | `$uri $uri/ /index.html /index.htm =404` |
 
 ### ENVIRONMENT
 
@@ -93,10 +94,10 @@ The `ENVIRONMENT` variable is a high-level switch for the container's operationa
 - **Default:** `production`.
 - **Rule:** Any value other than `development` or `dev` is treated as a production environment.
 
-
 ### MAX_UPLOAD_SIZE and friends
 
 The `MAX_UPLOAD_SIZE` variable is a convenient way to set related limits in one place. If you leave it undefined it defaults to `100M`. If you set `MAX_UPLOAD_SIZE`, it will automatically configure:
+
 - `client_max_body_size` in NGINX (possible override: `NGINX_CLIENT_MAX_BODY_SIZE`)
 
 You MAY override any of these individually if you need different values, but in most cases, setting `MAX_UPLOAD_SIZE` is the simplest way to ensure all related limits are consistent. As a rule of thumb: **Use `MAX_UPLOAD_SIZE` whenever possible, and only override the individual settings if you have a specific need for different values.**
@@ -452,6 +453,30 @@ docker/custom/
 # Custom caching for the API service
 proxy_cache_valid 200 10m;
 proxy_cache_key "$scheme$request_method$host$request_uri";
+```
+
+##### 1.3 Root Location Snippets (Static Mode Only) `MARKER-AWARE` `TEMPLATES`
+
+When running in `static` mode, you can add custom snippets directly to the root location block. This is useful for SPAs that require specific routing rules or custom headers.
+
+**Note:** You cannot override the `try_files` directive from here. Use the `NGINX_TRY_FILES` environment variable instead.
+
+**Directory structure:**
+
+```
+docker/custom/
+└── nginx/
+    └── location/
+        ├── 01-basic-auth.prod.conf
+        └── 02-custom-rewrites.conf
+```
+
+**Example:**
+
+```nginx
+# docker/custom/nginx/location/01-basic-auth.prod.conf
+auth_basic "Restricted";
+auth_basic_user_file /etc/nginx/.htpasswd;
 ```
 
 #### 2. Custom SSL Certificates `TEMPLATES`

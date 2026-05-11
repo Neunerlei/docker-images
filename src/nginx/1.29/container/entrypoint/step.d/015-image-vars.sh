@@ -2,6 +2,13 @@
 
 echo "[ENTRYPOINT] Image configuration:";
 
+# Additional NGINX settings
+# If NGINX_TRY_FILES is empty, assign the default using strong single quotes
+if [ -z "$NGINX_TRY_FILES" ]; then
+    NGINX_TRY_FILES='$uri $uri/ /index.html /index.htm =404'
+fi
+export NGINX_TRY_FILES
+
 export NGINX_CUSTOM_SNIPPETS_PROXY_DIR="${NGINX_SNIPPETS_DIR}/proxy.d"
 
 # IMPORTANT: We ignore the "BUILD" container mode, and always set the mode based on the presence of proxy containers.

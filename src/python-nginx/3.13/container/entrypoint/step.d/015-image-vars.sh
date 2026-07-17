@@ -5,6 +5,7 @@ echo "[ENTRYPOINT] Python image configuration settings initialization started.";
 # Python application settings
 export PYTHON_APP_MODULE="${PYTHON_APP_MODULE:-'server:app'}"
 export PYTHON_WORKER_PROCESS_COUNT="${PYTHON_WORKER_PROCESS_COUNT:-"1"}"
+export PYTHON_WORKER_STOP_WAIT_SECS="${PYTHON_WORKER_STOP_WAIT_SECS:-"10"}"
 
 # Gunicorn settings
 export GUNICORN_WORKERS="${GUNICORN_WORKERS:-4}"

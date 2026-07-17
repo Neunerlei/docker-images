@@ -83,6 +83,7 @@ This image is configured almost entirely through environment variables. This all
 | **Python Worker Mode**        |                                                                                                                                                                                       |                                      |
 | `PYTHON_WORKER_COMMAND`       | The command to execute in worker mode. **Setting this enables worker mode.**                                                                                                          |                                      |
 | `PYTHON_WORKER_PROCESS_COUNT` | The number of worker processes to run (`numprocs` in Supervisor).                                                                                                                     | `1`                                  |
+| `PYTHON_WORKER_STOP_WAIT_SECS`| The number of seconds Supervisor waits for the worker process to stop gracefully before sending SIGKILL (`stopwaitsecs` in Supervisor).                                               | `10`                                 |
 
 ### ENVIRONMENT, `APP_ENV`, and `FLASK_ENV` Derivation
 

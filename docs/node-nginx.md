@@ -119,6 +119,19 @@ You MAY override any of these individually if you need different values, but in 
 
 > My app wants bytes, not human-readable sizes! The `MAX_UPLOAD_SIZE_BYTES` variable is a read-only variable that the entrypoint script calculates from `MAX_UPLOAD_SIZE`. If you need to work with byte values in your application, you can use this variable directly.
 
+### NODE_WORKER_STOP_WAIT_SECS and Docker Stop Timeout
+
+**Important:** `NODE_WORKER_STOP_WAIT_SECS` only takes effect if Docker's own stop timeout is set *higher* than this value. By default, Docker sends `SIGKILL` to the entire container 10 seconds after `SIGTERM` — so Supervisor never gets a chance to wait longer. If you raise `NODE_WORKER_STOP_WAIT_SECS` (e.g. to `90`), also set `stop_grace_period` in your `docker-compose.yml` to a value above it (e.g. `120s`):
+```yaml
+services:
+  my-app-worker:
+    image: neunerlei/node-nginx:latest
+    stop_grace_period: 120s
+    environment:
+      - NODE_WORKER_COMMAND=node /var/www/html/dist/queue-worker.js
+      - NODE_WORKER_STOP_WAIT_SECS=90
+```
+
 ---
 
 #### Scenario 1: A Single App on a Domain Root

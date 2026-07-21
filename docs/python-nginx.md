@@ -117,6 +117,17 @@ When running multiple services behind a single reverse proxy, you need a way to 
 
 Your reverse proxy uses `DOCKER_SERVICE_PATH` for routing, while your application uses `DOCKER_SERVICE_ABS_PATH` for its internal logic.
 
+### PYTHON_WORKER_STOP_WAIT_SECS  and Docker Stop Timeout
+**Important:** `PYTHON_WORKER_STOP_WAIT_SECS` only takes effect if Docker's own stop timeout is set *higher* than this value. By default, Docker sends `SIGKILL` to the entire container 10 seconds after `SIGTERM` — so Supervisor never gets a chance to wait longer. If you raise `PYTHON_WORKER_STOP_WAIT_SECS` (e.g. to `90`), also set `stop_grace_period` in your `docker-compose.yml` to a value above it (e.g. `120s`):
+```yaml
+services:
+  my-app-worker:
+    image: neunerlei/python-nginx:latest
+    stop_grace_period: 120s
+    environment:
+      - PYTHON_WORKER_COMMAND=python /var/www/html/queue_worker.py
+      - PYTHON_WORKER_STOP_WAIT_SECS=90
+```
 ---
 
 #### Scenario 1: A Single App on a Domain Root

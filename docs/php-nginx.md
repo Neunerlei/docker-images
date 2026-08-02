@@ -335,6 +335,23 @@ services:
       - PHP_WORKER_COMMAND=while true; do php /var/www/html/my_task.php; sleep 300; done
 ```
 
+### Automatic Container Restart on Fatal Failures
+
+Supervisor keeps your worker (and every other managed process) alive by restarting it whenever it exits. But if a process fails to start **repeatedly** — by default three times in quick succession — Supervisor marks it `FATAL` and permanently stops trying. Without intervention the container would then keep running with a dead worker that nothing notices: the container looks healthy, but no work is being done. This is exactly the kind of silent failure that can go unnoticed for days.
+
+To prevent that, the image ships a Supervisor eventlistener that **shuts the whole container down the moment any managed process reaches `FATAL`**. Combined with a Docker restart policy, a crash-looping worker becomes a visible, self-healing container restart instead of a quiet stall:
+
+```yaml
+services:
+  my-app-worker:
+    image: neunerlei/php-nginx:8.5
+    restart: unless-stopped   # let the orchestrator bring the container back up
+    environment:
+      - PHP_WORKER_COMMAND=php /var/www/html/artisan queue:work --tries=3
+```
+
+> This applies in **web mode too**: if NGINX or PHP-FPM cannot stay up, the container exits rather than silently serving nothing. In local development (usually without a restart policy) the container simply stops, which surfaces the failure immediately instead of hiding it.
+
 ## Build Mode at a Glance
 
 Automatically activated when no command is provided. This mode sets up the full container environment for multi-stage builds, dependency installation, testing, or compilation without starting any services.

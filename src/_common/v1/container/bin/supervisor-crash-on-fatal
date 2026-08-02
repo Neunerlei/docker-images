@@ -1,0 +1,56 @@
+#!/bin/bash
+# Supervisor eventlistener: when ANY supervised program enters the FATAL state
+# — meaning it exhausted its start retries and Supervisor has permanently given
+# up restarting it — bring the whole container down so the orchestrator (Docker
+# restart policy, Kubernetes, Swarm, ...) replaces it with a fresh one.
+#
+# Without this, a container whose worker crashed on boot keeps running with a
+# permanently dead process that nothing notices: PID 1 (supervisord) stays
+# happily alive while the actual work never happens. Crashing the container
+# turns that silent failure into a visible, self-healing restart.
+#
+# This listener is subscribed to PROCESS_STATE_FATAL only (see the
+# [eventlistener] section in conf.d/crash-on-fatal.eventlistener.conf), so any
+# event that arrives here is by definition fatal.
+#
+# PROTOCOL NOTE: for an eventlistener, stdout is the communication channel with
+# supervisord and must carry ONLY protocol tokens (READY / RESULT). Everything
+# we want to log therefore goes to stderr.
+
+set -u
+
+while true; do
+    # Tell supervisord we are ready to receive the next event.
+    printf 'READY\n'
+
+    # Read the event header line (space-separated "key:value" tokens), e.g.
+    #   ver:3.0 server:supervisor serial:21 ... eventname:PROCESS_STATE_FATAL len:57
+    IFS=' ' read -r header || exit 0
+
+    # Pull the payload length out of the header and drain exactly that many
+    # bytes, so the protocol stream stays byte-aligned.
+    len=0
+    for token in ${header}; do
+        case "${token}" in
+            len:*) len="${token#len:}" ;;
+        esac
+    done
+
+    payload=''
+    if [[ "${len}" =~ ^[0-9]+$ ]] && [[ "${len}" -gt 0 ]]; then
+        IFS= read -r -N "${len}" payload || true
+    fi
+
+    echo "[supervisor-crash-on-fatal] A supervised process entered FATAL state (${payload}). Shutting the container down so it is restarted clean." >&2
+
+    # Graceful shutdown: supervisord stops the remaining programs and then
+    # exits. Because supervisord is PID 1, that terminates the container.
+    # Fall back to signalling PID 1 directly if supervisorctl is unavailable.
+    if ! supervisorctl -c /etc/supervisor/supervisord.conf shutdown >&2 2>&1; then
+        kill -TERM 1
+    fi
+
+    # Best-effort ack; the shutdown is already in flight.
+    printf 'RESULT 2\nOK'
+    exit 0
+done

@@ -4,6 +4,7 @@
   "deprecated": false,
   "maintainedTags": [
     "latest",
+    "3.15",
     "3.14",
     "3.13"
   ],

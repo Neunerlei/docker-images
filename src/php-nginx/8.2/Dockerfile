@@ -7,6 +7,9 @@ LABEL org.opencontainers.image.description="Lean PHP FPM image with an nginx ser
 
 ENV TZ=UTC
 
+# Print the current PHP version
+RUN php -v
+
 # Add Composer (MUST be done before the installer)
 COPY --from=index.docker.io/library/composer:latest /usr/bin/composer /usr/bin/composer
 

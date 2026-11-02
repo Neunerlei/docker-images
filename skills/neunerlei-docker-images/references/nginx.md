@@ -1,0 +1,61 @@
+# `neunerlei/nginx` — Smart Reverse Proxy / Static Server
+
+Not an app runtime: a standalone NGINX that either reverse-proxies to sibling containers or serves static files. The entrypoint detects the mode from env.
+
+## Modes
+
+- **proxy** (main mode): any `PROXY_*_CONTAINER` variable present → builds one `location` block per service key. Project base path supported via `DOCKER_PROJECT_PATH` (combined with each service path).
+- **static** (fallback, no `PROXY_*` vars): serves files from `NGINX_DOC_ROOT` (`/var/www/html/public`). Ships a default `index.html` — mount your own files to replace it.
+
+`MAX_UPLOAD_SIZE` sets `client_max_body_size` only in proxy mode (all uploads pass through the proxy).
+
+## Proxy service variables
+
+Define a group per service with a unique key (`FRONTEND`, `API`, …):
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `PROXY_<KEY>_CONTAINER` | yes | — | Hostname of the backend (usually the Compose service name). |
+| `PROXY_<KEY>_PATH` | no | `/` | Public path for this service. |
+| `PROXY_<KEY>_DEST` | no | — | Rewrite target. `_PATH=/api` + `_DEST=/` routes `/api/users` → `/users`. |
+| `PROXY_<KEY>_PROTOCOL` | no | `http` | Backend protocol. |
+| `PROXY_<KEY>_PORT` | no | `80` | Backend HTTP port. |
+| `PROXY_<KEY>_HTTPS_PORT` | no | `443` | Backend HTTPS port. |
+
+```yaml
+proxy:
+  image: neunerlei/nginx:latest
+  ports: ["80:80"]
+  environment:
+    - PROXY_FRONTEND_CONTAINER=frontend-app   # / → frontend-app:3000
+    - PROXY_FRONTEND_PORT=3000
+    - PROXY_API_CONTAINER=backend-app        # /api/* → backend-app:80 as /*
+    - PROXY_API_PATH=/api
+    - PROXY_API_DEST=/
+```
+
+## Static mode
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `NGINX_DOC_ROOT` | `/var/www/html/public` | Document root for static files. |
+| `NGINX_TRY_FILES` | `$uri $uri/ /index.html /index.htm =404` | Root-location routing (SPA-friendly). |
+
+## Image-specific customization (`/container/custom`)
+
+Beyond the shared dirs (`env/`, `certs/`, `entrypoint/`, `errorPage.html/json`):
+
+| Dir | Loaded into | Notes |
+|---|---|---|
+| `nginx/` | server block | Server-level snippets → `/etc/nginx/snippets/custom.d/`. |
+| `nginx/global/` | `http` block | Global rules, headers, `map` blocks. |
+| `nginx/location/` | root `location` block (static mode) | Cannot override `try_files` — use `NGINX_TRY_FILES`. |
+| `nginx/proxy/` | per-service `location` block (proxy mode) | Filename = **lowercase service key**: `api.conf` targets `PROXY_API_*`; markers allowed: `api.prod-or-env-staging.https.conf`. |
+
+Example per-service snippet:
+
+```nginx
+# nginx/proxy/api.conf — inside the API service's location block
+proxy_cache_valid 200 10m;
+proxy_cache_key "$scheme$request_method$host$request_uri";
+```

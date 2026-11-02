@@ -12,6 +12,40 @@ A collection of Docker images; optimized for production use with common extensio
 - **[php (deprecated)](docs/php.md)**: PHP-FPM only (without NGINX) (legacy, deprecated since PHP 8.4)
 - **[python-nginx](docs/python-nginx.md)**: Python in a box with NGINX as reverse proxy
 
+## Skill for AI Coding Agents
+
+This repository ships a skill in [`skills/neunerlei-docker-images`](skills/neunerlei-docker-images) that teaches AI coding agents how these images work: the entrypoint modes, all environment variables and their defaults, the `/container/custom` mount, the filename-marker system, templating, and multi-stage build mode. With the skill installed, your agent can write docker-compose files, Dockerfiles and debug output for these images without guessing — and without you pasting documentation into the chat.
+
+### Install With the `skills` CLI
+
+The easiest way is the [`skills`](https://github.com/vercel-labs/skills) CLI, which knows the skill directory layout of the common agents (Claude Code, OpenCode, Codex, Cursor, ...):
+
+```bash
+# See what this repository provides
+npx skills add Neunerlei/docker-images --list
+
+# Install into the current project (shared with your team via git)
+npx skills add Neunerlei/docker-images --skill neunerlei-docker-images
+
+# Install globally, so it is available in all your projects
+npx skills add Neunerlei/docker-images --skill neunerlei-docker-images -g
+
+# Install only for a specific agent
+npx skills add Neunerlei/docker-images --skill neunerlei-docker-images -a claude-code
+```
+
+Alternatively, point the CLI directly at the skill's directory:
+
+```bash
+npx skills add https://github.com/Neunerlei/docker-images/tree/main/skills/neunerlei-docker-images
+```
+
+Installed skills can be checked and updated with `npx skills check` and `npx skills update`.
+
+### Manual Installation
+
+If you do not want to use the CLI, copy or clone the [`skills/neunerlei-docker-images`](skills/neunerlei-docker-images) directory into your agent's skills folder — for Claude Code that is `~/.claude/skills/` (global) or `.claude/skills/` (project). The skill consists of a `SKILL.md` and its `references/` directory; both travel together.
+
 ## Automated Image Build Process
 
 Our Docker images are built and updated automatically using a smart GitHub Actions pipeline. This process ensures our images stay up-to-date with the latest security patches from their official base images (like `php`, `nginx`, or `node`).

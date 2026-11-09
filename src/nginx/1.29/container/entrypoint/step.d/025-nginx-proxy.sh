@@ -62,10 +62,41 @@ function _process_custom_proxy_snippet_templates() {
         fi
 
         local KEY_LOWER=${KEY,,}
+
+        # Render the custom snippets for this service first, so we can detect
+        # whether one of them declares its own "auth_basic". NGINX does not allow
+        # the directive twice in the same context, so a snippet that has it takes
+        # ownership of the authentication — we then skip our generated directives.
+        render_filtered_templates_in_dir "${source_path}" "${output_path}" "${KEY_LOWER}*.conf"
+
+        # Collect per-service basic auth credentials
+        # (PROXY_${KEY}_BASIC_AUTH, PROXY_${KEY}_BASIC_AUTH_1, ...)
+        local PROXY_BASIC_AUTH_BLOCK=""
+        mapfile -t proxy_basic_auth_credentials < <(collect_basic_auth_credentials "PROXY_${KEY}_BASIC_AUTH")
+        if [[ ${#proxy_basic_auth_credentials[@]} -gt 0 ]]; then
+            # The password file is always written, so custom snippets may reference it
+            # via "${NGINX_BASIC_AUTH_DIR}/proxy.${KEY_LOWER}.htpasswd" if they want to
+            local proxy_basic_auth_file="${NGINX_BASIC_AUTH_DIR}/proxy.${KEY_LOWER}.htpasswd"
+            if ! write_basic_auth_file "${proxy_basic_auth_file}" "${proxy_basic_auth_credentials[@]}"; then
+                echo "[ENTRYPOINT.proxy] Error: Invalid PROXY_${KEY}_BASIC_AUTH / PROXY_${KEY}_BASIC_AUTH_<n> value. Aborting." >&2
+                exit 1
+            fi
+
+            if grep -qsE '^\s*auth_basic' "${NGINX_CUSTOM_SNIPPETS_PROXY_DIR}"/${KEY_LOWER}*.conf; then
+                echo "   - Custom snippet declares its own 'auth_basic' — skipping the generated directives, password file kept at ${proxy_basic_auth_file}" >&2
+            else
+                local proxy_basic_auth_realm_var="PROXY_${KEY}_BASIC_AUTH_REALM"
+                if ! PROXY_BASIC_AUTH_BLOCK="$(build_basic_auth_directives "${!proxy_basic_auth_realm_var:-Restricted}" "${proxy_basic_auth_file}")"; then
+                    echo "[ENTRYPOINT.proxy] Error: Invalid PROXY_${KEY}_BASIC_AUTH_REALM value. Aborting." >&2
+                    exit 1
+                fi
+
+                echo "   - Basic auth enabled for ${#proxy_basic_auth_credentials[@]} user(s)" >&2
+            fi
+        fi
+
         local CURRENT_LOCATION_BLOCK=$(render_template_string "${CONTAINER_TEMPLATES_NGINX_DIR}/proxy.location.nginx.conf")
         rendered_location_blocks="${rendered_location_blocks}"$'\n\n'"${CURRENT_LOCATION_BLOCK}"
-
-        render_filtered_templates_in_dir "${source_path}" "${output_path}" "${KEY_LOWER}*.conf"
     done
 }
 

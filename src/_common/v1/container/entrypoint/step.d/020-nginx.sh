@@ -67,8 +67,61 @@ _process_nginx_error_pages() {
     _render_nginx_error "504" "504 Gateway Timeout" "The server did not receive a timely response from the upstream server." "$1"
 }
 
+# Configures global NGINX basic authentication from environment variables:
+#   NGINX_BASIC_AUTH="username clear-password"      the first user
+#   NGINX_BASIC_AUTH_1, NGINX_BASIC_AUTH_2, ...     additional users
+#   NGINX_BASIC_AUTH_REALM                          optional realm shown in the login dialog
+#
+# When at least one user is configured, the password file is written to
+# ${NGINX_BASIC_AUTH_DIR}/default.htpasswd and NGINX_BASIC_AUTH_BLOCK is filled with the
+# matching "auth_basic" directives, which the server templates include below. The
+# authentication then applies to the whole server; a custom snippet can still take
+# ownership with its own "auth_basic" directive (see below), or opt out with
+# "auth_basic off;".
+#
+# The password files of the per-proxy authentication (PROXY_<KEY>_BASIC_AUTH, handled
+# in the nginx image) live in the same directory, so it is reset here on every boot —
+# this step always runs before the proxy configuration.
+_configure_nginx_basic_auth() {
+    # Start from a clean slate, so users or proxies that were removed from the
+    # environment since the last boot do not leave their password files behind
+    rm -rf "${NGINX_BASIC_AUTH_DIR}"
+    mkdir -p "${NGINX_BASIC_AUTH_DIR}"
+
+    local -a credentials=()
+    mapfile -t credentials < <(collect_basic_auth_credentials "NGINX_BASIC_AUTH")
+
+    if [[ ${#credentials[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    echo "[ENTRYPOINT.nginx] Configuring global basic auth for ${#credentials[@]} user(s)..."
+
+    local auth_file="${NGINX_BASIC_AUTH_DIR}/default.htpasswd"
+    if ! write_basic_auth_file "${auth_file}" "${credentials[@]}"; then
+        echo "[ENTRYPOINT.nginx] Error: Invalid NGINX_BASIC_AUTH / NGINX_BASIC_AUTH_<n> value. Aborting." >&2
+        exit 1
+    fi
+
+    if ! NGINX_BASIC_AUTH_BLOCK="$(build_basic_auth_directives "${NGINX_BASIC_AUTH_REALM:-Restricted}" "${auth_file}")"; then
+        echo "[ENTRYPOINT.nginx] Error: Invalid NGINX_BASIC_AUTH_REALM value. Aborting." >&2
+        exit 1
+    fi
+
+    # NGINX_BASIC_AUTH_BLOCK and NGINX_BASIC_AUTH_FILE are deliberately plain shell
+    # variables (not "local", not exported): they must stay visible to the template
+    # rendering (which reads them via get_all_vars) without polluting the environment
+    NGINX_BASIC_AUTH_FILE="${auth_file}"
+}
+
 if [[ "${feature_registry}" == *"nginx"* ]]; then
     echo "[ENTRYPOINT.nginx] Starting Nginx configuration process..."
+
+    # Basic auth first: it resets the password file directory and prepares the
+    # auth_basic directives consumed by the server templates
+    NGINX_BASIC_AUTH_BLOCK=""
+    NGINX_BASIC_AUTH_FILE=""
+    _configure_nginx_basic_auth
 
     process_tpl "nginx-conf"
     process_tpl "nginx-mime-types"
@@ -76,8 +129,19 @@ if [[ "${feature_registry}" == *"nginx"* ]]; then
     process_tpl "nginx-snippets-resolver"
     process_tpl "nginx-custom-snippets"
     process_tpl "nginx-custom-snippets-global"
+    process_tpl "nginx-custom-snippets-location"
     process_tpl "nginx-error-pages" _process_nginx_error_pages
     process_tpl "nginx-snippets-errors"
+
+    # NGINX does not allow "auth_basic" twice in the same context. If a custom
+    # server-level snippet declares its own, it takes ownership of the
+    # authentication and we skip the generated NGINX_BASIC_AUTH directives.
+    # (The generated password file is still written, so the snippet may
+    # reference it via ${NGINX_BASIC_AUTH_FILE}.)
+    if [[ -n "${NGINX_BASIC_AUTH_BLOCK}" ]] && grep -qsE '^\s*auth_basic' "${NGINX_CUSTOM_SNIPPETS_DIR}"/*.conf; then
+        echo "[ENTRYPOINT.nginx] A custom server snippet declares its own 'auth_basic' — skipping the generated NGINX_BASIC_AUTH directives."
+        NGINX_BASIC_AUTH_BLOCK=""
+    fi
 
     if [ "${DOCKER_SERVICE_PROTOCOL}" == "https" ]; then
         echo "[ENTRYPOINT.nginx] Configuring for HTTPS."

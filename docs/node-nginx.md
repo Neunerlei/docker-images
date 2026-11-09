@@ -76,6 +76,7 @@ This image is configured almost entirely through environment variables. This all
 | `NGINX_PROXY_SEND_TIMEOUT`    | Sets `proxy_send_timeout` in NGINX. This value defines the timeout for transmitting a request to a proxied server.                                                                    | `60s`                            |
 | `NGINX_KEEPALIVE_TIMEOUT`     | Sets `keepalive_timeout` in NGINX. This value defines the timeout for keeping connections alive with clients. If omitted, automatically calculated based on the other TIMEOUT values. | (calculated)                     |
 | `NGINX_TRY_FILES`             | Sets the `try_files` directive in the root location of the nginx server.                                                                                                              | `$uri @nodeproxy`                |
+| `NGINX_BASIC_AUTH`            | Enables basic auth for the **whole server**. Format: `username clear-password`; additional users via `NGINX_BASIC_AUTH_1..n` (e.g. `NGINX_BASIC_AUTH_2="user2 pass2"`), login dialog realm via `NGINX_BASIC_AUTH_REALM` (default `Restricted`). | (disabled) |
 | **Node.js Web Mode**          |                                                                                                                                                                                       |                                  |
 | `NODE_WEB_COMMAND`            | The command to start your web server application.                                                                                                                                     | `node /var/www/html/server.js`   |
 | `NODE_SERVICE_PORT`           | The internal port your Node.js app listens on for NGINX to proxy to.                                                                                                                  | `3000`                           |
@@ -491,17 +492,19 @@ These snippets are included in the `location /` block, allowing you to add authe
 docker/custom/
 └── nginx/
     └── location/
-        ├── 01-basic-auth.prod.conf
+        ├── 01-auth-basic-off.prod.conf
         └── 02-custom-rewrites.conf
 ```
 
 **Example:**
 
 ```nginx
-# docker/custom/nginx/location/01-basic-auth.prod.conf
-auth_basic "Restricted";
-auth_basic_user_file /etc/nginx/.htpasswd;
+# docker/custom/nginx/location/01-auth-basic-off.prod.conf
+# Make this location public again when NGINX_BASIC_AUTH is enabled
+auth_basic off;
 ```
+
+> For simple "protect everything with a username and password" cases, prefer the `NGINX_BASIC_AUTH` environment variable over hand-written snippets — it creates and maintains the password file for you.
 
 #### 2. Custom SSL Certificates `TEMPLATES`
 

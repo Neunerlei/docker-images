@@ -90,6 +90,7 @@ This image is configured almost entirely through environment variables. This all
 | `NGINX_PROXY_SEND_TIMEOUT`             | Sets `fastcgi_read_timeout` in NGINX. This value defines the timeout for transmitting a request to a proxied server.                                                                  | `60s`                                |
 | `NGINX_KEEPALIVE_TIMEOUT`              | Sets `keepalive_timeout` in NGINX. This value defines the timeout for keeping connections alive with clients. If omitted, automatically calculated based on the other TIMEOUT values. | (calculated)                         |
 | `NGINX_TRY_FILES`                      | Sets the `try_files` directive in the root location of the nginx server.                                                                                                              | `$uri $uri/ /index.php$is_args$args` |
+| `NGINX_BASIC_AUTH`                      | Enables basic auth for the **whole server**. Format: `username clear-password`; additional users via `NGINX_BASIC_AUTH_1..n` (e.g. `NGINX_BASIC_AUTH_2="user2 pass2"`), login dialog realm via `NGINX_BASIC_AUTH_REALM` (default `Restricted`). | (disabled)              |
 | **PHP**                                |                                                                                                                                                                                       |                                      |
 | `PHP_UPLOAD_MAX_FILESIZE`              | Overrides PHP's `upload_max_filesize` directly. **Please prefer `MAX_UPLOAD_SIZE`**                                                                                                   | Matches `MAX_UPLOAD_SIZE`            |
 | `PHP_POST_MAX_SIZE`                    | Overrides PHP's `post_max_size` directly. **Please prefer `MAX_UPLOAD_SIZE`**                                                                                                         | Matches `MAX_UPLOAD_SIZE`            |
@@ -545,17 +546,19 @@ authentication, custom headers, or internal rewrites specific to the root path.
 docker/custom/
 └── nginx/
     └── location/
-        ├── 01-basic-auth.prod.conf
+        ├── 01-auth-basic-off.prod.conf
         └── 02-custom-rewrites.conf
 ```
 
 **Example:**
 
 ```nginx
-# docker/custom/nginx/location/01-basic-auth.prod.conf
-auth_basic "Restricted";
-auth_basic_user_file /etc/nginx/.htpasswd;
+# docker/custom/nginx/location/01-auth-basic-off.prod.conf
+# Make this location public again when NGINX_BASIC_AUTH is enabled
+auth_basic off;
 ```
+
+> For simple "protect everything with a username and password" cases, prefer the `NGINX_BASIC_AUTH` environment variable over hand-written snippets — it creates and maintains the password file for you.
 
 #### 2. Adding Custom php.ini and php-fpm.conf Snippets `MARKER-AWARE` `TEMPLATES`
 

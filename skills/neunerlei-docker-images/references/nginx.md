@@ -21,6 +21,9 @@ Define a group per service with a unique key (`FRONTEND`, `API`, …):
 | `PROXY_<KEY>_PROTOCOL` | no | `http` | Backend protocol. |
 | `PROXY_<KEY>_PORT` | no | `80` | Backend HTTP port. |
 | `PROXY_<KEY>_HTTPS_PORT` | no | `443` | Backend HTTPS port. |
+| `PROXY_<KEY>_BASIC_AUTH` | no | — | Basic auth for only this service's location: `username clear-password`. |
+| `PROXY_<KEY>_BASIC_AUTH_1..n` | no | — | Additional users for this service. |
+| `PROXY_<KEY>_BASIC_AUTH_REALM` | no | `Restricted` | Login-dialog realm for this service. |
 
 ```yaml
 proxy:
@@ -40,6 +43,15 @@ proxy:
 |---|---|---|
 | `NGINX_DOC_ROOT` | `/var/www/html/public` | Document root for static files. |
 | `NGINX_TRY_FILES` | `$uri $uri/ /index.html /index.htm =404` | Root-location routing (SPA-friendly). |
+
+## Basic authentication
+
+Env-var driven, regenerated every boot; passwords hashed with `openssl passwd -apr1`, files land in `/etc/nginx/basic-auth/`.
+
+- **Global (all images, whole server):** `NGINX_BASIC_AUTH="user clear-pass"`, extra users `NGINX_BASIC_AUTH_1..n`, realm `NGINX_BASIC_AUTH_REALM` (default `Restricted`). First space separates user/password — passwords may contain spaces. Generated file path available as `NGINX_BASIC_AUTH_FILE`.
+- **Per service (this image, proxy mode):** `PROXY_<KEY>_BASIC_AUTH(_1..n/_REALM)` — replaces the global auth for that location only.
+- Opt out per location via `auth_basic off;` in a custom snippet; error pages stay reachable (the `@error_handler` location disables auth).
+- Malformed values abort the container at boot instead of serving unprotected.
 
 ## Image-specific customization (`/container/custom`)
 

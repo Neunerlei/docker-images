@@ -85,6 +85,10 @@ The proxy is configured almost entirely through declarative environment variable
 | `NGINX_PROXY_SEND_TIMEOUT`    | Sets `proxy_send_timeout` in NGINX. This value defines the timeout for transmitting a request to a proxied server.                                                                    | `60s`                                    |
 | `NGINX_KEEPALIVE_TIMEOUT`     | Sets `keepalive_timeout` in NGINX. This value defines the timeout for keeping connections alive with clients. If omitted, automatically calculated based on the other TIMEOUT values. | (calculated)                             |
 | `NGINX_TRY_FILES`             | (static only) Sets the `try_files` directive in the root location of the nginx server.                                                                                                | `$uri $uri/ /index.html /index.htm =404` |
+| `NGINX_BASIC_AUTH`            | Enables basic auth for the **whole server**. Format: `username clear-password`. See [Basic Authentication](#basic-authentication).                                                     | (disabled)                             |
+| `NGINX_BASIC_AUTH_1..n`       | Adds additional users to the global basic auth, e.g. `NGINX_BASIC_AUTH_2="user2 pass2"`. Any number of suffixes.                                                                       | (none)                                 |
+| `NGINX_BASIC_AUTH_REALM`      | The realm name shown in the browser's login dialog for the global basic auth.                                                                                                          | `Restricted`                           |
+| `NGINX_BASIC_AUTH_FILE`       | Read-only. Path to the generated global password file, usable in your own custom snippets.                                                                                            | (derived)                              |
 
 ### ENVIRONMENT
 
@@ -104,6 +108,41 @@ You MAY override any of these individually if you need different values, but in 
 
 > My app wants bytes, not human-readable sizes! The `MAX_UPLOAD_SIZE_BYTES` variable is a read-only variable that the entrypoint script calculates from `MAX_UPLOAD_SIZE`. If you need to work with byte values in your application, you can use this variable directly.
 
+### Basic Authentication
+
+You can protect your server (or a single proxied service) with HTTP basic auth entirely through environment variables — no `htpasswd` utility or mounted password files needed. The entrypoint hashes the passwords (MD5-based `$apr1$`, as accepted by NGINX) and writes the password file on every boot, so changing a password is just an environment change and a restart.
+
+**Protecting the whole server** (works in `proxy` and `static` mode):
+
+```yaml
+environment:
+  - NGINX_BASIC_AUTH=admin clear-secret      # the first user: "username clear-password"
+  - NGINX_BASIC_AUTH_2=jane another-secret   # additional users: _1, _2, _3, ... any number
+  - NGINX_BASIC_AUTH_REALM=My Project        # optional, shown in the login dialog. Default: "Restricted"
+```
+
+The **first space** separates username and password — everything after it belongs to the password, so passwords may contain spaces. Numbered variables can be used in any combination (`_2` without `_1` works fine); empty values are ignored.
+
+**Protecting a single proxied service** (only in `proxy` mode): the same scheme with a `PROXY_<KEY>_` prefix, applied only to that service's location:
+
+```yaml
+environment:
+  - PROXY_API_CONTAINER=backend-app
+  - PROXY_API_PATH=/api
+  - PROXY_API_BASIC_AUTH=api-user api-secret    # only /api requires credentials
+  - PROXY_API_BASIC_AUTH_2=api-user2 api-secret2
+  - PROXY_API_BASIC_AUTH_REALM=API Area         # optional, Default: "Restricted"
+```
+
+A few details worth knowing:
+
+* If both global and per-service auth are configured, the per-service authentication **replaces** the global one for that location (its users apply, the global users do not).
+* Turning auth off again works through the same snippet mechanism: a snippet that declares `auth_basic` — including `auth_basic off;` — **takes ownership** for its context, and the entrypoint then skips its generated directives (NGINX forbids the directive twice in one context). For a single proxy service use `docker/custom/nginx/proxy/<key>.conf`, for the whole server a snippet in `docker/custom/nginx/`.
+* The password files are always written, so an owning snippet can point `auth_basic_user_file` at `/etc/nginx/basic-auth/proxy.<key>.htpasswd` (or `${NGINX_BASIC_AUTH_FILE}`) and keep the env-var managed users.
+* The generated password files live in `/etc/nginx/basic-auth/`; the global one is available as the read-only variable `NGINX_BASIC_AUTH_FILE` if you want to reference it in your own snippets.
+* The error pages stay reachable without credentials, so failed logins still show the styled error page instead of a bare NGINX 401.
+* A malformed value (e.g. a missing password or a username containing `:`) aborts the container startup with an error message — a typo can never silently disable the protection.
+
 ## Proxy Mode In-Depth
 
 In `proxy` mode, the entrypoint generates a unique `location` block for each service key it finds.
@@ -120,6 +159,9 @@ For each service you want to proxy, you define a group of variables with a uniqu
 | `PROXY_<KEY>_PROTOCOL`   | **(Optional)** The protocol to communicate with the backend (`http` or `https`). Default is `http`.   |
 | `PROXY_<KEY>_PORT`       | **(Optional)** The internal port the backend listens on (for HTTP). Default is `80`.                  |
 | `PROXY_<KEY>_HTTPS_PORT` | **(Optional)** The internal port the backend listens on (for HTTPS). Default is `443`.                |
+| `PROXY_<KEY>_BASIC_AUTH` | **(Optional)** Enables basic auth for **only this service's location**. Format: `username clear-password`. See [Basic Authentication](#basic-authentication). |
+| `PROXY_<KEY>_BASIC_AUTH_1..n` | **(Optional)** Adds additional users to this service's basic auth, e.g. `PROXY_API_BASIC_AUTH_2="user2 pass2"`. |
+| `PROXY_<KEY>_BASIC_AUTH_REALM` | **(Optional)** The realm name shown in the browser's login dialog for this service. Default is `Restricted`. |
 
 ### **Project Base Path in Proxy Mode**
 
@@ -483,17 +525,18 @@ When running in `static` mode, you can add custom snippets directly to the root 
 docker/custom/
 └── nginx/
     └── location/
-        ├── 01-basic-auth.prod.conf
+        ├── 01-custom-headers.conf
         └── 02-custom-rewrites.conf
 ```
 
 **Example:**
 
 ```nginx
-# docker/custom/nginx/location/01-basic-auth.prod.conf
-auth_basic "Restricted";
-auth_basic_user_file /etc/nginx/.htpasswd;
+# docker/custom/nginx/location/01-custom-headers.conf
+add_header X-Frame-Options "SAMEORIGIN";
 ```
+
+> For basic authentication, prefer the `NGINX_BASIC_AUTH` environment variable — it creates and maintains the password file for you. See [Basic Authentication](#basic-authentication).
 
 #### 2. Custom SSL Certificates `TEMPLATES`
 

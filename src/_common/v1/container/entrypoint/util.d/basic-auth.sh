@@ -48,7 +48,7 @@ collect_basic_auth_credentials() {
 # Returns 1 (and leaves a possibly incomplete file behind) when a credential is malformed.
 #
 # Usage:
-#   write_basic_auth_file "/etc/nginx/basic-auth/default.htpasswd" "user1 pass1" "user2 pass2"
+#   write_basic_auth_file "${NGINX_BASIC_AUTH_DIR}/default.htpasswd" "user1 pass1" "user2 pass2"
 #
 write_basic_auth_file() {
     local output_file="$1"
@@ -59,7 +59,7 @@ write_basic_auth_file() {
         return 1
     fi
 
-    local credential username password
+    local credential username password hashed_password
     for credential in "$@"; do
         username="${credential%% *}"
         password="${credential#* }"
@@ -80,7 +80,25 @@ write_basic_auth_file() {
         fi
 
         # Read the password from stdin, so it never shows up in a process listing
-        printf '%s:%s\n' "${username}" "$(printf '%s' "${password}" | openssl passwd -apr1 -stdin)" >> "${output_file}"
+        hashed_password="$(printf '%s' "${password}" | openssl passwd -apr1 -stdin)"
+
+        # Self-verification: re-hash with the same salt and compare, so a broken
+        # hashing pipeline can never write an unverifiable password file.
+        # The salt is the second "$"-separated field of the apr1 hash.
+        local hash_salt
+        hash_salt="$(printf '%s' "${hashed_password}" | cut -d'$' -f3)"
+        if [ "$(printf '%s' "${password}" | openssl passwd -apr1 -stdin -salt "${hash_salt}")" != "${hashed_password}" ]; then
+            echo "[UTIL.basic-auth] Error: The generated hash for user '${username}' failed the self-verification. Aborting." >&2
+            return 1
+        fi
+
+        printf '%s:%s\n' "${username}" "${hashed_password}" >> "${output_file}"
+
+        # Log the user with the password LENGTH (never the password itself). This makes
+        # truncated values visible at a glance: some environment file parsers cut values
+        # at characters like '#', and the login would otherwise fail with a cryptic
+        # "password mismatch" while the boot log looks perfectly fine.
+        echo "[UTIL.basic-auth] - Added user '${username}' (password: ${#password} characters)"
     done
 
     chmod 644 "${output_file}"
@@ -91,7 +109,7 @@ write_basic_auth_file() {
 # line breaks) are rejected. Returns 1 on an invalid realm, prints the directives otherwise.
 #
 # Usage:
-#   directives=$(build_basic_auth_directives "Restricted" "/etc/nginx/basic-auth/default.htpasswd")
+#   directives=$(build_basic_auth_directives "Restricted" "${NGINX_BASIC_AUTH_DIR}/default.htpasswd")
 #
 build_basic_auth_directives() {
     local realm="$1"

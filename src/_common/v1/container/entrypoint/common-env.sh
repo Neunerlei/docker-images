@@ -36,7 +36,9 @@ export CONTAINER_CUSTOM_SSL_CERTS_DIR="${CONTAINER_CUSTOM_DIR}/certs"
 export CONTAINER_CUSTOM_NGINX_DIR="${CONTAINER_CUSTOM_DIR}/nginx"
 export NGINX_DIR="/etc/nginx"
 export NGINX_SNIPPETS_DIR="${NGINX_DIR}/snippets"
-export NGINX_BASIC_AUTH_DIR="${NGINX_DIR}/basic-auth"
+# Basic auth password files are generated at runtime, so they must live in the
+# work directory — the only guaranteed-writable location on a read-only filesystem
+export NGINX_BASIC_AUTH_DIR="${CONTAINER_WORK_DIR}/nginx-basic-auth"
 export NGINX_CUSTOM_SNIPPETS_DIR="${NGINX_SNIPPETS_DIR}/custom.d"
 export NGINX_CUSTOM_SNIPPETS_GLOBAL_DIR="${NGINX_SNIPPETS_DIR}/global.d"
 export NGINX_CUSTOM_SNIPPETS_LOCATION_DIR="${NGINX_SNIPPETS_DIR}/location.d"

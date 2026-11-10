@@ -92,6 +92,21 @@ set -e
 #       --exec-after-dependencies "chown -R www-data:www-data /opt/venv"
 #
 #
+# --user-owned-dir DIR
+#
+#     Declares a directory that must exist and be owned by the www-data user,
+#     so processes running as www-data can work inside it. The installer
+#     creates missing directories and takes care of the ownership at BUILD
+#     time (required for the container to boot on read-only filesystems,
+#     where the runtime ownership step cannot write), and registers the
+#     directory for the runtime user-permissions step, which keeps the
+#     ownership correct on every boot. May be specified multiple times.
+#
+#     Example:
+#       --user-owned-dir "/var/www/.npm"
+#       --user-owned-dir "/usr/local/lib/node_modules"
+#
+#
 # --tpl NAME [SUB-FLAGS...]
 #
 #     Registers a named template with the runtime templating system. At
@@ -159,6 +174,9 @@ declare entrypoint_dir="${current_dir}/container/entrypoint"
 # Load the common environment variables
 source "${entrypoint_dir}/common-env.sh"
 
+# Shared ownership utility (also used by the user-permissions step at runtime)
+source "${entrypoint_dir}/util.d/user-owned-dir.sh"
+
 # A list of dependencies to install using apt
 declare dependencies_to_install=()
 
@@ -168,6 +186,9 @@ declare -A scripts_wrap_www_data=()
 
 # Array to collect commands to run after dependencies are installed ---
 declare -a commands_to_exec_after_deps=()
+
+# Directories that must exist and be owned by the www-data user
+declare -a user_owned_directories=()
 
 # These flags will be prepended to the command-line arguments
 # to ensure that certain default templates are always registered.
@@ -204,6 +225,8 @@ declare -a default_flags=(
     "--tpl" "nginx-snippets-resolver"
     "--source" "${CONTAINER_TEMPLATES_NGINX_SNIPPETS_DIR}/resolver.nginx.conf"
     "--target" "${NGINX_SNIPPETS_DIR}/resolver.nginx.conf"
+    "--tpl" "nginx-snippets-basic-auth"
+    "--target" "${NGINX_SNIPPETS_DIR}/basicAuth.nginx.conf"
     "--tpl" "nginx-snippets-global-default"
     "--target" "${NGINX_SNIPPETS_DIR}/default.nginx.conf"
     "--tpl" "nginx-custom-snippets"
@@ -401,6 +424,16 @@ while [[ "$#" -gt 0 ]]; do
         commands_to_exec_after_deps+=("$2")
         shift 2
         ;;
+    --user-owned-dir)
+        if [[ -z "$2" ]]; then
+            echo "[INSTALLER] Error: --user-owned-dir flag requires a non-empty directory path." >&2
+            exit 1
+        fi
+        if [[ ! " ${user_owned_directories[*]} " =~ " $2 " ]]; then
+            user_owned_directories+=("$2")
+        fi
+        shift 2
+        ;;
     *)
         shift
         ;;
@@ -456,6 +489,12 @@ REGISTRY_HEADER
             done
         fi
     done
+
+    echo ""
+    echo "# --- 3. Extend user_owned_directories_registry ---"
+    for user_owned_dir in "${user_owned_directories[@]}"; do
+        printf 'user_owned_directories_registry+=(%q)\n' "$user_owned_dir"
+    done
 } >> "$CONTAINER_INSTALLER_REGISTRY_SCRIPT"
 
 echo "[INSTALLER] Installer registry script generated successfully."
@@ -468,6 +507,17 @@ echo "[INSTALLER] Copying common container files"
 
 cp -R "${current_dir}/container/." "${CONTAINER_DIR}/"
 chmod +x "${CONTAINER_ENTRYPOINT_SCRIPT}"
+# Make the utility commands executable at build time already, so they keep working
+# when the container runs on a read-only filesystem (the user-permissions step only
+# chmods files that are not executable yet, which would fail there)
+if [ -d "${CONTAINER_BIN_DIR}" ]; then
+    chmod +x "${CONTAINER_BIN_DIR}/"*
+fi
+# Unify the ownership of the container directory: files created by this installer run
+# are root-owned, while the image-specific files are copied as www-data. Doing this at
+# build time keeps the runtime ownership step a no-op, which is required for the
+# container to boot on read-only filesystems.
+ensure_user_owned_dir "${CONTAINER_DIR}"
 
 # -----------------------------------------------------------------
 # Ensure home permissions for www-data
@@ -530,6 +580,18 @@ if [[ ${#commands_to_exec_after_deps[@]} -gt 0 ]]; then
             echo "[INSTALLER] Error: Command failed: '${cmd}'" >&2
             exit 1
         fi
+    done
+fi
+
+# -----------------------------------------------------------------
+# User owned directories
+# -----------------------------------------------------------------
+# Applied after the post-dependency commands, so commands like a venv or npm
+# installation can create their directories first.
+if [[ ${#user_owned_directories[@]} -gt 0 ]]; then
+    echo "[INSTALLER] Ensuring user owned directories..."
+    for user_owned_dir in "${user_owned_directories[@]}"; do
+        ensure_user_owned_dir "$user_owned_dir"
     done
 fi
 

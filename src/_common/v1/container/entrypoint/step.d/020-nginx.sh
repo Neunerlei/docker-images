@@ -73,20 +73,24 @@ _process_nginx_error_pages() {
 #   NGINX_BASIC_AUTH_REALM                          optional realm shown in the login dialog
 #
 # When at least one user is configured, the password file is written to
-# ${NGINX_BASIC_AUTH_DIR}/default.htpasswd and NGINX_BASIC_AUTH_BLOCK is filled with the
-# matching "auth_basic" directives, which the server templates include below. The
-# authentication then applies to the whole server; a custom snippet can still take
-# ownership with its own "auth_basic" directive (see below), or opt out with
-# "auth_basic off;".
+# ${NGINX_BASIC_AUTH_DIR}/default.htpasswd and the "auth_basic" directives are written
+# to the "nginx-snippets-basic-auth" template target (${NGINX_SNIPPETS_DIR}/basicAuth.nginx.conf,
+# symlinked into the work directory) — an include file the server templates always
+# include (an empty include is valid NGINX). The authentication then applies to the
+# whole server; a custom snippet can still take ownership with its own "auth_basic"
+# directive (see below), or opt out with "auth_basic off;".
 #
 # The password files of the per-proxy authentication (PROXY_<KEY>_BASIC_AUTH, handled
-# in the nginx image) live in the same directory, so it is reset here on every boot —
-# this step always runs before the proxy configuration.
+# in the nginx image) live in ${NGINX_BASIC_AUTH_DIR}, so it is reset here on every
+# boot — this step always runs before the proxy configuration.
 _configure_nginx_basic_auth() {
     # Start from a clean slate, so users or proxies that were removed from the
     # environment since the last boot do not leave their password files behind
     rm -rf "${NGINX_BASIC_AUTH_DIR}"
     mkdir -p "${NGINX_BASIC_AUTH_DIR}"
+
+    # The include file must always exist, so it starts with the "not configured" variant
+    printf '# basic auth is not configured\n' > "${NGINX_SNIPPETS_DIR}/basicAuth.nginx.conf"
 
     local -a credentials=()
     mapfile -t credentials < <(collect_basic_auth_credentials "NGINX_BASIC_AUTH")
@@ -103,14 +107,16 @@ _configure_nginx_basic_auth() {
         exit 1
     fi
 
-    if ! NGINX_BASIC_AUTH_BLOCK="$(build_basic_auth_directives "${NGINX_BASIC_AUTH_REALM:-Restricted}" "${auth_file}")"; then
+    local auth_directives
+    if ! auth_directives="$(build_basic_auth_directives "${NGINX_BASIC_AUTH_REALM:-Restricted}" "${auth_file}")"; then
         echo "[ENTRYPOINT.nginx] Error: Invalid NGINX_BASIC_AUTH_REALM value. Aborting." >&2
         exit 1
     fi
+    printf '%s\n' "${auth_directives}" > "${NGINX_SNIPPETS_DIR}/basicAuth.nginx.conf"
 
-    # NGINX_BASIC_AUTH_BLOCK and NGINX_BASIC_AUTH_FILE are deliberately plain shell
-    # variables (not "local", not exported): they must stay visible to the template
-    # rendering (which reads them via get_all_vars) without polluting the environment
+    # NGINX_BASIC_AUTH_FILE is deliberately a plain shell variable (not "local", not
+    # exported): it must stay visible to the template rendering (which reads it via
+    # get_all_vars) without polluting the environment
     NGINX_BASIC_AUTH_FILE="${auth_file}"
 }
 
@@ -118,8 +124,7 @@ if [[ "${feature_registry}" == *"nginx"* ]]; then
     echo "[ENTRYPOINT.nginx] Starting Nginx configuration process..."
 
     # Basic auth first: it resets the password file directory and prepares the
-    # auth_basic directives consumed by the server templates
-    NGINX_BASIC_AUTH_BLOCK=""
+    # auth_basic include file consumed by the server templates
     NGINX_BASIC_AUTH_FILE=""
     _configure_nginx_basic_auth
 
@@ -135,12 +140,12 @@ if [[ "${feature_registry}" == *"nginx"* ]]; then
 
     # NGINX does not allow "auth_basic" twice in the same context. If a custom
     # server-level snippet declares its own, it takes ownership of the
-    # authentication and we skip the generated NGINX_BASIC_AUTH directives.
+    # authentication and we empty the generated include file instead.
     # (The generated password file is still written, so the snippet may
     # reference it via ${NGINX_BASIC_AUTH_FILE}.)
-    if [[ -n "${NGINX_BASIC_AUTH_BLOCK}" ]] && grep -qsE '^\s*auth_basic' "${NGINX_CUSTOM_SNIPPETS_DIR}"/*.conf; then
+    if grep -qsE '^\s*auth_basic' "${NGINX_SNIPPETS_DIR}/basicAuth.nginx.conf" && grep -qsE '^\s*auth_basic' "${NGINX_CUSTOM_SNIPPETS_DIR}"/*.conf; then
         echo "[ENTRYPOINT.nginx] A custom server snippet declares its own 'auth_basic' — skipping the generated NGINX_BASIC_AUTH directives."
-        NGINX_BASIC_AUTH_BLOCK=""
+        printf '# basic auth is managed by a custom server snippet\n' > "${NGINX_SNIPPETS_DIR}/basicAuth.nginx.conf"
     fi
 
     if [ "${DOCKER_SERVICE_PROTOCOL}" == "https" ]; then

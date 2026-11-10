@@ -66,6 +66,7 @@ The proxy is configured almost entirely through declarative environment variable
 | `PGID`                        | The group ID to run processes as (`www-data`). Useful for matching host file permissions.                                                                                             | `33`                                     |
 | `CONTAINER_MODE`              | Read-only. Automatically set to `proxy` or `static`.                                                                                                                                  | `static`                                 |
 | `MAX_UPLOAD_SIZE`             | A convenient variable to set the global `client_max_body_size`. This applies only if in "proxy" mode, as all uploads need to pass through the proxy.                                  | `100M`                                   |
+| `USER_OWNED_DIRECTORIES`      | Additional directories (space separated) that should be owned by the `www-data` user, e.g. for mounted volumes the application writes into. They are created when missing.           | (none)                                   |
 | `MAX_UPLOAD_SIZE_BYTES`       | Read-only. The byte value of `MAX_UPLOAD_SIZE`, calculated by the entrypoint script.                                                                                                  | (calculated)                             |
 | `ENVIRONMENT`                 | Sets the overall environment. `dev`/`development` is non-production; all other values are considered production.                                                                      | `production`                             |
 | **Project**                   |                                                                                                                                                                                       |                                          |
@@ -88,7 +89,7 @@ The proxy is configured almost entirely through declarative environment variable
 | `NGINX_BASIC_AUTH`            | Enables basic auth for the **whole server**. Format: `username clear-password`. See [Basic Authentication](#basic-authentication).                                                     | (disabled)                             |
 | `NGINX_BASIC_AUTH_1..n`       | Adds additional users to the global basic auth, e.g. `NGINX_BASIC_AUTH_2="user2 pass2"`. Any number of suffixes.                                                                       | (none)                                 |
 | `NGINX_BASIC_AUTH_REALM`      | The realm name shown in the browser's login dialog for the global basic auth.                                                                                                          | `Restricted`                           |
-| `NGINX_BASIC_AUTH_FILE`       | Read-only. Path to the generated global password file, usable in your own custom snippets.                                                                                            | (derived)                              |
+| `NGINX_BASIC_AUTH_FILE`       | Read-only. Path to the generated global password file, usable in your own custom snippets. The generated `auth_basic` directives live in the always-present snippet `/etc/nginx/snippets/basicAuth.nginx.conf` (empty when disabled). | (derived)                |
 
 ### ENVIRONMENT
 
@@ -138,10 +139,11 @@ A few details worth knowing:
 
 * If both global and per-service auth are configured, the per-service authentication **replaces** the global one for that location (its users apply, the global users do not).
 * Turning auth off again works through the same snippet mechanism: a snippet that declares `auth_basic` — including `auth_basic off;` — **takes ownership** for its context, and the entrypoint then skips its generated directives (NGINX forbids the directive twice in one context). For a single proxy service use `docker/custom/nginx/proxy/<key>.conf`, for the whole server a snippet in `docker/custom/nginx/`.
-* The password files are always written, so an owning snippet can point `auth_basic_user_file` at `/etc/nginx/basic-auth/proxy.<key>.htpasswd` (or `${NGINX_BASIC_AUTH_FILE}`) and keep the env-var managed users.
-* The generated password files live in `/etc/nginx/basic-auth/`; the global one is available as the read-only variable `NGINX_BASIC_AUTH_FILE` if you want to reference it in your own snippets.
+* The password files are always written, so an owning snippet can point `auth_basic_user_file` at `${NGINX_BASIC_AUTH_DIR}/proxy.<key>.htpasswd` (or `${NGINX_BASIC_AUTH_FILE}`) and keep the env-var managed users.
+* The generated `auth_basic` directives are snippets like any other: `/etc/nginx/snippets/basicAuth.nginx.conf` for the server (registered like the built-in snippets, symlinked into the work directory) and `proxy.d/<key>.auth.conf` per service (picked up by the custom-snippet include of the location). Both always exist and are empty when the respective auth is disabled or owned by a custom snippet — do not give your own snippets those names.
 * The error pages stay reachable without credentials, so failed logins still show the styled error page instead of a bare NGINX 401.
 * A malformed value (e.g. a missing password or a username containing `:`) aborts the container startup with an error message — a typo can never silently disable the protection.
+* **Troubleshooting "password mismatch":** the boot log prints every configured user with its password *length*. If logins fail although you entered the password correctly, compare that length with what you expect — some environment file parsers truncate values at characters like `#` or `$` before they reach the container. Verify what actually arrived with `docker exec <container> printenv NGINX_BASIC_AUTH` (or `PROXY_<KEY>_BASIC_AUTH`). Compose YAML lists and `.env` files pass such characters through unchanged, but unquoted values in shell scripts or third-party env UIs may not.
 
 ## Proxy Mode In-Depth
 
@@ -490,7 +492,7 @@ docker/custom/
 
 If you are using the container as proxy (`CONTAINER_MODE` = `proxy`), this feature allows you to add custom rules *inside* the `location` block of a specific proxied service. This is ideal for things like per-route caching, rate-limiting, or custom headers.
 
-* **How:** Inside your custom directory, create a `nginx/proxy/` sub-directory. Then create a new `.conf` file with the prefix of `${service_key}` (the **lowercase version of your proxy key**). For a service defined with `PROXY_API_CONTAINER`, the filename would be `api.conf`. Your name can include markers like: `api.prod-or-env-staging.https.conf`.
+* **How:** Inside your custom directory, create a `nginx/proxy/` sub-directory. Then create a new `.conf` file starting with the **lowercase version of your proxy key**, followed by a `.` and any name you like — the dot is the key boundary, so keys sharing a prefix (e.g. `api` and `api_v2`) do not include each other's snippets. For a service defined with `PROXY_API_CONTAINER`, the filename could be `api.cache.conf`. Your name can include markers like: `api.prod-or-env-staging.https.conf`. Snippets named exactly `api.conf` (without a purpose part) keep working for backward compatibility, but the dotted form is the recommended convention.
 * **Result:** All files following that schema will be included within the `location` block for the `API` service (if the marker conditions are met).
 
 **Directory structure:**
@@ -499,7 +501,7 @@ If you are using the container as proxy (`CONTAINER_MODE` = `proxy`), this featu
 docker/custom/
 └── nginx/
     └── proxy/
-        ├── api.conf
+        ├── api.cache.conf
         ├── frontend.prod.conf
         └── backend.https.conf
 ```
@@ -507,7 +509,7 @@ docker/custom/
 **Example:**
 
 ```nginx
-# docker/custom/nginx/proxy/api.conf
+# docker/custom/nginx/proxy/api.cache.conf
 # Custom caching for the API service
 proxy_cache_valid 200 10m;
 proxy_cache_key "$scheme$request_method$host$request_uri";
@@ -659,7 +661,7 @@ project/
 │       │   ├── global/
 │       │   │   └── 01-cors.conf
 │       │   ├── proxy/
-│       │   │   └── api.conf
+│       │   │   └── api.cache.conf
 │       │   ├── 01-custom-location.conf
 │       │   ├── errorPage.html
 │       │   └── errorPage.json

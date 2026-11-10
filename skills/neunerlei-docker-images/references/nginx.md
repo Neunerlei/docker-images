@@ -46,7 +46,7 @@ proxy:
 
 ## Basic authentication
 
-Env-var driven, regenerated every boot; passwords hashed with `openssl passwd -apr1`, files land in `/etc/nginx/basic-auth/`.
+Env-var driven, regenerated every boot; passwords hashed with `openssl passwd -apr1`, htpasswd files land in `/container/work/nginx-basic-auth/`. The generated `auth_basic` directives are regular snippets: `/etc/nginx/snippets/basicAuth.nginx.conf` (server context, registered via the `nginx-snippets-basic-auth` tpl) and `proxy.d/<key>.auth.conf` per service (auto-included by the location's custom-snippet glob) — always present, empty when disabled.
 
 - **Global (all images, whole server):** `NGINX_BASIC_AUTH="user clear-pass"`, extra users `NGINX_BASIC_AUTH_1..n`, realm `NGINX_BASIC_AUTH_REALM` (default `Restricted`). First space separates user/password — passwords may contain spaces. Generated file path available as `NGINX_BASIC_AUTH_FILE`.
 - **Per service (this image, proxy mode):** `PROXY_<KEY>_BASIC_AUTH(_1..n/_REALM)` — replaces the global auth for that location only.
@@ -62,12 +62,12 @@ Beyond the shared dirs (`env/`, `certs/`, `entrypoint/`, `errorPage.html/json`):
 | `nginx/` | server block | Server-level snippets → `/etc/nginx/snippets/custom.d/`. |
 | `nginx/global/` | `http` block | Global rules, headers, `map` blocks. |
 | `nginx/location/` | root `location` block (static mode) | Cannot override `try_files` — use `NGINX_TRY_FILES`. |
-| `nginx/proxy/` | per-service `location` block (proxy mode) | Filename = **lowercase service key**: `api.conf` targets `PROXY_API_*`; markers allowed: `api.prod-or-env-staging.https.conf`. |
+| `nginx/proxy/` | per-service `location` block (proxy mode) | Filename = lowercase service key + `.` + any name: `api.cache.conf` targets `PROXY_API_*` (the dot is the key boundary — `api` and `api_v2` don't collide); markers allowed: `api.prod-or-env-staging.https.conf`; bare `api.conf` works for backward compat. |
 
 Example per-service snippet:
 
 ```nginx
-# nginx/proxy/api.conf — inside the API service's location block
+# nginx/proxy/api.cache.conf — inside the API service's location block
 proxy_cache_valid 200 10m;
 proxy_cache_key "$scheme$request_method$host$request_uri";
 ```

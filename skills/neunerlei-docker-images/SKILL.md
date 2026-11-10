@@ -66,7 +66,8 @@ Dev-only: with `ENVIRONMENT=development` and `/container/custom` mounted, step 0
 | `NGINX_PROXY_SEND_TIMEOUT` | `60s` | Request send timeout (php-nginx: `fastcgi_read_timeout`). |
 | `NGINX_KEEPALIVE_TIMEOUT` | (calculated) | Derived from the other timeouts if unset. |
 | `NGINX_TRY_FILES` | per image | Root-location routing; see references. |
-| `NGINX_BASIC_AUTH` | (disabled) | Basic auth for the whole server: `username clear-password`; extra users `NGINX_BASIC_AUTH_1..n`, realm `NGINX_BASIC_AUTH_REALM`. Per-proxy: `PROXY_<KEY>_BASIC_AUTH(_1..n/_REALM)` replaces it for that location. Configured inside step 020 (no separate step); passwords hashed with `openssl passwd -apr1`; malformed values abort boot. |
+| `NGINX_BASIC_AUTH` | (disabled) | Basic auth for the whole server: `username clear-password`; extra users `NGINX_BASIC_AUTH_1..n`, realm `NGINX_BASIC_AUTH_REALM`. Per-proxy: `PROXY_<KEY>_BASIC_AUTH(_1..n/_REALM)` replaces it for that location. Directives are generated as snippets (`/etc/nginx/snippets/basicAuth.nginx.conf` server-wide, `proxy.d/<key>.auth.conf` per service — always present, empty when disabled); passwords hashed with `openssl passwd -apr1`; malformed values abort boot. |
+| `USER_OWNED_DIRECTORIES` | (none) | Space-separated extra dirs to create/own as www-data at boot (volumes the app writes into). Image-level dirs are declared at build via the installer's `--user-owned-dir` flag. |
 
 Rule of thumb: use `MAX_UPLOAD_SIZE` and only override individual limits when values must differ.
 

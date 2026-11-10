@@ -13,10 +13,12 @@ RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=apt-lib,target=/var/lib/apt,sharing=locked\
     --mount=type=bind,from=common,source=v1,target=/tmp/installer \
     bash /tmp/installer/installer.sh \
+      --user-owned-dir "/var/www/html/public" \
       --add-dependency "python3-pip" \
       --add-dependency "python3-venv" \
       --add-dependency "net-tools" \
-      --exec-after-dependencies "python3 -m venv /opt/venv && chown -R www-data:www-data /opt/venv" \
+      --exec-after-dependencies "python3 -m venv /opt/venv" \
+      --user-owned-dir "/opt/venv" \
       --env-wrap "/opt/venv/bin/python" \
       --env-wrap "/opt/venv/bin/pip" \
       --www-data-wrap "/opt/venv/bin/pip" \

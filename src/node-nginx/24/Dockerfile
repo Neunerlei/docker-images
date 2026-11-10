@@ -12,6 +12,8 @@ RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
     --mount=type=bind,from=common,source=v1,target=/tmp/installer \
     bash /tmp/installer/installer.sh \
     --exec-after-dependencies "npm install -g pnpm" \
+    --user-owned-dir "/var/www/.npm" \
+    --user-owned-dir "/usr/local/lib/node_modules" \
     --www-data-wrap "/usr/local/bin/npm" \
     --www-data-wrap "/usr/local/bin/pnpm"
 

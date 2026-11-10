@@ -62,6 +62,12 @@ declare -g -a user_owned_directories_registry=(
     "/var/www" # This is important because this is the home directory for the www-data user, and we want to ensure it has the correct ownership and permissions.
     "${NGINX_DOC_ROOT}"
 )
+# Additional user owned directories can be declared for the running container via the
+# USER_OWNED_DIRECTORIES environment variable (space separated), e.g. for volumes that
+# the www-data processes need to write into
+for user_owned_dir in ${USER_OWNED_DIRECTORIES}; do
+    user_owned_directories_registry+=("${user_owned_dir}")
+done
 # Custom directory children
 # The set of sub-directories that should exist inside CONTAINER_CUSTOM_DIR.
 # Used by 005-init-custom-on-dev.sh to create the skeleton on first startup in development.

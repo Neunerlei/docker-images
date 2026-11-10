@@ -177,6 +177,21 @@ source "${entrypoint_dir}/common-env.sh"
 # Shared ownership utility (also used by the user-permissions step at runtime)
 source "${entrypoint_dir}/util.d/user-owned-dir.sh"
 
+# -----------------------------------------------------------------
+# Work data staging setup
+# -----------------------------------------------------------------
+# During the build, the work data directory is a symlink to the staging area,
+# so everything written into it — by this installer, by later build steps, or
+# by child images extending one of ours — is captured as the pristine build
+# state. The entrypoint resets the real work data from the staging area on
+# every boot (see entrypoint.sh).
+echo "[INSTALLER] Preparing work data staging area"
+rm -rf "${CONTAINER_WORK_STAGING_DIR}" "${CONTAINER_WORK_DATA_DIR}"
+mkdir -p "${CONTAINER_WORK_DIR}" "${CONTAINER_WORK_STAGING_DIR}"
+# The staging area is a sibling of the work directory, so the relative link
+# target has to go one level up from the link's location inside the work dir
+ln -s "../$(basename "${CONTAINER_WORK_STAGING_DIR}")" "${CONTAINER_WORK_DATA_DIR}"
+
 # A list of dependencies to install using apt
 declare dependencies_to_install=()
 
@@ -366,13 +381,15 @@ while [[ "$#" -gt 0 ]]; do
         # --- Create dummy work entry and symlink ---
         # The work directory entry serves as the symlink target. Subsequent build
         # steps (e.g., installing PHP extensions) may write files into the target
-        # path, which now resolves through the symlink into CONTAINER_WORK_DIR.
-        # The clean-state snapshot is taken on first boot by the entrypoint, so
-        # all files written during the build are captured correctly.
-        work_path="${CONTAINER_WORK_DIR}/${tpl_name}"
+        # path, which now resolves through the symlink into CONTAINER_WORK_DIR —
+        # and from there into the pristine staging area (work is a symlink to it
+        # during the build), so all files written during the build are captured.
+        work_path="${CONTAINER_WORK_DATA_DIR}/${tpl_name}"
         if [[ "$tpl_type" == "file" || "$tpl_type" == "cb_file" ]]; then
             echo "[INSTALLER] Creating dummy file at work path: ${work_path}"
-            mkdir -p "$(dirname "$work_path")"
+            # The work data directory is a symlink during the build — [ -d ] follows
+            # it, while "mkdir -p" would fail on the link itself
+            [ -d "$(dirname "$work_path")" ] || mkdir -p "$(dirname "$work_path")"
             touch "$work_path"
         else
             echo "[INSTALLER] Creating dummy directory at work path: ${work_path}"
@@ -516,8 +533,15 @@ fi
 # Unify the ownership of the container directory: files created by this installer run
 # are root-owned, while the image-specific files are copied as www-data. Doing this at
 # build time keeps the runtime ownership step a no-op, which is required for the
-# container to boot on read-only filesystems.
+# container to boot on read-only filesystems. The staging area is handled explicitly,
+# because a recursive chown does not descend through the work directory symlink.
+# Unify the ownership of the container directory: files created by this installer run
+# are root-owned, while the image-specific files are copied as www-data. Doing this at
+# build time keeps the runtime ownership step a no-op, which is required for the
+# container to boot on read-only filesystems. The staging area is handled explicitly,
+# because a recursive chown does not descend through the work data symlink.
 ensure_user_owned_dir "${CONTAINER_DIR}"
+ensure_user_owned_dir "${CONTAINER_WORK_STAGING_DIR}"
 
 # -----------------------------------------------------------------
 # Ensure home permissions for www-data

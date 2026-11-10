@@ -27,7 +27,14 @@ export CONTAINER_INSTALLER_REGISTRY_SCRIPT="${CONTAINER_DIR}/installer-registry.
 export CONTAINER_ENTRYPOINT_DIR="${CONTAINER_DIR}/entrypoint"
 export CONTAINER_ENTRYPOINT_SCRIPT="${CONTAINER_ENTRYPOINT_DIR}/entrypoint.sh"
 export CONTAINER_WORK_DIR="${CONTAINER_DIR}/work"
-export CONTAINER_WORK_CLEAN_DIR="${CONTAINER_WORK_DIR}/.clean-state"
+# All template/entrypoint work data lives in this sub-directory of the work directory
+export CONTAINER_WORK_DATA_DIR="${CONTAINER_WORK_DIR}/data"
+# Pristine build-time state of the work data. During the image build, work/data
+# is a symlink to this directory, so everything written "into the work data" —
+# by the installer, later build steps or child images — lands here. Every boot
+# resets the real work data from it (see entrypoint.sh). Lives OUTSIDE the work
+# directory so that a mount over the work directory can not shadow it.
+export CONTAINER_WORK_STAGING_DIR="${CONTAINER_DIR}/work-data-staging"
 export CONTAINER_VARS_SCRIPT="${CONTAINER_WORK_DIR}/container-vars.sh"
 export CONTAINER_CUSTOM_DIR="${CONTAINER_DIR}/custom"
 export CONTAINER_CUSTOM_ENV_DIR="${CONTAINER_CUSTOM_DIR}/env"

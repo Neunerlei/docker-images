@@ -78,26 +78,32 @@ declare -gA container_custom_dir_child_registry=(
     ["${CONTAINER_CUSTOM_ENTRYPOINT_DIR}"]=1
 )
 
-# Reset the working directory to the clean build-time state.
-# On the very first boot, CONTAINER_WORK_CLEAN_DIR does not exist yet.
-# We snapshot the current contents of CONTAINER_WORK_DIR (which includes
-# everything written during the Docker build, e.g. PHP extension .ini files)
-# into CONTAINER_WORK_CLEAN_DIR so subsequent boots can restore from it.
-# On every later boot, we wipe everything in CONTAINER_WORK_DIR except
-# CONTAINER_WORK_CLEAN_DIR itself, then copy the snapshot back.
-if [ -d "${CONTAINER_WORK_CLEAN_DIR}" ]; then
-    echo "[ENTRYPOINT] Resetting working directory from clean-state snapshot..."
-    # Remove everything in CONTAINER_WORK_DIR except the clean-state directory
-    find "${CONTAINER_WORK_DIR}" -mindepth 1 -maxdepth 1 ! -name "$(basename "${CONTAINER_WORK_CLEAN_DIR}")" -exec rm -rf {} +
-    # Restore from the snapshot
-    cp -a "${CONTAINER_WORK_CLEAN_DIR}/." "${CONTAINER_WORK_DIR}/"
-    echo "[ENTRYPOINT] Working directory reset complete."
-elif [ -d "${CONTAINER_WORK_DIR}" ]; then
-    echo "[ENTRYPOINT] First boot detected — creating clean-state snapshot..."
-    mkdir -p "${CONTAINER_WORK_CLEAN_DIR}"
-    # Copy everything except the clean-state directory itself to avoid recursive copy
-    find "${CONTAINER_WORK_DIR}" -mindepth 1 -maxdepth 1 ! -name "$(basename "${CONTAINER_WORK_CLEAN_DIR}")" -exec cp -a {} "${CONTAINER_WORK_CLEAN_DIR}/" \;
-    echo "[ENTRYPOINT] Clean-state snapshot created."
+# --- Work data bootstrap -----------------------------------------------
+# The staging area holds the pristine build-time state of the work data: during
+# the build, work/data is a symlink to it, so everything written into the work
+# data — by the installer, later build steps or child images — is captured
+# there. On every boot, the work data is reset to exactly that state: the
+# build-time symlink (or a stale runtime copy from a previous boot) is replaced
+# by a real directory, and the entrypoint steps re-generate everything they
+# need. A work directory mounted empty (tmpfs, Kubernetes emptyDir) is seeded
+# the same way — the staging area lives outside the work directory, so a mount
+# can not shadow it.
+if [ ! -d "${CONTAINER_WORK_DIR}" ]; then
+    echo "[ENTRYPOINT] Work directory is missing — creating it..."
+    mkdir -p "${CONTAINER_WORK_DIR}"
+fi
+
+echo "[ENTRYPOINT] Resetting work data from the staging area..."
+rm -rf "${CONTAINER_WORK_DATA_DIR}"
+if [ -d "${CONTAINER_WORK_STAGING_DIR}" ]; then
+    cp -a "${CONTAINER_WORK_STAGING_DIR}" "${CONTAINER_WORK_DATA_DIR}"
+else
+    # The staging area is created by the installer during the image build and is as
+    # much part of the image as the entrypoint itself — a healthy image can not boot
+    # without it. Continuing with an empty work data directory would only die a few
+    # steps later with a far less helpful "Output directory does not exist" error.
+    echo "[ENTRYPOINT] Error: the work data staging area is missing at '${CONTAINER_WORK_STAGING_DIR}'. It is created by the installer during the image build — the image appears to be broken or was modified after the build. Aborting." >&2
+    exit 1
 fi
 
 # Source the installer registry script to populate the in-memory registries

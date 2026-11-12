@@ -41,6 +41,6 @@ if [[ ${#detected_legacy_mounts[@]} -gt 0 ]]; then
     echo "    # ✅ NEW (use this instead):"
     echo "    - ./docker:/container/custom"
     echo ""
-    echo "Migration guide: https://github.com/Neunerlei/docker-images/blob/main/docs/migration/migrate-to-centralized-container-dir.md"
+    echo "Migration guide: https://github.com/Neunerlei/docker-images/blob/main/docs/migration/2026-02-05-migrate-to-centralized-container-dir.md"
     exit 1
 fi

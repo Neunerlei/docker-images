@@ -131,7 +131,7 @@ volumes:
 
 The images support `readOnlyRootFilesystem: true` (Kubernetes) and `docker run --read-only`. Everything the container writes at runtime goes to two places:
 
-1. **`/container/work`** — all rendered configuration. Mount it writable; it may start **empty** (tmpfs, `emptyDir`) — the entrypoint seeds it from the image's pristine build state (`/container/work-data-staging`) on every boot, and resets it to that state on every restart, so stale configuration from a previous boot is always discarded.
+1. **`/container/work`** — all rendered configuration. Mount it writable; it may start **empty** (tmpfs, `emptyDir`) — the entrypoint seeds it from the image's pristine build state (`/container/work-data-staging`) on every boot, and resets it to that state on every restart, so stale configuration from a previous boot is always discarded. The writable home of the `www-data` service user (`/container/work/www-data-home`, `CONTAINER_WWW_DATA_HOME_DIR`) lives here too; it is **not** reset, so caches and dotfiles survive restarts — budget your tmpfs/`emptyDir` size accordingly.
 2. **Runtime directories** — `/run`, `/tmp`, `/var/lib/nginx`, `/var/log/nginx`. Mount them as tmpfs.
 
 Docker:
@@ -163,6 +163,23 @@ volumes:
   - { name: nginx-lib, emptyDir: {} }
   - { name: nginx-log, emptyDir: {} }
 ```
+
+## The www-data Home Directory
+
+Every process running as `www-data` (supervisor services with `user=www-data`, `gosu` worker commands, wrapped CLIs like `pip`/`npm`/`composer`, FPM workers) gets the writable home **`/container/work/www-data-home`** (`CONTAINER_WWW_DATA_HOME_DIR`, read-only constant), so libraries that write to `~/` at import or runtime (playwright, huggingface, matplotlib, …) work. It is inside the work directory, so it is writable on read-only filesystems too, and it is not part of the per-boot work-data reset.
+
+- **Do not bake build-time content into `$HOME`.** With `USER www-data` + `RUN playwright install` / `pip install --user` / `composer global require`, the content lands in `/container/work/www-data-home` — hidden behind a tmpfs/`emptyDir` mount at runtime, and with a named volume at `/container/work` it is copied only on the *first* mount, so image upgrades keep stale content (e.g. mismatched playwright browsers). Use explicit paths instead: `PLAYWRIGHT_BROWSERS_PATH`, `COMPOSER_HOME`, `PIP_CACHE_DIR`, …
+- **Legacy dotfiles under `/var/www`** (the old www-data home: `.npmrc`, `.ssh`, `.gitconfig`, `.composer`, `.netrc`, …) are bridged into the new home as symlinks at boot, with a deprecation warning — move them to the new home when you can. Note: writes through a bridged entry still land in `/var/www`, which is unwritable on read-only systems (as before).
+- Custom supervisor programs that use `user=www-data` should add `environment=HOME="${CONTAINER_WWW_DATA_HOME_DIR}"` to their program section — supervisor's `user=` switches only the uid. Processes launched via `gosu` (and php-fpm workers) derive `HOME` from the www-data passwd entry automatically and need nothing.
+
+## Behavior Changes (Migration Notes)
+
+Breaking or behavior-changing releases are documented in [`docs/migration/`](./migration/), one file per change, each prefixed with the release date (`YYYY-MM-DD-…`). Current transitions:
+
+- [2026-11-12: Exact Command Arguments](./migration/2026-11-12-exact-command-arguments.md) — exact argv execution, single-string deprecation fallback
+- [2026-11-12: www-data Home Directory](./migration/2026-11-12-www-data-home-directory.md) — the home move and its dotfile bridge, npm/composer cache paths
+
+One behavior change without its own guide: gunicorn's supervisor stop wait rises from 10s to `GUNICORN_GRACEFUL_TIMEOUT + 10` (default 40s, python-nginx) — see `GUNICORN_STOP_WAIT_SECS` in [python-nginx.md](./python-nginx.md).
 
 ## Customizing the Container
 
@@ -333,4 +350,4 @@ Entrypoint-exported variables are normally invisible to `docker exec` sessions. 
 
 > **Breaking change:** all customization paths were centralized into `/container/custom`.
 
-Containers mounting legacy paths (`/etc/ssl/certs`, `/etc/container/templates/nginx/custom`, `/usr/bin/container/custom`) **fail to start** with an error message containing migration instructions. See the [migration guide](./migration/migrate-to-centralized-container-dir.md) for details.
+Containers mounting legacy paths (`/etc/ssl/certs`, `/etc/container/templates/nginx/custom`, `/usr/bin/container/custom`) **fail to start** with an error message containing migration instructions. See the [migration guide](./migration/2026-02-05-migrate-to-centralized-container-dir.md) for details.

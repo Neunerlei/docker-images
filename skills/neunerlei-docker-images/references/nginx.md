@@ -37,6 +37,8 @@ proxy:
     - PROXY_API_DEST=/
 ```
 
+Backends are addressed via `proxy_pass $upstream` (dynamic name) → resolution runs through the auto-detected NGINX resolver on every request; in Kubernetes backend names must be FQDNs (see SKILL.md → NGINX DNS resolution).
+
 ## Static mode
 
 | Variable | Default | Purpose |

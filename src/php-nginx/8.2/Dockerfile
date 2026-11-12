@@ -6,6 +6,10 @@ LABEL org.opencontainers.image.authors="Martin Neundorfer <code@neunerlei.eu>"
 LABEL org.opencontainers.image.description="Lean PHP FPM image with an nginx server based on debian"
 
 ENV TZ=UTC
+# Make the utility commands in /container/bin callable by name from fresh
+# shells (docker exec, Dockerfile RUN steps in builder stages). The entrypoint
+# prepends the directory at runtime, but that only reaches its own processes.
+ENV PATH="/container/bin:$PATH"
 
 # Print the current PHP version
 RUN php -v

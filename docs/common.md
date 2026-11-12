@@ -146,10 +146,13 @@ docker run --read-only \
 Kubernetes:
 
 ```yaml
-securityContext:
-  readOnlyRootFilesystem: true
 containers:
   - name: app
+    # readOnlyRootFilesystem is a CONTAINER-level setting — at pod level it is
+    # rejected (kubectl strict validation, the default since 1.27) or silently
+    # ignored by lenient tooling; the root filesystem stays writable.
+    securityContext:
+      readOnlyRootFilesystem: true
     volumeMounts:
       - { name: work,      mountPath: /container/work }
       - { name: run,       mountPath: /run }
@@ -176,6 +179,7 @@ Every process running as `www-data` (supervisor services with `user=www-data`, `
 
 Breaking or behavior-changing releases are documented in [`docs/migration/`](./migration/), one file per change, each prefixed with the release date (`YYYY-MM-DD-…`). Current transitions:
 
+- [2026-11-12: Build Mode Marker and RUN Variables](./migration/2026-11-12-build-mode-marker-and-variables.md) — builder-stage-only build mode, variables for later `RUN` steps fixed
 - [2026-11-12: Exact Command Arguments](./migration/2026-11-12-exact-command-arguments.md) — exact argv execution, single-string deprecation fallback
 - [2026-11-12: www-data Home Directory](./migration/2026-11-12-www-data-home-directory.md) — the home move and its dotfile bridge, npm/composer cache paths
 
@@ -316,18 +320,35 @@ environment:
 
 ## Build Mode
 
-Invoking the entrypoint in a Dockerfile `RUN` **without a command** switches to `CONTAINER_MODE=build`: full environment setup, services skipped. Later `RUN` steps see exactly the variables production will have — same paths, same derived values — which makes it the tool for multi-stage builds:
+`RUN init-build-env` in a Dockerfile runs the full entrypoint bootstrap for build stages: same environment as production, services skipped. It is **only for builder stages** of a multi-stage build — images built this way refuse to boot by design, and if that ever happens by accident, the startup error explains the fix:
 
 ```dockerfile
 FROM neunerlei/php-nginx:latest AS builder
 ENV DOCKER_PROJECT_PROTOCOL=https
 COPY --chown=www-data:www-data ./src ./src
-RUN /container/entrypoint/entrypoint.sh
+RUN init-build-env
 RUN composer install --no-dev --optimize-autoloader
 
 FROM neunerlei/php-nginx:latest
 COPY --from=builder /var/www/html ./
 ```
+
+**CI:** to start a builder-stage image anyway (e.g. `docker build --target builder` followed by `docker run … phpunit`), build it with `RUN init-build-env --allow-boot` — no marker is written and the image can boot. Changes made by later `RUN` steps (e.g. a `docker-php-ext-enable` dropping a conf.d file) **survive boots**: the rendered work data is synced back into the staging area. Caveat: build-time rendered configuration — including anything rendered from build-time env values — becomes part of the image, so don't render secrets at build time.
+
+### Variables in Later `RUN` Steps
+
+Later `RUN` steps see exactly the variables production will have — same paths, same derived values:
+
+- **Shell-form `RUN`** (the usual `RUN pnpm build`) runs through `/bin/sh`, which links to the [bash wrapper](#the-shell-environment-and-the-bash-wrapper) and sources the `container-vars.sh` snapshot the build-mode run wrote.
+- **Exec-form `RUN` `["…"]`** only receives the variables through the env-wrapped binaries (`node`, `python`, `pip`, `php`, …) — start the exec form with a wrapped binary, or use the shell form.
+
+Run your build commands in a **separate `RUN`** after `init-build-env`. Chaining in the same line (`RUN init-build-env && npm run build`) only gives the variables to env-wrapped child processes — the outer shell started before the snapshot existed, so `$NODE_ENV` in the `RUN` line itself is empty.
+
+The file is a **snapshot** taken at the build-mode run: it takes precedence over `ENV` lines declared *after* it. Declare all `ENV` lines before `init-build-env`; to re-run after changing `ENV`, use the exec form `RUN ["init-build-env"]` — the shell form goes through the bash wrapper, which sources the old snapshot and would override the new `ENV`. `HOME` is deliberately not part of the snapshot.
+
+Builder images pushed to a registry (e.g. as a CI cache) contain the derived variables, including everything computed by `custom/env` files — don't pull secrets in at build time.
+
+### Build Hooks
 
 Hooks can target the build phase only (`01-migrations.mode-build.sh`).
 

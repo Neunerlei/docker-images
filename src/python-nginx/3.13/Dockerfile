@@ -6,6 +6,10 @@ LABEL org.opencontainers.image.authors="Martin Neundorfer <code@neunerlei.eu>"
 LABEL org.opencontainers.image.description="Lean Python image with Nginx, Gunicorn, and Flask support, based on Debian."
 
 ENV TZ=UTC
+# Make the utility commands in /container/bin callable by name from fresh
+# shells (docker exec, Dockerfile RUN steps in builder stages). The entrypoint
+# prepends the directory at runtime, but that only reaches its own processes.
+ENV PATH="/container/bin:$PATH"
 
 # Use the installer to add Python's package manager and venv tool.
 # Also ensure net-tools is installed for some legacy networking commands if needed.

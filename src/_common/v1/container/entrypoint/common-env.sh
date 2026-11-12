@@ -43,6 +43,13 @@ export CONTAINER_WWW_DATA_HOME_DIR="${CONTAINER_WORK_DIR}/www-data-home"
 # resets the real work data from it (see entrypoint.sh). Lives OUTSIDE the work
 # directory so that a mount over the work directory can not shadow it.
 export CONTAINER_WORK_STAGING_DIR="${CONTAINER_DIR}/work-data-staging"
+# Marker file written by every build-mode run (see entrypoint.sh). Like the
+# staging area it lives in the image layer — deliberately NOT inside the work
+# directory: a work-dir mount (tmpfs, emptyDir, named volume) would hide a
+# marker placed there, and everything in work/data is deleted by the boot
+# reset anyway. Its presence at boot means the image ran build mode during
+# its build and must not be booted as a final image.
+export CONTAINER_BUILD_MODE_MARKER="${CONTAINER_DIR}/build-mode.marker"
 export CONTAINER_VARS_SCRIPT="${CONTAINER_WORK_DIR}/container-vars.sh"
 export CONTAINER_CUSTOM_DIR="${CONTAINER_DIR}/custom"
 export CONTAINER_CUSTOM_ENV_DIR="${CONTAINER_CUSTOM_DIR}/env"

@@ -156,7 +156,6 @@ The `step.d/` directory enforces a predictable bootstrap sequence. Scripts are e
 ```
 entrypoint/step.d/
 ├── 005-init-custom-on-dev.sh  # Dev skeleton creation
-├── 010-fail-on-legacy-mounts.sh
 ├── 017-custom-env.sh          # Project variables (custom/env/)
 ├── 020-nginx.sh               # Web server setup
 ├── 040-supervisor.sh          # Process manager
@@ -170,6 +169,44 @@ entrypoint/step.d/
 - Add new steps by creating numbered files
 - Override existing steps by providing same-numbered files
 - Insert steps between existing ones using intermediate numbers
+
+## Build Mode Internals (Marker, Legacy Layer)
+
+Build mode (`CONTAINER_MODE=build`) is invoked by the `init-build-env` utility (`src/_common/v1/container/bin/init-build-env`), which sets an internal selector and execs the entrypoint. Three invocation forms exist, distinguished by the selector value:
+
+| Invocation | Selector | Marker | Bootable | Work-data writes by later `RUN` steps |
+|---|---|---|---|---|
+| `init-build-env` | `1` | written | **no** (refuses with `exit 1`) | irrelevant — image never boots |
+| `init-build-env --allow-boot` | `allow-boot` | not written | yes (CI test stages) | **survive boots** (staging sync-back) |
+| entrypoint without a command (**legacy**, deprecated, expires 2027-11-12) | unset | not written | yes | **survive boots** (same sync-back as `--allow-boot`) |
+
+Mechanics worth knowing when touching this:
+
+- **The marker** is `CONTAINER_BUILD_MODE_MARKER` (`/container/build-mode.marker`), defined in `common-env.sh`. It deliberately lives in the image layer next to the work-data staging area — anything under `/container/work` could be hidden by a mount (tmpfs, `emptyDir`, a named volume) or deleted by the boot reset.
+- **The check** runs at the top of `entrypoint.sh`, right after `common-env.sh` is sourced and before anything changes state (home bootstrap, dotfile bridge, work-data reset, steps). Non-build boot + marker present → `exit 1` with the fix spelled out.
+- **The selector** (`CONTAINER_INIT_BUILD_ENV`) is read and `unset` immediately in `entrypoint.sh`, before any step runs — `get_all_vars` exports every variable it can see, so the selector must never leak into `container-vars.sh`.
+- **The legacy layer** restores the pre-2026-11-12 behavior, not just bootability: at the end of a legacy build-mode run, the rendered work data is synced back into the staging area and the build-time `work/data → work-data-staging` symlink is restored (`util.d/sync-work-data.sh`, shared with `init-build-env --allow-boot`), so later `RUN` steps write through to the staging area and their changes survive boots — exactly like images before the work-data model. The known wart (build-time rendered configuration, including anything rendered from build-time env values, becomes the pristine staging state) is the old behavior itself and is accepted under the deprecation umbrella — and is the documented price of `--allow-boot`.
+- **Removing the legacy layer** (after 2027-11-12) means: delete `legacy.d/2026-11-12-build-mode-marker-and-variables.sh` and its call site in `entrypoint.sh`, drop the `legacy` case of the selector, and update the migration guide.
+
+## Legacy compatibility layers (legacy.d)
+
+Deprecated compatibility layers live in `container/entrypoint/legacy.d/`, one file per migration guide — same name as the guide in `docs/migration/`, with a `.sh` suffix. The entrypoint sources the directory at the very top (right after `common-env.sh`), so the functions exist before any state changes.
+
+Rules for files in `legacy.d`:
+
+- **Functions only** — nothing executes at source time. The entrypoint calls the functions at their correct boot positions (guards before state changes, bridges after the relevant bootstrap, fallbacks where the legacy behavior hooked in).
+- **The file header documents**: the migration guide it belongs to, the expiry date, the rationale, and every call site (searchable function name) — so removal is a two-step delete, not archaeology.
+- **Function names start with `legacy_`** and are referenced nowhere outside the layer's file and its call sites.
+- **When a layer expires** (the date in its compat-notice): delete the file, delete the call site(s), and note the removal in the migration guide.
+
+Current layers:
+
+| File | Expires | Call site(s) |
+|---|---|---|
+| `2026-02-05-migrate-to-centralized-container-dir.sh` | 2027-02-05 | `entrypoint.sh` (legacy mount guard, after the marker check) |
+| `2026-11-12-exact-command-arguments.sh` | 2027-11-12 | `step.d/100-execute-command.sh` |
+| `2026-11-12-www-data-home-directory.sh` | 2027-11-12 | `entrypoint.sh` (dotfile bridge, after the home bootstrap) |
+| `2026-11-12-build-mode-marker-and-variables.sh` | 2027-11-12 | `entrypoint.sh` (legacy build-mode end branch) |
 
 ## File Organization Patterns
 
@@ -430,7 +467,7 @@ docker exec my-container my-command
 
 - Keep commands small and focused on a single task.
 - Only add a command to `_common` if it is genuinely useful across *all* images. Prefer the image-specific location otherwise.
-- The command name is taken verbatim from the filename. Use `kebab-case` (e.g. `reload-supervisor`).
+- The command name is taken verbatim from the filename. Use `kebab-case` (e.g. `reload-supervisor`). Note that `/container/bin` precedes the system directories in `PATH`, so utility names can shadow system commands — keep names kebab-case and specific enough to never collide (e.g. `init-build-env`, not `env`).
 - No `.sh` extension — the filename is the command name.
 
 ## How to Create a New Base Image (e.g., Python)

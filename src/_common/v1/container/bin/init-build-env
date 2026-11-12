@@ -1,0 +1,60 @@
+#!/bin/_bash
+# Deliberately the UNWRAPPED bash: /bin/bash is the container wrapper, which
+# sources the container-vars.sh snapshot before executing this script. That
+# would override ENV variables declared after a previous init-build-env run
+# with the old snapshot values — so a re-run via the exec form
+# RUN ["init-build-env"] must not go through the wrapper.
+#
+# Runs the container entrypoint in the NEW build mode — the supported way to
+# set up the environment inside a Dockerfile builder stage:
+#
+#   FROM neunerlei/php-nginx:latest AS builder
+#   COPY --chown=www-data:www-data ./src ./src
+#   RUN init-build-env
+#   RUN composer install --no-dev --optimize-autoloader
+#
+# It runs the full entrypoint bootstrap (later `RUN` steps see exactly the
+# variables production will have) and writes the build mode marker
+# (/container/build-mode.marker): an image built this way must never be booted
+# as a final image — the boot would reset the build-time work data and
+# silently discard later build-step changes, so it refuses to start instead.
+# Copy the artifacts into a fresh final stage (multi-stage build).
+#
+# Options:
+#   --allow-boot   Run the build mode WITHOUT writing the marker. The image may
+#                  then be booted — e.g. CI stages that run tests against a
+#                  builder image (`docker build --target builder` +
+#                  `docker run … phpunit`). The rendered work data is synced
+#                  back into the staging area and the build-time symlink
+#                  restored, so changes made by later build steps (e.g. a
+#                  docker-php-ext-enable dropping a conf.d file) survive
+#                  boots. Caveat: build-time rendered configuration —
+#                  including anything rendered from build-time env values —
+#                  becomes part of the image; don't render secrets at build
+#                  time.
+#
+# Invoking the entrypoint directly WITHOUT a command (the way builds worked
+# before 2026-11-12) keeps running as a deprecated compatibility layer: no
+# marker, the image stays bootable, but a deprecation warning is logged. See
+# the migration guide referenced in that warning.
+set -e
+
+allow_boot=0
+for arg in "$@"; do
+    case "$arg" in
+        --allow-boot) allow_boot=1 ;;
+        *)
+            echo "init-build-env: unknown option '${arg}'" >&2
+            echo "Usage: init-build-env [--allow-boot]" >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Internal selector for the entrypoint — read and unset there, never exported
+# any further (it must not end up in the container-vars.sh snapshot).
+export CONTAINER_INIT_BUILD_ENV=1
+if [ "$allow_boot" == "1" ]; then
+    export CONTAINER_INIT_BUILD_ENV=allow-boot
+fi
+exec /container/entrypoint/entrypoint.sh

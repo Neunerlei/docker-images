@@ -25,12 +25,12 @@ Human-facing docs mirror this skill: `docs/common.md` (shared concepts) + `docs/
 
 ## Entrypoint model
 
-`/container/entrypoint/entrypoint.sh` is a dumb orchestrator: sources `util.d/`, runs `step.d/` scripts in numeric order, then `exec`s the command. Steps build on each other:
+`/container/entrypoint/entrypoint.sh` is a dumb orchestrator: sources `util.d/` and `legacy.d/` (deprecated compat layers, one file per migration guide), runs `step.d/` scripts in numeric order, then `exec`s the command. Steps build on each other:
 
 ```
 005-init-custom-on-dev   017-custom-env        040-supervisor      070-user-permissions
-010-fail-on-legacy-mounts 020-nginx           050-export-vars    080-custom (hooks)
-015-image-vars (image)   030-git               060-user-setup     090-export-custom-vars → 100-execute-command
+015-image-vars (image)   020-nginx            050-export-vars     080-custom (hooks)
+                        030-git               060-user-setup      090-export-custom-vars → 100-execute-command
 ```
 
 `CONTAINER_MODE` (read-only, exported for templates) is derived:
@@ -114,7 +114,7 @@ custom/
 └── <runtime>/      # image-specific (php/, php/fpm/ …) — see references
 ```
 
-Legacy mounts (`/etc/ssl/certs`, `/etc/container/templates/.../custom`) abort startup (step 010) with migration instructions. Migration guide: `docs/migration/2026-02-05-migrate-to-centralized-container-dir.md`.
+Legacy mounts (`/etc/ssl/certs`, `/etc/container/templates/.../custom`) abort startup with migration instructions (legacy.d guard in `entrypoint.sh`). Migration guide: `docs/migration/2026-02-05-migrate-to-centralized-container-dir.md`.
 
 ## Read-only filesystems
 
@@ -207,20 +207,22 @@ Container values take precedence over inline overrides: the wrapper exports ever
 
 ## Build mode (multi-stage builds)
 
-`RUN /container/entrypoint/entrypoint.sh` with NO command in a Dockerfile → `CONTAINER_MODE=build`: full env setup, services skipped, final `exec` skipped. Later `RUN` commands see the exact variables production will have — same paths, same derived values.
+`RUN init-build-env` in a Dockerfile → `CONTAINER_MODE=build`: full env setup, services skipped, final `exec` skipped, plus the build mode marker `/container/build-mode.marker`. **Builder stages only** — booting an image containing the marker aborts with `exit 1` before anything runs, because the boot would reset the build-time work data and discard later build-step changes (expected behavior for `init-build-env` images). Builder stages that must stay bootable (CI test stages) use `RUN init-build-env --allow-boot`: no marker, bootable AND consistent — later-`RUN` work-data writes survive boots (staging sync-back via `util.d/sync-work-data.sh`). Invoking the entrypoint directly with NO command is the deprecated legacy path (until 2027-11-12: same behavior as `--allow-boot` plus a deprecation warning — see migration notes; internals in `docs/contributing.md`).
 
 ```dockerfile
 FROM neunerlei/php-nginx:latest AS builder
 ARG DOCKER_PROJECT_PROTOCOL
 ENV DOCKER_PROJECT_PROTOCOL=${DOCKER_PROJECT_PROTOCOL}
 COPY --chown=www-data:www-data ./src ./src
-RUN /container/entrypoint/entrypoint.sh        # set up environment
+RUN init-build-env                             # set up environment
 RUN composer install --no-dev --optimize-autoloader
 RUN ./vendor/bin/phpunit
 
 FROM neunerlei/php-nginx:latest
 COPY --from=builder /var/www/html ./
 ```
+
+Later `RUN` steps see the exact variables production will have: shell-form `RUN` via the bash wrapper (`/bin/sh` sources `container-vars.sh`), exec-form only via env-wrapped binaries — run build commands in a **separate `RUN`** (chaining in the same line leaves the outer shell without the variables). It's a **snapshot**: it wins over `ENV` lines declared after the build-mode run — declare `ENV` before `init-build-env`, and re-run after a change only via the exec form `RUN ["init-build-env"]` (the shell form goes through the wrapper and would keep the old snapshot values). Builder images pushed to a registry contain the derived variables (incl. `custom/env` computations) — no build-time secrets.
 
 Hooks can target the build phase only: `01-migrations.mode-build.sh`.
 
@@ -236,9 +238,12 @@ Breaking or behavior-changing releases are documented in `docs/migration/`, one 
   - Commands keep their exact argument boundaries (`sh -c '…'` works). Passing a command as a **single string** (`command: ["npm run dev"]`, K8s `args: ["php artisan queue:work"]`) still runs but logs a deprecation warning and will fail in a future release. Use separate arguments. `$entrypoint_command` is now an array.
 - **2026-11-12 — www-data home directory** (`docs/migration/2026-11-12-www-data-home-directory.md`):
   - The www-data home moved from `/var/www` to `/container/work/www-data-home`. Dotfiles in `/var/www` (`.npmrc`, `.ssh`, `.gitconfig`, …) are bridged in as symlinks with a deprecation warning. The npm and composer caches moved with the home. Don't bake build-time content into `$HOME`. Dev containers now really add `/var/www/html` to git's `safe.directory` (the step never ran before).
+- **2026-11-12 — build mode marker + variables for later `RUN` steps** (`docs/migration/2026-11-12-build-mode-marker-and-variables.md`):
+  - New `init-build-env` command is the supported way to run build mode; it writes `/container/build-mode.marker`, and images containing it refuse to boot (the new work-data model would otherwise silently discard build-time changes). CI test stages use `init-build-env --allow-boot` (bootable, no marker, later-`RUN` work-data writes survive boots via staging sync-back). Legacy no-command invocation (`RUN entrypoint.sh`) keeps working as a deprecated compatibility layer until **2027-11-12** — identical to `--allow-boot` plus a deprecation warning.
+  - **Fixed:** later `RUN` steps in a builder stage receive the container variables again (a regression had deleted `container-vars.sh` at the end of a build-mode run).
 - **2026-11-12 — gunicorn stop timeout (python-nginx)** (no separate guide — feature documentation lives in `docs/python-nginx.md`):
   - New `GUNICORN_TIMEOUT`/`GUNICORN_GRACEFUL_TIMEOUT`/`GUNICORN_MAX_REQUESTS(_JITTER)` knobs (opt-in, defaults match gunicorn's own). Supervisor now waits `GUNICORN_GRACEFUL_TIMEOUT + 10` (default 40s) for gunicorn to stop instead of 10s — a behavior change on rolling rebuilds, configurable via `GUNICORN_STOP_WAIT_SECS`. Raise `NGINX_PROXY_READ_TIMEOUT` together with `GUNICORN_TIMEOUT`.
-- **2026-02-05 — centralized container dir** (`docs/migration/2026-02-05-migrate-to-centralized-container-dir.md`): all custom mounts go to `/container/custom`. Legacy mount paths abort startup (step 010).
+- **2026-02-05 — centralized container dir** (`docs/migration/2026-02-05-migrate-to-centralized-container-dir.md`): all custom mounts go to `/container/custom`. Legacy mount paths abort startup (legacy.d guard).
 
 ---
 

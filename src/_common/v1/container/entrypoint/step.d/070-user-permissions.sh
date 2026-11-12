@@ -1,5 +1,14 @@
 #!/bin/bash
 
+# Additional user owned directories can be declared via the USER_OWNED_DIRECTORIES
+# environment variable (space separated), e.g. for volumes the www-data processes
+# need to write into. This deliberately runs HERE — after the custom environment
+# files were loaded (step 017) — so the variable may also be set from
+# /container/custom/env/*.env, not only from the container environment.
+for user_owned_dir in ${USER_OWNED_DIRECTORIES}; do
+    user_owned_directories_registry+=("${user_owned_dir}")
+done
+
 # Set correct ownership on the relevant directories
 echo "[ENTRYPOINT.user-permissions] Setting ownership on application directories..."
 

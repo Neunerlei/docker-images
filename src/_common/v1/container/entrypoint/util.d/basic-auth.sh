@@ -80,7 +80,19 @@ write_basic_auth_file() {
         fi
 
         # Read the password from stdin, so it never shows up in a process listing
-        hashed_password="$(printf '%s' "${password}" | openssl passwd -apr1 -stdin)"
+        if ! hashed_password="$(printf '%s' "${password}" | openssl passwd -apr1 -stdin)"; then
+            echo "[UTIL.basic-auth] Error: Hashing the password for user '${username}' with openssl failed. Aborting." >&2
+            return 1
+        fi
+
+        # An apr1 hash always has the form $apr1$<8-char-salt>$<22-char-digest>. An
+        # empty or malformed output must never reach the password file — and must
+        # not rely on the self-verification below alone, which a consistently
+        # failing pipeline could trick with two equal garbage values.
+        if ! [[ "${hashed_password}" =~ ^\$apr1\$[./A-Za-z0-9]{8}\$[./A-Za-z0-9]{22}$ ]]; then
+            echo "[UTIL.basic-auth] Error: openssl produced no valid apr1 hash for user '${username}' (got ${#hashed_password} characters). Aborting." >&2
+            return 1
+        fi
 
         # Self-verification: re-hash with the same salt and compare, so a broken
         # hashing pipeline can never write an unverifiable password file.

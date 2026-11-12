@@ -6,6 +6,7 @@ echo "[ENTRYPOINT] Starting bootstrapping process..."
 declare entrypoint_dir="$(dirname $(realpath "${BASH_SOURCE[0]}"))"
 declare step_dir="$entrypoint_dir/step.d"
 declare util_dir="$entrypoint_dir/util.d"
+declare legacy_dir="$entrypoint_dir/legacy.d"
 declare -a entrypoint_command=("$@")
 
 # If the entrypoint_command is empty, we automatically set the container mode to "build"
@@ -15,6 +16,36 @@ if [ ${#entrypoint_command[@]} -eq 0 ]; then
     export CONTAINER_MODE="build"
     echo "[ENTRYPOINT] No command specified, setting CONTAINER_MODE to 'build'."
 fi
+
+# There are three ways to reach build mode:
+#
+#  - NEW (supported): the "init-build-env" utility (/container/bin) sets the
+#    CONTAINER_INIT_BUILD_ENV selector below before invoking this entrypoint.
+#    That run writes the build mode marker at the end, so the image can never
+#    be booted as a final image — for images built this way, refusing to boot
+#    is the expected behavior.
+#  - NEW with --allow-boot: the same utility with the --allow-boot flag sets
+#    the selector to "allow-boot" — full build mode, but NO marker is written,
+#    so the image may be booted (e.g. CI stages that run tests against a
+#    builder image). The work data is synced back into the staging area, so
+#    changes made by later build steps survive boots (util.d/sync-work-data.sh).
+#  - LEGACY (deprecated compatibility layer, expires 2027-11-12): invoking the
+#    entrypoint directly without a command, the way builds worked before the
+#    marker existed. Everything runs, later `RUN` steps get the variables, no
+#    marker is written — the image stays bootable — and, like images before
+#    the work-data model, changes made by later build steps into the work data
+#    survive boots (see legacy.d/2026-11-12-build-mode-marker-and-variables.sh).
+#    A deprecation warning is logged.
+#
+# The selector is unset immediately: it is internal, and get_all_vars picks up
+# every exported variable, so it must not leak into the container-vars.sh
+# snapshot.
+declare container_build_mode_invocation="legacy"
+case "${CONTAINER_INIT_BUILD_ENV:-}" in
+    "1") container_build_mode_invocation="new" ;;
+    "allow-boot") container_build_mode_invocation="allow-boot" ;;
+esac
+unset CONTAINER_INIT_BUILD_ENV
 
 echo "[ENTRYPOINT] Setting common environment variables..."
 
@@ -32,6 +63,54 @@ function source_files_in_dir_alphabetically() {
         done < <(find "$dir_path" -maxdepth 1 -name "*.sh" -print0 | sort -z)
     fi
 }
+
+# --- Legacy compatibility layers (legacy.d) --------------------------------
+# Every deprecated compatibility layer lives as a function collection in
+# legacy.d, one file per migration guide (same name, .sh suffix), with its
+# expiry date and call sites documented in the file header. The files provide
+# functions only — nothing executes at source time. When a layer expires, the
+# file and its call site(s) are deleted together. See docs/contributing.md,
+# "Legacy compatibility layers (legacy.d)".
+source_files_in_dir_alphabetically "$legacy_dir"
+
+# --- Build mode marker check -----------------------------------------------
+# The "init-build-env" utility writes a marker file into the image layer. An
+# image built that way must never be booted as a final image: the boot reset
+# replaces the build-time work-data state with a runtime copy — silently
+# discarding the changes later build steps made — and the entrypoint steps
+# mutate the filesystem in ways that can not be tracked (extending images can
+# add their own steps). Refusing to boot is deliberate, and it only hits images
+# that explicitly opted in via init-build-env; builder stages that must remain
+# bootable (e.g. CI test stages) use 'init-build-env --allow-boot' instead.
+# The LEGACY no-command invocation writes no marker and stays bootable.
+if [ "${CONTAINER_MODE}" != "build" ] && [ -f "${CONTAINER_BUILD_MODE_MARKER}" ]; then
+    echo "[ENTRYPOINT] Error: this image ran 'init-build-env' (build mode) during its build." >&2
+    echo "" >&2
+    echo "Build mode is only meant for builder stages of a multi-stage build — an image like this" >&2
+    echo "must not be booted: the boot would reset the build-time work data and silently discard" >&2
+    echo "changes made by later build steps." >&2
+    echo "" >&2
+    echo "Fix: run your build in a builder stage and copy the artifacts into a fresh final stage:" >&2
+    echo "" >&2
+    echo "    FROM neunerlei/php-nginx:latest AS builder" >&2
+    echo "    RUN init-build-env" >&2
+    echo "    RUN <your build commands>" >&2
+    echo "" >&2
+    echo "    FROM neunerlei/php-nginx:latest" >&2
+    echo "    COPY --from=builder /var/www/html ./" >&2
+    echo "" >&2
+    echo "If you really need to boot such an image (e.g. to run tests in a CI builder stage)," >&2
+    echo "build it with 'init-build-env --allow-boot' instead." >&2
+    echo "" >&2
+    echo "Documentation: https://github.com/Neunerlei/docker-images/blob/main/docs/common.md#build-mode" >&2
+    echo "Migration guide: https://github.com/Neunerlei/docker-images/blob/main/docs/migration/2026-11-12-build-mode-marker-and-variables.md" >&2
+    exit 1
+fi
+
+# --- Legacy mount check (2026-02-05, expires 2027-02-05) --------------------
+# Previously step.d/010-fail-on-legacy-mounts.sh; as a direct call it now
+# aborts even earlier — before the entrypoint changes any state.
+legacy_fail_on_legacy_mount_paths
 
 # Registries for feature promotion
 # Template Registry
@@ -64,11 +143,9 @@ declare -g -a user_owned_directories_registry=(
     "${CONTAINER_WWW_DATA_HOME_DIR}"
 )
 # Additional user owned directories can be declared for the running container via the
-# USER_OWNED_DIRECTORIES environment variable (space separated), e.g. for volumes that
-# the www-data processes need to write into
-for user_owned_dir in ${USER_OWNED_DIRECTORIES}; do
-    user_owned_directories_registry+=("${user_owned_dir}")
-done
+# USER_OWNED_DIRECTORIES environment variable — the extension happens in step 070
+# (after the custom environment files were loaded), so the variable may also be
+# set from /container/custom/env/*.env.
 # Custom directory children
 # The set of sub-directories that should exist inside CONTAINER_CUSTOM_DIR.
 # Used by 005-init-custom-on-dev.sh to create the skeleton on first startup in development.
@@ -115,40 +192,12 @@ if [ "$(stat -c '%U' "${CONTAINER_WWW_DATA_HOME_DIR}")" != "www-data" ]; then
     chown -R www-data:www-data "${CONTAINER_WWW_DATA_HOME_DIR}"
 fi
 
-# --- Legacy dotfile bridge -------------------------------------------------
+# --- Legacy dotfile bridge (2026-11-12, expires 2027-11-12) -----------------
 # Historically the www-data home was /var/www, so consumers may have baked or
-# mounted dotfiles there (.npmrc, .ssh, .gitconfig, .composer, ...). After the
-# home moved, those files would silently stop being read. Bridge them: every
-# dot-entry in /var/www that does not exist in the new home yet is symlinked.
-# Note: writes through a bridged entry (e.g. into ~/.ssh/) land back in
-# /var/www, which is unwritable on read-only systems — the bridge does not
-# change that, it only keeps the files readable where they were before.
-shopt -s nullglob
-# First sweep the home for leftover bridge links from earlier boots whose
-# source in /var/www has disappeared (e.g. a mount was removed while the home
-# lives on a named volume) — dangling links must not accumulate forever.
-for existing_home_entry in "${CONTAINER_WWW_DATA_HOME_DIR}"/.[!.]* "${CONTAINER_WWW_DATA_HOME_DIR}"/..?*; do
-    if [ -L "${existing_home_entry}" ]; then
-        existing_home_target="$(readlink "${existing_home_entry}")"
-        case "${existing_home_target}" in
-            /var/www/*)
-                if [ ! -e "${existing_home_entry}" ]; then
-                    echo "[ENTRYPOINT] Removing stale bridge link '${existing_home_entry}' (target '${existing_home_target}' is gone)."
-                    rm -f "${existing_home_entry}"
-                fi
-                ;;
-        esac
-    fi
-done
-for legacy_entry in /var/www/.[!.]* /var/www/..?*; do
-    bridge_target="${CONTAINER_WWW_DATA_HOME_DIR}/${legacy_entry##*/}"
-    if [ ! -e "${bridge_target}" ] && [ ! -L "${bridge_target}" ]; then
-        echo "[ENTRYPOINT] Warning: bridging legacy '${legacy_entry}' into the www-data home. Deprecated — move it to '${CONTAINER_WWW_DATA_HOME_DIR}'." >&2
-        echo "Migration guide: https://github.com/Neunerlei/docker-images/blob/main/docs/migration/2026-11-12-www-data-home-directory.md" >&2
-        ln -s "${legacy_entry}" "${bridge_target}"
-    fi
-done
-shopt -u nullglob
+# mounted dotfiles there (.npmrc, .ssh, .gitconfig, .composer, ...). The
+# bridge symlinks them into the new home — see the legacy.d function for the
+# details and the read-only caveat.
+legacy_bridge_var_www_dotfiles
 
 echo "[ENTRYPOINT] Resetting work data from the staging area..."
 rm -rf "${CONTAINER_WORK_DATA_DIR}"
@@ -176,12 +225,51 @@ source_files_in_dir_alphabetically "$util_dir"
 # Iterate all the steps to configure the container
 source_files_in_dir_alphabetically "$step_dir"
 
-# If running in BUILD mode, export all variables for the next command,
-# but remove the "CONTAINER_VARS_SCRIPT" script, so it does not pollute the next run.
 if [ "$CONTAINER_MODE" == "build" ]; then
-    echo "[ENTRYPOINT] Running in BUILD mode, exporting variables for the next command..."
-    export -p > "${CONTAINER_VARS_SCRIPT}"
-    rm -f "${CONTAINER_VARS_SCRIPT}"
+    case "$container_build_mode_invocation" in
+        "new")
+            # NEW build mode (init-build-env): write the build mode marker into
+            # the image layer — an image built this way must never be booted as
+            # a final image, and the check at the top enforces it. Rewriting the
+            # marker on every build-mode run is fine.
+            echo "[ENTRYPOINT] Running in BUILD mode, writing the build mode marker: ${CONTAINER_BUILD_MODE_MARKER}"
+            {
+                echo "This image was built with 'init-build-env' (CONTAINER_MODE=build)."
+                echo "Build mode is only meant for builder stages of a multi-stage build — never boot"
+                echo "an image containing this marker as a final image."
+                echo ""
+                echo "Build mode run finished at: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            } > "${CONTAINER_BUILD_MODE_MARKER}"
+            ;;
+        "allow-boot")
+            # NEW build mode with --allow-boot: explicit opt-out of the marker.
+            # The image may be booted (e.g. CI stages running tests against a
+            # builder image) — a supported choice, so no deprecation warning.
+            # The work data is synced back into the staging area and the
+            # build-time symlink restored, so changes made by later build
+            # steps SURVIVE boots: the image is bootable AND consistent.
+            # Caveat: build-time rendered configuration (including anything
+            # rendered from build-time env values) becomes part of the
+            # pristine staging state — don't render secrets at build time.
+            echo "[ENTRYPOINT] Running in BUILD mode with boot allowed — no build mode marker written."
+            sync_work_data_into_staging
+            ;;
+        *)
+            # LEGACY build mode (entrypoint invoked without a command):
+            # deprecated compatibility layer, expires 2027-11-12. Everything
+            # it does — deprecation warning, work-data sync-back, build-time
+            # symlink restore — lives in the legacy.d function.
+            legacy_finish_deprecated_build_mode
+            ;;
+    esac
+    # The variables for later `RUN` steps keep the container-vars.sh snapshot
+    # written by the export steps (050/090) — in ALL modes. It is deliberately
+    # NOT replaced with `export -p` here: get_all_vars leaves out HOME, PATH,
+    # SHELL and similar on purpose — `export -p` would pin HOME=/root for every
+    # later process and drag shell internals into the file. Note that builder
+    # images pushed to a registry (e.g. as a CI cache) contain the derived
+    # variables, including everything computed by custom/env files — do not
+    # pull secrets in at build time.
 else
     echo "[ENTRYPOINT] Running in NORMAL mode, executing entrypoint command: $(printf '%q ' "${entrypoint_command[@]}")"
     exec "${entrypoint_command[@]}"

@@ -65,7 +65,7 @@ my-app-worker:
 ```dockerfile
 FROM neunerlei/python-nginx:latest
 COPY --chown=www-data:www-data ./requirements.txt /var/www/html/requirements.txt
-RUN gosu www-data pip install --no-cache-dir -r /var/www/html/requirements.txt
+RUN pip install --no-cache-dir -r /var/www/html/requirements.txt  # pip always runs as www-data
 COPY --chown=www-data:www-data ./src /var/www/html
 ```
 

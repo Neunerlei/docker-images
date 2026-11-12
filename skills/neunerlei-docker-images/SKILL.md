@@ -21,6 +21,8 @@ Tag lists: `https://docker.neunerlei.eu/neunerlei-<image>-tags.html` (e.g. `neun
 
 Read the matching reference for exact env vars, defaults, and image-specific dirs — they differ per image. Everything below applies to all images.
 
+Human-facing docs mirror this skill: `docs/common.md` (shared concepts) + `docs/<image>.md` (quick starts, complete ENV tables, per-image examples). When image behavior changes, update both the docs and this skill.
+
 ## Entrypoint model
 
 `/container/entrypoint/entrypoint.sh` is a dumb orchestrator: sources `util.d/`, runs `step.d/` scripts in numeric order, then `exec`s the command. Steps build on each other:
@@ -88,7 +90,7 @@ Outer proxy routes on `SERVICE_PATH`; application code generates links with `SER
 
 ## The /container/custom mount
 
-Single mount point for ALL customization, usually `./docker/custom:/container/custom`:
+Single mount point for ALL customization, usually `./docker/custom:/container/custom`. Read-only mounts (Kubernetes config maps) are fully supported — the entrypoint only reads from it, rendered copies land in the work dir, and it never chowns the mounted files:
 
 ```
 custom/
@@ -103,6 +105,20 @@ custom/
 ```
 
 Legacy mounts (`/etc/ssl/certs`, `/etc/container/templates/.../custom`) abort startup (step 010) with migration instructions. Migration guide: `docs/migration/migrate-to-centralized-container-dir.md`.
+
+## Read-only filesystems
+
+`readOnlyRootFilesystem: true` (Kubernetes) and `docker run --read-only` are fully supported. Everything written at runtime goes to two places:
+
+1. `/container/work` — all rendered configuration. May start **empty** (tmpfs, `emptyDir`): the entrypoint seeds it on every boot from the image's pristine build state (`/container/work-data-staging`) and resets it on every restart, so stale config from a previous boot is discarded. Mount it writable.
+2. Runtime dirs as tmpfs: `/run`, `/tmp`, `/var/lib/nginx`, `/var/log/nginx`.
+
+```bash
+docker run --read-only \
+  --tmpfs /run --tmpfs /tmp --tmpfs /var/lib/nginx --tmpfs /var/log/nginx \
+  -v my-work:/container/work \
+  my-image
+```
 
 ## Filename markers (DSL)
 
@@ -123,7 +139,7 @@ Loading conditions live in filenames — behavior visible at a glance. Applies t
 
 ## Templating
 
-Every config file — built-in templates in `/container/templates/` AND custom files in `/container/custom/` — is rendered with `${VAR}` substitution from exported env (bash parameter expansion, no external engine). Add `[[DEBUG_VARS]]` anywhere in a file → entrypoint prints all substitutable vars and exits. Not available in entrypoint hooks (use `printenv | sort` there).
+Every config file — built-in templates in `/container/templates/` AND custom files in `/container/custom/` — is rendered with `${VAR}` substitution from exported env (bash parameter expansion, no external engine). Add `[[DEBUG_VARS]]` on its own line anywhere in a file → entrypoint prints all substitutable vars and exits. Not available in entrypoint hooks (use `printenv | sort` there).
 
 Note: `get_all_vars()` filters out bash internals, system vars, and anything starting lowercase or `_` — name template vars UPPERCASE.
 
@@ -175,7 +191,9 @@ environment:
 
 ## Bash wrapper (env in `docker exec`)
 
-Entrypoint-exported vars are normally invisible to `docker exec` sessions. Build moves `/bin/bash` → `/bin/_bash` and installs a wrapper that sources `/container/work/container-vars.sh` first (`/bin/sh` symlinks to it too). Result: `docker exec my-container bash` sees `DOCKER_SERVICE_ABS_PATH` etc. Other shells (zsh) must source that file in their rc. Runtime CLIs are wrapped the same way (php, python/pip — see references); prefix `_` accesses originals.
+Entrypoint-exported vars are normally invisible to `docker exec` sessions. Build moves `/bin/bash` → `/bin/_bash` and installs a wrapper that sources `/container/work/container-vars.sh` first (`/bin/sh` symlinks to it too). Result: `docker exec my-container bash` sees `DOCKER_SERVICE_ABS_PATH` etc. Other shells (zsh) must source that file in their rc. Runtime CLIs are env-wrapped the same way (`php`; `python`/`pip`; `node` — see references); prefix `_` accesses originals.
+
+Container values take precedence over inline overrides: the wrapper exports every var unconditionally, so `NODE_ENV=test node --test` or `docker exec -e APP_ENV=testing … php artisan test` run with the container's values. For a one-off override invoke the original binary (`NODE_ENV=test _node --test`); for a permanent change set the var where the container gets its env (compose `environment:` or `custom/env/`).
 
 ## Build mode (multi-stage builds)
 

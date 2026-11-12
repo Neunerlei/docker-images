@@ -6,6 +6,8 @@ Starting with PHP 8.2, these images are designed as self-contained, high-perform
 
 Think of this image as a "service-in-a-box". You put your code in, configure it with environment variables, and it just works—whether in local development or behind a production reverse proxy.
 
+> **Shared behavior:** concepts that apply to all images — the entrypoint, container modes, customization, templating, read-only/Kubernetes operation and more — are documented once in [Shared Concepts](./common.md). This document keeps everything specific to this image.
+
 For older PHP versions (<= 8.1) without NGINX, please refer to the [legacy PHP documentation](php.md).
 
 ## Tags
@@ -51,6 +53,8 @@ Composer is pre-installed globally in the image, so you can run `composer` comma
 > Composer is configured to ALWAYS run as `www-data` user, so you do not need to worry about permissions when running composer commands.
 > If you want to use composer as a different user, execute `_composer` instead, which is the original composer binary without the user switch.
 
+Unrelated to the user switch above: `php` is **env-wrapped** (it still runs as the invoking user). The `php` command sources the container variables first, so CLI scripts see the same environment as the entrypoint — execute `_php` for the original binary. The container values take precedence over inline overrides like `APP_ENV=testing php …`; see [The Shell Environment and the Bash Wrapper](./common.md#the-shell-environment-and-the-bash-wrapper).
+
 ## Core Concepts: The Smart Entrypoint
 
 The "brain" of this image is its entrypoint script. When the container starts, this script reads your environment variables to decide how to configure itself. It operates in one of two primary modes:
@@ -84,8 +88,8 @@ This image is configured almost entirely through environment variables. This all
 | **NGINX**                              |                                                                                                                                                                                       |                                      |
 | `NGINX_DOC_ROOT`                       | The document root NGINX should use.                                                                                                                                                   | `/var/www/html/public`               |
 | `NGINX_CLIENT_MAX_BODY_SIZE`           | Overrides `client_max_body_size` in NGINX. **Please prefer `MAX_UPLOAD_SIZE`**                                                                                                        | Matches `MAX_UPLOAD_SIZE`            |
-| `NGINX_CERT_PATH`                      | Path to the SSL certificate file (used if `DOCKER_PROJECT_PROTOCOL="https"`).                                                                                                         | `/etc/ssl/certs/custom/cert.pem`     |
-| `NGINX_KEY_PATH`                       | Path to the SSL key file (used if `DOCKER_PROJECT_PROTOCOL="https"`).                                                                                                                 | `/etc/ssl/certs/custom/key.pem`      |
+| `NGINX_CERT_PATH`                      | Path to the SSL certificate file (used if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                         | `/etc/ssl/certs/custom/cert.pem`     |
+| `NGINX_KEY_PATH`                       | Path to the SSL key file (used if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                 | `/etc/ssl/certs/custom/key.pem`      |
 | `NGINX_PROXY_CONNECT_TIMEOUT`          | Sets `fastcgi_connect_timeout` in NGINX. This defines how long NGINX will wait when trying to connect to PHP-FPM.                                                                     | `5s`                                 |
 | `NGINX_PROXY_READ_TIMEOUT`             | Sets `fastcgi_send_timeout` in NGINX. This value defines the timeout for reading a response from a proxied server.                                                                    | `60s`                                |
 | `NGINX_PROXY_SEND_TIMEOUT`             | Sets `fastcgi_read_timeout` in NGINX. This value defines the timeout for transmitting a request to a proxied server.                                                                  | `60s`                                |
@@ -155,147 +159,31 @@ The changes will be reflected in the corresponding `PHP_PROD_*` environment vari
 
 ### Path Composition: `PROJECT_PATH` + `SERVICE_PATH`
 
-When running multiple services behind a single reverse proxy, you need a way to manage URL paths. This image handles this by composing the final public URL path from two separate variables. A reverse proxy sits between your users and your services, directing traffic to the right place based on the URL path.
+Public URLs compose from `DOCKER_PROJECT_PATH` + `DOCKER_SERVICE_PATH` into the read-only `DOCKER_SERVICE_ABS_PATH`.
 
-* `DOCKER_PROJECT_PATH`: The **base path** for the entire group of related services. If your whole application is served from `https://example.com/myapp/`, then this value would be `/myapp/`.
-* `DOCKER_SERVICE_PATH`: The unique **sub-path** for a specific service within that project. For an API service, this might be `/api/`.
-* `DOCKER_SERVICE_ABS_PATH`: This read-only variable is automatically created by combining the two: `DOCKER_PROJECT_PATH` + `DOCKER_SERVICE_PATH`. Your application can use this to reliably generate correct absolute URLs.
-
-Your reverse proxy uses `DOCKER_SERVICE_PATH` for routing, while your application uses `DOCKER_SERVICE_ABS_PATH` for its internal logic.
+See [Path Composition](./common.md#path-composition) in the shared documentation.
 
 ### MAX_UPLOAD_SIZE and friends
 
-The `MAX_UPLOAD_SIZE` variable is a convenient way to set multiple related limits in one place. If you leave it undefined it defaults to `100M`. The value is automatically applied to:
-- `client_max_body_size` in NGINX (possible override: `NGINX_CLIENT_MAX_BODY_SIZE`)
-- `upload_max_filesize` in PHP (possible override: `PHP_UPLOAD_MAX_FILESIZE`)
-- `post_max_size` in PHP (possible override: `PHP_POST_MAX_SIZE`)
+`MAX_UPLOAD_SIZE` (default `100M`) sets all upload limits at once; `MAX_UPLOAD_SIZE_BYTES` is the parsed read-only byte value. Prefer it over the individual overrides.
 
-You MAY override any of these individually if you need different values, but in most cases, setting `MAX_UPLOAD_SIZE` is the simplest way to ensure all related limits are consistent. As a rule of thumb: **Use `MAX_UPLOAD_SIZE` whenever possible, and only override the individual settings if you have a specific need for different values.**
-
-> My app wants bytes, not human-readable sizes! The `MAX_UPLOAD_SIZE_BYTES` variable is a read-only variable that the entrypoint script calculates from `MAX_UPLOAD_SIZE`. If you need to work with byte values in your application, you can use this variable directly.
+See [MAX_UPLOAD_SIZE and Friends](./common.md#max_upload_size-and-friends) in the shared documentation for the full explanation.
 
 ### PHP_WORKER_STOP_WAIT_SECS and Docker Stop Timeout
 
-**Important:** `PHP_WORKER_STOP_WAIT_SECS` only takes effect if Docker's own stop timeout is set *higher* than this value. By default, Docker sends `SIGKILL` to the entire container 10 seconds after `SIGTERM` — so Supervisor never gets a chance to wait longer. If you raise `PHP_WORKER_STOP_WAIT_SECS` (e.g. to `90`), also set `stop_grace_period` in your `docker-compose.yml` to a value above it (e.g. `120s`):
-```yaml
-services:
-  my-app-worker:
-    image: neunerlei/php-nginx:latest
-    stop_grace_period: 120s
-    environment:
-      - PHP_WORKER_COMMAND=php /var/www/html/artisan queue:work --tries=3
-      - PHP_WORKER_STOP_WAIT_SECS=90
-```
+Graceful shutdown: `*_WORKER_STOP_WAIT_SECS` defines how long the worker may finish after SIGTERM — raise Docker's `stop_grace_period` above it, or the timeout never takes effect.
 
----
-
-#### Scenario 1: A Single App on a Domain Root
-
-Your app runs at the root of a domain. This is the simplest case.
-
-* **Public URL:** `https://my-app.com/`
-* **Environment:**
-    * `DOCKER_PROJECT_PATH: /`
-    * `DOCKER_SERVICE_PATH: /` (or unset, as it defaults to `/`)
-* **Resulting Path:**
-    * `DOCKER_SERVICE_ABS_PATH` will be `/`.
-
----
-
-#### Scenario 2: Frontend and Backend on the Same Domain
-
-You have a frontend service at the root and a backend API service under `/api/`. A reverse proxy routes traffic.
-
-* **Public URLs:**
-    * Frontend: `https://my-app.com/`
-    * Backend: `https://my-app.com/api/`
-
-**Frontend Service Configuration:**
-
-* `DOCKER_PROJECT_PATH: /`
-* `DOCKER_SERVICE_PATH: /`
-* **Resulting Path:** `DOCKER_SERVICE_ABS_PATH` is `/`.
-
-**Backend Service Configuration:**
-
-* `DOCKER_PROJECT_PATH: /`
-* `DOCKER_SERVICE_PATH: /api/`
-* **Resulting Path:** `DOCKER_SERVICE_ABS_PATH` is `/api/`. The backend can now correctly generate links like `/api/users/123`.
-
----
-
-#### Scenario 3: An Entire Project Deployed on a Sub-Path
-
-Your entire project, including a frontend and backend, must live under a specific path on a shared server.
-
-* **Public URLs:**
-    * Frontend: `https://shared.server.com/project-alpha/`
-    * Backend: `https://shared.server.com/project-alpha/api/`
-
-**Frontend Service Configuration:**
-
-* `DOCKER_PROJECT_PATH: /project-alpha/`
-* `DOCKER_SERVICE_PATH: /`
-* **Resulting Path:** `DOCKER_SERVICE_ABS_PATH` is `/project-alpha/`.
-
-**Backend Service Configuration:**
-
-* `DOCKER_PROJECT_PATH: /project-alpha/`
-* `DOCKER_SERVICE_PATH: /api/`
-* **Resulting Path:** `DOCKER_SERVICE_ABS_PATH` is `/project-alpha/api/`.
+See [Worker Mode](./common.md#worker-mode) in the shared documentation.
 
 ## Web Mode In-Depth
 
-In `web` mode, the entrypoint script configures NGINX to serve your application. By default, it operates over plain HTTP, but enabling SSL for HTTPS is controlled via a single environment variable. This process is known as **SSL Termination**, where NGINX handles the performance-intensive work of encrypting and decrypting traffic, freeing your application to communicate over plain HTTP internally.
+In `web` mode, the entrypoint script configures NGINX to serve your application.
 
-**Controlling the Protocol:**
+### HTTP vs. HTTPS
 
-The `DOCKER_PROJECT_PROTOCOL` and `DOCKER_SERVICE_PROTOCOL` variables work together to manage this.
+Direct HTTPS (`DOCKER_PROJECT_PROTOCOL=https` with mounted certificates) or, recommended, TLS terminated at an outer gateway (`DOCKER_SERVICE_PROTOCOL=http`).
 
-- `DOCKER_PROJECT_PROTOCOL`: Defines how the **end-user** connects to your service from the outside world. Set this to `"https"` if your service is exposed via HTTPS.
-- `DOCKER_SERVICE_PROTOCOL`: Defines how the **reverse proxy talks to your application container**. If you are terminating SSL at an outer proxy, you should set this to `"http"`. It defaults to the value of `DOCKER_PROJECT_PROTOCOL`.
-
-**Common Scenarios:**
-
-1. **Direct HTTPS Exposure:**
-    - **Goal:** This container handles SSL directly.
-    - **Config:** `DOCKER_PROJECT_PROTOCOL="https"` (and leave `DOCKER_SERVICE_PROTOCOL` unset).
-    - **Result:** NGINX listens on port 443 with SSL, using certificates from `NGINX_CERT_PATH` and `NGINX_KEY_PATH`, and redirects HTTP traffic to HTTPS. You must mount your certificates into the container at `/container/custom/certs/`.
-
-2. **SSL Termination at an External Gateway (Recommended for Production):**
-    - **Goal:** A different proxy (like Traefik, Caddy, or another `nginx` instance) handles SSL, and forwards plain HTTP traffic to this container.
-    - **Config:** `DOCKER_PROJECT_PROTOCOL="https"` (so your app can generate correct public URLs) and `DOCKER_SERVICE_PROTOCOL="http"`.
-    - **Result:** NGINX inside this container listens for plain HTTP on port 80. Your application remains simple and unaware of SSL, while still understanding that the public-facing connection is secure.
-
-> **Production Note:** For automated certificate management (e.g., via Let's Encrypt), using a dedicated reverse proxy gateway like [linuxserver/swag](https://docs.linuxserver.io/images/docker-swag) or [nginx-proxy](https://github.com/nginx-proxy/nginx-proxy) in front of this container is a highly recommended pattern. This centralizes SSL management and simplifies your application containers.
-
-### Example: A Secure Application with SSL Termination
-
-You're running a single application that must be accessed securely over HTTPS. Your reverse proxy will handle the security.
-
-* **Public URL:** `https://my-secure-app.com/`
-* **Request Flow:**
-    1. User's browser connects to `https://my-secure-app.com/`.
-    2. The reverse proxy receives the HTTPS request on port 443 and terminates the TLS connection.
-    3. The proxy forwards a plain HTTP request to the internal `app` service (e.g., `http://app`).
-
-* **Configuration for the `app` service:**
-  ```yaml
-  environment:
-    # --- Public-Facing Configuration ---
-    DOCKER_PROJECT_HOST: 'my-secure-app.com'
-    DOCKER_PROJECT_PROTOCOL: 'https' # The user connects via HTTPS
-
-    # --- Service-Specific Configuration ---
-    DOCKER_SERVICE_PROTOCOL: 'http'  # But the proxy talks to us via plain HTTP
-  ```
-
-* **Result:**
-    * Your main proxy listens for `https` traffic.
-    * Your `app` service only needs to run a standard `http` server on its internal port.
-    * The automatically derived `DOCKER_SERVICE_ABS_PATH` is `/`, and your application code can still be made aware that the public connection is secure by checking the `X-Forwarded-Proto` header, which proxies typically add.
-
-If you were to omit `DOCKER_SERVICE_PROTOCOL`, it would default to the value of `DOCKER_PROJECT_PROTOCOL` (`https` in this case), and your internal service would be expected to handle HTTPS traffic directly. By setting it explicitly to `http`, you enable the SSL Termination pattern.
+See [HTTP vs. HTTPS](./common.md#http-vs-https) in the shared documentation for the full explanation.
 
 ### Customizing NGINX with Intelligent Snippets
 
@@ -339,26 +227,15 @@ services:
 
 ### Automatic Container Restart on Fatal Failures
 
-Supervisor keeps your worker (and every other managed process) alive by restarting it whenever it exits. But if a process fails to start **repeatedly** — by default three times in quick succession — Supervisor marks it `FATAL` and permanently stops trying. Without intervention the container would then keep running with a dead worker that nothing notices: the container looks healthy, but no work is being done. This is exactly the kind of silent failure that can go unnoticed for days.
+All services run under Supervisor; a process reaching `FATAL` exits the whole container so a dead worker never hides inside a healthy-looking container.
 
-To prevent that, the image ships a Supervisor eventlistener that **shuts the whole container down the moment any managed process reaches `FATAL`**. Combined with a Docker restart policy, a crash-looping worker becomes a visible, self-healing container restart instead of a quiet stall:
-
-```yaml
-services:
-  my-app-worker:
-    image: neunerlei/php-nginx:8.5
-    restart: unless-stopped   # let the orchestrator bring the container back up
-    environment:
-      - PHP_WORKER_COMMAND=php /var/www/html/artisan queue:work --tries=3
-```
-
-> This applies in **web mode too**: if NGINX or PHP-FPM cannot stay up, the container exits rather than silently serving nothing. In local development (usually without a restart policy) the container simply stops, which surfaces the failure immediately instead of hiding it.
+See [Supervisor and Fatal Failures](./common.md#supervisor-and-fatal-failures) in the shared documentation for the full explanation.
 
 ## Build Mode at a Glance
 
-Automatically activated when no command is provided. This mode sets up the full container environment for multi-stage builds, dependency installation, testing, or compilation without starting any services.
+Invoking the entrypoint in a Dockerfile `RUN` without a command sets `CONTAINER_MODE=build`: full environment setup, services skipped — later `RUN` steps see exactly the production variables.
 
-Learn more about it in the [Build Mode Documentation](#build-time-execution-with-multi-stage-builds)
+See [Build Mode](./common.md#build-mode) in the shared documentation for the full explanation.
 
 ## Utility Commands
 
@@ -366,15 +243,9 @@ The following helper commands are available inside every container at runtime.
 
 ### `reload-supervisor`
 
-Restarts all Supervisor-managed services (e.g. NGINX, PHP-FPM) in one step:
+`reload-supervisor` applies changed configs without a container restart.
 
-```bash
-docker exec my-container reload-supervisor
-```
-
-Useful when you have changed an NGINX snippet or a PHP-FPM pool configuration and want the changes to take effect without restarting the entire container.
-
-> Under the hood this runs `supervisorctl restart all`, so all registered processes are stopped and restarted in one go. The Supervisor daemon itself keeps running.
+See [Utility Commands](./common.md#utility-commands) in the shared documentation.
 
 ## Advanced Customization: Templating and Overrides
 
@@ -382,98 +253,21 @@ This image uses a powerful templating engine that processes **all internal confi
 
 ### The `/container/custom` Directory
 
-**All customization happens through a single mount point: `/container/custom`**
+**All customization happens through a single mount point: `/container/custom`** — snippets, certificates, env files, hooks and image-specific runtime config together. Read-only mounts (e.g. Kubernetes config maps) are fully supported.
 
-This centralized approach simplifies volume management and provides a clear structure for organizing your custom configurations, scripts, and certificates.
-
-```yaml
-services:
-  app:
-    image: neunerlei/php-nginx:latest
-    volumes:
-      # Single mount for all customizations
-      - ./docker/custom:/container/custom
-```
-
-**Structure:**
-
-```
-docker/custom/
-├── env/                # Custom environment variable declarations (*.env, *.env.sh)
-├── nginx/              # Custom NGINX snippets (server-level)
-│   ├── global/         # Custom NGINX snippets (http-level)
-│   ├── location/       # Custom NGINX snippets (root-location-level "/")
-│   └── errorPage.html  # Optional: Custom error page template
-├── php/                # Custom PHP .ini snippets
-│   └── fpm/            # Custom PHP-FPM .conf snippets
-├── certs/              # SSL certificates (cert.pem, key.pem)
-└── entrypoint/         # Custom startup scripts
-```
-
-> **Development Mode Bonus:** When running with `ENVIRONMENT=development`, the container will automatically create this directory structure for you if `/container/custom` is mounted. This provides a clear guide for what you can customize.
+See [The /container/custom Directory](./common.md#the-custom-directory) for the structure and the config map example, and [Running on a Read-Only Filesystem](./common.md#running-on-a-read-only-filesystem) for read-only deployments.
 
 ### How Templating Works
 
-Every configuration file (both built-in templates in `/container/templates/` and your custom files in `/container/custom/`) is treated as a template. The entrypoint script reads these files, substitutes placeholders with their corresponding environment variable values, and writes the final config to its destination.
+Every config file — built-in and custom — is rendered with `${VAR}` substitution from the exported environment. `[[DEBUG_VARS]]` prints all substitutable variables.
 
-You can use any of the environment variables listed above as placeholders in your custom files, using the syntax `${VAR_NAME}`.
-
-> Whenever you see `TEMPLATES` in the headlines below, it means that you can use variables in the files.
-
-#### The `[[DEBUG_VARS]]` Helper
-
-To see exactly which variables are available for a template, you can add the special string `[[DEBUG_VARS]]` anywhere in a `.conf` or `.ini` file you are customizing. When the container starts, the template engine will detect this, print a list of all available variables and their current values to the console, and then exit. This is an invaluable tool for debugging your configurations.
-
-Example output:
-
-```
-DEBUG_VARS detected in template: '/container/custom/nginx/my_debug.conf'. Current variables that can be substituted:
-  - ${CONTAINER_MODE} = web
-  - ${ENVIRONMENT} = production
-  - ${NGINX_DOC_ROOT} = /var/www/html/public
-  ...
-```
+See [Templating](./common.md#templating) in the shared documentation for the full explanation.
 
 ### Filename Markers: Declarative Conditional Logic
 
-To control *when* your custom snippets and scripts are loaded, you can embed special markers in their filenames. This creates a powerful and readable declarative system for managing configuration.
+`.prod.`, `.dev.`, `.env-*`, `.mode-*` and `.https` filename suffixes decide declaratively when a file loads; `-or-` builds OR clauses.
 
-The system understands two operators: `.` (for AND) and `-or-` (for OR).
-
-> Whenever you see `MARKER-AWARE` in the headlines below, it means that these rules apply.
-
-**Logic Rules:**
-
-1. A filename is broken into groups by the `.` delimiter. For a file to be loaded, **every** logical group must be satisfied.
-2. Each group is broken into clauses by the `-or-` delimiter. For a group to be satisfied, **at least one** of its clauses must be true.
-
-**Available Markers:**
-
-| Marker Pattern | Example Filename          | Condition for Loading                                                                                                                                                                                                                                          |
-|:---------------|:--------------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `env-*`        | `config.env-staging.conf` | The value of `$ENVIRONMENT` must match the part after `env-` (in this case, "staging"). This allows you to define custom environments beyond `prod` and `dev`. The aliases `env-prod` (for `production`) and `env-dev` (for `development`) are also supported. |
-| `mode-*`       | `script.mode-worker.sh`   | The value of `$CONTAINER_MODE` must match the part after `mode-` (e.g., "worker", "web", or "build").                                                                                                                                                          |
-| `prod`         | `config.prod.conf`        | A short form of `env-prod` when `ENVIRONMENT` is `production`.                                                                                                                                                                                                 |
-| `dev`          | `config.dev.conf`         | A short form of `env-dev` when `ENVIRONMENT` is `development`.                                                                                                                                                                                                 |
-| `https`        | `ssl-settings.https.conf` | The `$DOCKER_SERVICE_PROTOCOL` must be `https`.                                                                                                                                                                                                                |
-
-**Examples:**
-
-- **`01-headers.conf`**
-    - **Logic:** No markers.
-    - **Result:** Always loaded.
-
-- **`10-security.prod.conf`** equivalent to `10-security.env-prod.conf`
-    - **Logic:** `prod`
-    - **Result:** Loaded only when `ENVIRONMENT` is `production`.
-
-- **`20-hsts.prod.https.conf`**
-    - **Logic:** `prod` AND `https`
-    - **Result:** Loaded only in a `production` environment with `https` enabled.
-
-- **`30-analytics.prod-or-env-staging.conf`** equivalent to `30-analytics.env-prod-or-env-staging.conf`
-    - **Logic:** `env-prod` OR `env-staging`
-    - **Result:** Loaded if `$ENVIRONMENT` is `production` or `staging`.
+See [Filename Markers](./common.md#filename-markers) in the shared documentation for the full explanation.
 
 ### Customization Methods
 
@@ -484,7 +278,7 @@ There are multiple ways to customize the container's behavior and configuration.
 This is the standard, additive approach for extending NGINX. It's perfect for adding headers, redirects, or custom `location` blocks.
 
 * **How it works:** Place your custom `.conf` files in `./docker/custom/nginx/` and mount it to `/container/custom`.
-* **Result:** These files are treated as snippets. After variable substitution, they are copied to `/etc/nginx/snippets/service.d/` and included by the main server block.
+* **Result:** These files are treated as snippets. After variable substitution, they are copied to `/etc/nginx/snippets/custom.d/` and included by the main server block.
 
 ```yaml
 # docker-compose.yml
@@ -588,111 +382,15 @@ max_execution_time = ${PHP_MAX_EXECUTION_TIME}
 default_socket_timeout = 300
 ```
 
-#### 3. Custom SSL Certificates `TEMPLATES`
+#### Shared Customization Methods
 
-For HTTPS support, provide your SSL certificate and private key:
+The remaining customization methods are shared between all images and are documented once in the shared documentation:
 
-* **How:** Place `cert.pem` and `key.pem` in `./docker/custom/certs/`.
-* **Result:** When `DOCKER_SERVICE_PROTOCOL="https"`, NGINX will use these certificates.
-
-**Directory structure:**
-
-```
-docker/custom/
-└── certs/
-    ├── cert.pem
-    └── key.pem
-```
-
-> **Warning:** If no custom certificates are found and HTTPS is enabled, the container will generate self-signed certificates and display a warning. This is only suitable for development.
-
-#### 4. Custom Error Pages `TEMPLATES`
-
-Customize the error pages shown for HTTP status codes (400, 401, 403, 404, 500, 502, 503, 504).
-
-* **How:** Place `errorPage.html` and/or `errorPage.json` in `./docker/custom/nginx/`.
-* **Result:** These templates will be used to generate all error pages. They support variable substitution including `${ERROR_CODE}`, `${ERROR_TITLE}`, and `${ERROR_DESCRIPTION}`.
-
-**Example `errorPage.html`:**
-
-```html
-<!DOCTYPE html>
-<html>
-<head><title>${ERROR_TITLE}</title></head>
-<body>
-<h1>${ERROR_CODE}</h1>
-<p>${ERROR_DESCRIPTION}</p>
-<p>Environment: ${ENVIRONMENT}</p>
-</body>
-</html>
-```
-
-#### 5. Custom Environment Variables `MARKER-AWARE`
-
-Declare project-specific environment variables that are derived from other variables or computed
-at runtime. These are loaded **before** any service configuration runs, so they are available to
-all NGINX and PHP templates and entrypoint hooks.
-
-* **How:** Place `*.env` (plain key=value) or `*.env.sh` (shell scripts) files in `./docker/custom/env/`.
-* **Result:** Variables in `*.env` files are automatically exported. Variables in `*.env.sh` files must be exported explicitly and can contain arbitrary shell logic.
-
-**Directory structure:**
-
-```
-docker/custom/
-└── env/
-    ├── 10-routing.env           # derives APP_URL from APP_HOST / APP_PROTOCOL
-    ├── 10-routing.prod.env      # production-only override
-    └── 20-dynamic.env.sh        # runtime lookups (e.g. from a secrets manager)
-```
-
-**Example `10-routing.env`:**
-
-```dotenv
-# docker/custom/env/10-routing.env
-APP_URL=${APP_PROTOCOL}://${APP_HOST}
-VITE_REVERB_HOST=${APP_HOST}
-VITE_REVERB_SCHEME=${APP_PROTOCOL}
-```
-
-Filename markers work here too — `10-routing.prod.env` is only loaded when `ENVIRONMENT=production`.
-
-#### 6. Custom Entrypoint Hooks `MARKER-AWARE`
-
-Run your own scripts when the container starts, just before the main command (`supervisord`) is executed.
-
-* **How:** Place `.sh` files in `./docker/custom/entrypoint/`.
-* **Result:** These scripts are executed during the container's startup process. All environment variables are automatically available.
-
-**Directory structure:**
-
-```
-docker/custom/
-└── entrypoint/
-    ├── 01-setup-database.mode-build.sh
-    ├── 02-clear-cache.mode-web.sh
-    └── 03-warm-cache.prod.sh
-```
-
-> **Note:** Unlike templates, entrypoint scripts are executed directly. You can use commands like `printenv | sort` to see all available variables, but the `[[DEBUG_VARS]]` helper is not available in shell scripts.
-
-**Example script:**
-
-```bash
-#!/bin/bash
-# 02-clear-cache.mode-web.sh
-echo "Clearing application cache for web mode..."
-php /var/www/html/bin/console cache:clear
-```
-
-#### 7. Overriding Core Templates (Advanced) `TEMPLATES`
-
-For maximum control, you can completely replace any of the container's default template files. This is an "all-or-nothing" approach best used for fundamentally changing a core component.
-
-* **How:** Identify the default template (e.g., `/container/templates/nginx/nginx.conf`). In your project, create your version and mount it to the *exact same path* inside the container.
-* **Result:** Your mounted file will completely replace the image's default. The entrypoint will then process *your* template instead.
-
-> **Note:** Filename markers do **not** apply when directly overriding a core template file.
+- [SSL Certificates](./common.md#ssl-certificates) — mount `cert.pem` + `key.pem` in `certs/`
+- [Custom Error Pages](./common.md#custom-error-pages) — `errorPage.html` / `errorPage.json` in `nginx/`
+- [Environment Files](./common.md#environment-files) — `*.env` / `*.env.sh` in `env/`, loaded before any service configuration
+- [Entrypoint Hooks](./common.md#entrypoint-hooks) — `.sh` scripts in `entrypoint/`, run just before the services launch
+- [Overriding Core Templates](./common.md#overriding-core-templates-advanced) — replace a default template wholesale (advanced)
 
 ### Complete Example
 
@@ -740,27 +438,9 @@ services:
 
 ### Migration from Legacy Mount Points
 
-> **Breaking Change:** Starting from PHP 8.2, all customization paths have been centralized to `/container/custom`.
+Legacy mount points (`/etc/ssl/certs`, `/etc/container/templates/...`) abort the startup with migration instructions.
 
-If you're upgrading from an older version that used individual mount points like `/etc/ssl/certs`, `/etc/container/templates/nginx/custom`, etc., your container will **fail to start** and display a clear error message with migration instructions.
-
-**Old structure (no longer supported):**
-
-```yaml
-volumes:
-  - ./docker/certs:/etc/ssl/certs
-  - ./docker/nginx:/etc/container/templates/nginx/custom
-  - ./docker/php:/etc/container/templates/php/custom
-```
-
-**New structure:**
-
-```yaml
-volumes:
-  - ./docker/custom:/container/custom
-```
-
-See the [Migration Guide](https://github.com/Neunerlei/docker-images/blob/main/docs/migration/migrate-to-centralized-container-dir.md) for detailed instructions.
+See [Migration from Legacy Mount Points](./common.md#migration-from-legacy-mount-points) in the shared documentation for the full explanation.
 
 ## Default Script (index.php)
 
@@ -768,16 +448,9 @@ To get you started quickly, the image includes a simple default `index.php` file
 
 ## The Shell Environment and the Bash Wrapper
 
-A common challenge in Docker is that environment variables set during an entrypoint's execution are not automatically available to subsequent `docker exec` sessions or different shell environments. This image solves this problem with a "bash wrapper."
+`/bin/bash` (and `/bin/sh`) source `/container/work/container-vars.sh` first, so entrypoint-exported variables are available in `docker exec` sessions. These container values take precedence over variables passed inline or via `docker exec -e`.
 
-During the build process, the original `/bin/bash` is moved to `/bin/_bash`, and a new `/bin/bash` script is put in its place. This wrapper does one simple thing: before executing the real bash, it sources the file at `/container/work/container-vars.sh`, which is generated by the entrypoint and contains all exported variables. The `/bin/sh` shell is also symlinked to this wrapper.
-
-> The PHP CLI has a similar mechanism. The `/usr/local/bin/php` binary is moved to `/usr/local/bin/_php`, and a wrapper script is placed at `/usr/local/bin/php` that uses the above bash wrapper to execute PHP with the correct environment.
-
-**Implications for You:**
-
-- **Seamless `exec`:** Variables like `DOCKER_SERVICE_ABS_PATH` will be available in `docker exec my-container env` or `docker exec my-container bash`.
-- **Other Shells (e.g., `zsh`):** If you install and use a different shell, it will **not** inherit these variables automatically. To get the same behavior, you would need to configure your `~/.zshrc` (or equivalent) to source `/container/work/container-vars.sh` upon startup.
+See [The Shell Environment and the Bash Wrapper](./common.md#the-shell-environment-and-the-bash-wrapper) in the shared documentation for the full explanation.
 
 ## Build-Time Execution with Multi-Stage Builds
 
@@ -787,11 +460,9 @@ This feature allows you to leverage the container's fully configured environment
 
 ### How It Works
 
-Build Mode is activated automatically:
+The entrypoint runs in build mode when invoked without a command; the resulting variables are exported for the following `RUN` steps.
 
-> When you execute the entrypoint script (`/container/entrypoint/entrypoint.sh`) inside a `Dockerfile` `RUN` instruction **without** providing any command, the framework detects this and sets `CONTAINER_MODE="build"`.
-
-It then proceeds to run all the normal setup steps, making variables like `DOCKER_SERVICE_ABS_PATH` available to subsequent `RUN` commands. Crucially, it skips the final `exec` step, allowing the Docker build to continue.
+See [Build Mode](./common.md#build-mode) in the shared documentation for the full explanation.
 
 ### Use Case: Creating an Optimized Production Image
 

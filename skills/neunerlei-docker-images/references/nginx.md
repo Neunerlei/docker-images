@@ -48,9 +48,11 @@ proxy:
 
 Env-var driven, regenerated every boot; passwords hashed with `openssl passwd -apr1`, htpasswd files land in `/container/work/nginx-basic-auth/`. The generated `auth_basic` directives are regular snippets: `/etc/nginx/snippets/basicAuth.nginx.conf` (server context, registered via the `nginx-snippets-basic-auth` tpl) and `proxy.d/<key>.auth.conf` per service (auto-included by the location's custom-snippet glob) — always present, empty when disabled.
 
-- **Global (all images, whole server):** `NGINX_BASIC_AUTH="user clear-pass"`, extra users `NGINX_BASIC_AUTH_1..n`, realm `NGINX_BASIC_AUTH_REALM` (default `Restricted`). First space separates user/password — passwords may contain spaces. Generated file path available as `NGINX_BASIC_AUTH_FILE`.
-- **Per service (this image, proxy mode):** `PROXY_<KEY>_BASIC_AUTH(_1..n/_REALM)` — replaces the global auth for that location only.
-- Opt out per location via `auth_basic off;` in a custom snippet; error pages stay reachable (the `@error_handler` location disables auth).
+- **Global (all images, whole server):** `NGINX_BASIC_AUTH="user clear-pass"`, extra users `NGINX_BASIC_AUTH_1..n` (any suffix combo, empty values ignored), realm `NGINX_BASIC_AUTH_REALM` (default `Restricted`). First space separates user/password — passwords may contain spaces. Generated file path available as `NGINX_BASIC_AUTH_FILE`.
+- **Per service (this image, proxy mode):** `PROXY_<KEY>_BASIC_AUTH(_1..n/_REALM)` — replaces the global auth for that location only (its users apply, global users don't).
+- **Ownership rule:** a snippet declaring `auth_basic` — including `auth_basic off;` — takes ownership of its context; the entrypoint then skips its generated directives there (NGINX forbids the directive twice). Password files are always written, so an owning snippet can point `auth_basic_user_file` at `${NGINX_BASIC_AUTH_DIR}/proxy.<key>.htpasswd` (or `${NGINX_BASIC_AUTH_FILE}`) and keep the env-managed users.
+- Boot log prints every configured user with password length — compare against expectations when logins fail (env parsers may truncate at `#`/`$`); verify with `printenv NGINX_BASIC_AUTH` in the container.
+- Error pages stay reachable without credentials (the `@error_handler` location disables auth).
 - Malformed values abort the container at boot instead of serving unprotected.
 
 ## Image-specific customization (`/container/custom`)

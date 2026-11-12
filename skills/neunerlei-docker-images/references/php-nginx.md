@@ -84,7 +84,7 @@ Shared dirs plus:
 |---|---|---|
 | `php/*.ini` | `php.ini` snippets | Prefix `z-` to load after defaults (`x.php.ini`, `x.php.prod.ini`) and override them. |
 | `php/fpm/*.conf` | FPM pool snippets | Defaults load as `www.conf`; prefix `z-`. |
-| `nginx/` | Server block | → `/etc/nginx/snippets/service.d/`. |
+| `nginx/` | Server block | → `/etc/nginx/snippets/custom.d/`. |
 | `nginx/global/` | `http` block | |
 | `nginx/location/` | Root `location /` block | Cannot override `try_files` (use `NGINX_TRY_FILES`). |
 

@@ -20,8 +20,12 @@ if [[ "${ENVIRONMENT}" == "development" ]]; then
     echo "[ENTRYPOINT.dev-setup] Ensuring custom directories exist:"
     for dir in "${!container_custom_dir_child_registry[@]}"; do
       if [[ ! -d "$dir" ]]; then
-        echo "  -> Creating missing custom directory: ${dir}"
-        mkdir -p "$dir"
+        if mkdir -p "$dir" 2>/dev/null; then
+          echo "  -> Created missing custom directory: ${dir}"
+        else
+          # Read-only custom mounts (e.g. Kubernetes config maps) cannot be scaffolded
+          echo "  -> Warning: cannot create '${dir}' (read-only mount?) — skipping skeleton creation." >&2
+        fi
       else
         echo "  -> Custom directory already exists: ${dir}"
       fi

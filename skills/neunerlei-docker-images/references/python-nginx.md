@@ -55,6 +55,11 @@ my-app-worker:
 | `GUNICORN_WORKER_CLASS` | `sync` | Worker type (`gevent`, `uvicorn.workers.UvicornWorker`, …). |
 | `GUNICORN_LOG_LEVEL` | `info` | Gunicorn log level. |
 | `GUNICORN_SOCKET` | `/run/gunicorn.sock` | Read-only: the Unix socket NGINX proxies to. |
+| `GUNICORN_TIMEOUT` | `30` | Worker kill timeout. Raise `NGINX_PROXY_READ_TIMEOUT` (default 60s) with it, or NGINX 504s first. |
+| `GUNICORN_GRACEFUL_TIMEOUT` | `30` | Graceful shutdown window before force-kill. |
+| `GUNICORN_MAX_REQUESTS` | `0` | Restart workers after N requests (memory leaks); 0 = off. |
+| `GUNICORN_MAX_REQUESTS_JITTER` | `0` | Spread worker restarts; without it all recycle at once. |
+| `GUNICORN_STOP_WAIT_SECS` | `graceful + 10` | Derived, overridable default. Supervisor `stopwaitsecs` (was 10s); `stop_grace_period` still caps it. |
 | `PYTHON_WORKER_COMMAND` | (unset) | **Setting this enables worker mode.** |
 | `PYTHON_WORKER_PROCESS_COUNT` | `1` | Supervisor `numprocs`. |
 | `PYTHON_WORKER_STOP_WAIT_SECS` | `10` | Supervisor `stopwaitsecs`; needs `stop_grace_period` above it. |
@@ -65,7 +70,7 @@ my-app-worker:
 ```dockerfile
 FROM neunerlei/python-nginx:latest
 COPY --chown=www-data:www-data ./requirements.txt /var/www/html/requirements.txt
-RUN gosu www-data pip install --no-cache-dir -r /var/www/html/requirements.txt
+RUN pip install --no-cache-dir -r /var/www/html/requirements.txt  # pip always runs as www-data
 COPY --chown=www-data:www-data ./src /var/www/html
 ```
 

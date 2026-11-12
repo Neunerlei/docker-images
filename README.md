@@ -11,6 +11,7 @@ A collection of Docker images; optimized for production use with common extensio
 - **[php-nginx](docs/php-nginx.md)**: PHP with NGINX included (from PHP 8.5 onwards, and PHP 8.4 as legacy)
 - **[php (deprecated)](docs/php.md)**: PHP-FPM only (without NGINX) (legacy, deprecated since PHP 8.4)
 - **[python-nginx](docs/python-nginx.md)**: Python in a box with NGINX as reverse proxy
+- **[common](docs/common.md)**: Concepts shared by all images (entrypoint, modes, customization, read-only/Kubernetes)
 
 ## Skill for AI Coding Agents
 

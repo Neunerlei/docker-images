@@ -3,32 +3,18 @@
 # Set correct ownership on the relevant directories
 echo "[ENTRYPOINT.user-permissions] Setting ownership on application directories..."
 
-set_owner_and_group() {
-  local path="$1"
-  local expected_owner="${2:-www-data}"
-  local expected_group="${3:-www-data}"
-
-  # Ignore if the path is already owned by the correct user
-  current_owner=$(stat -c '%U' "${path}")
-  if [ "${current_owner}" == "${expected_owner}" ]; then
-    echo "[ENTRYPOINT.user-permissions] ${path} is already owned by '${expected_owner}', skipping..."
-    return
-  fi
-
-  echo "[ENTRYPOINT.user-permissions] Setting ownership of ${path} to user '${expected_owner}' and group '${expected_group}'"
-  chown -R "${expected_owner}:${expected_group}" "${path}"
-}
-
-# Ensure all container bin scripts are executable
+# Ensure all container bin scripts are executable.
+# Scripts that are already executable are skipped, so this also works
+# on read-only filesystems (chmod fails there even without a mode change).
 if [ -d "${CONTAINER_BIN_DIR}" ]; then
-  chmod +x "${CONTAINER_BIN_DIR}/"*
+  for bin_script in "${CONTAINER_BIN_DIR}"/*; do
+    if [ -f "${bin_script}" ] && [ ! -x "${bin_script}" ]; then
+      chmod +x "${bin_script}"
+    fi
+  done
 fi
 
 # Set up ownership of user owned directories (or create them if missing)
 for dir in "${user_owned_directories_registry[@]}"; do
-  if [ ! -d "${dir}" ]; then
-    echo "[ENTRYPOINT.user-permissions] Creating missing directory: ${dir}"
-    mkdir -p "${dir}"
-  fi
-  set_owner_and_group "${dir}" "www-data" "www-data"
+  ensure_user_owned_dir "${dir}"
 done

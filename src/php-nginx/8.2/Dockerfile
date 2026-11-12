@@ -19,6 +19,8 @@ RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
     bash /tmp/installer/installer.sh \
       --env-wrap "/usr/local/bin/php" \
       --www-data-wrap "/usr/bin/composer" \
+      --user-owned-dir "/usr/local/etc/php/conf.d" \
+      --user-owned-dir "/usr/local/etc/php-fpm.d" \
       --add-dependency "libxml2-dev" \
       --add-dependency "tzdata" \
       --add-dependency "libicu-dev" \

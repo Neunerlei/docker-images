@@ -84,6 +84,18 @@ The outer proxy routes on `SERVICE_PATH`; application code generates absolute li
 
 > **Production note:** for automated certificate management (e.g. Let's Encrypt), running a dedicated gateway like [linuxserver/swag](https://docs.linuxserver.io/images/docker-swag) or [nginx-proxy](https://github.com/nginx-proxy/nginx-proxy) in front of these containers centralizes SSL management and keeps the application containers simple.
 
+## NGINX DNS Resolution
+
+NGINX resolves dynamic upstream names — a variable in `proxy_pass`, like `proxy_pass http://$backend;` — on every request through the servers of its `resolver` directive. It never consults `/etc/resolv.conf` for those, so the entrypoint fills the resolver snippet from the container's actual nameservers on every boot:
+
+- Docker (user-defined networks) → the embedded Docker DNS at `127.0.0.11`
+- Kubernetes → the cluster DNS
+- Podman / host networking → the runtime or host resolvers
+
+Override the detected servers with `NGINX_RESOLVER` (space-separated list for multiple servers); `NGINX_RESOLVER_VALID_TIMEOUT` (default `30s`, the `valid=` cache TTL for resolved addresses) and `NGINX_RESOLVER_TIMEOUT` (default `5s`, the query timeout) tune the corresponding `resolver` directives.
+
+> **Kubernetes note:** NGINX's resolver does not apply the `search` / `ndots` options from `/etc/resolv.conf`. Use fully qualified service names (`service.namespace.svc.cluster.local`) for variable-based upstreams — short names like `my-service` will not resolve.
+
 ## The Custom Directory
 
 **All customization happens through a single mount point:** `/container/custom`, usually `./docker/custom:/container/custom`.

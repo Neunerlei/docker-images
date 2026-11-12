@@ -104,3 +104,36 @@ export NGINX_PROXY_CONNECT_TIMEOUT="${NGINX_PROXY_CONNECT_TIMEOUT:-5s}"
 export NGINX_PROXY_READ_TIMEOUT="${NGINX_PROXY_READ_TIMEOUT:-60s}"
 export NGINX_PROXY_SEND_TIMEOUT="${NGINX_PROXY_SEND_TIMEOUT:-60s}"
 export NGINX_KEEPALIVE_TIMEOUT="${NGINX_KEEPALIVE_TIMEOUT:-$(calculate_keepalive_timeout)}"
+
+# Define the Nginx DNS resolvers. Nginx only consults them for dynamic upstream
+# names (a variable in proxy_pass, "server ... resolve", ...) which it resolves
+# on every request — for those it never reads /etc/resolv.conf on its own.
+# The servers are therefore detected from /etc/resolv.conf on every boot, so
+# the same image works everywhere: Docker's embedded DNS (127.0.0.11) on
+# user-defined networks, the cluster DNS in Kubernetes, Podman's runtime DNS,
+# the host resolvers with host networking, ...
+detect_dns_resolvers() {
+    local key nameserver found=""
+
+    # Without a readable resolv.conf we return nothing and let the caller
+    # fall back to the Docker default below
+    [ -r /etc/resolv.conf ] || return 0
+
+    while read -r key nameserver _; do
+        [[ "${key}" == "nameserver" ]] || continue
+        [ -n "${nameserver}" ] || continue
+        # Scoped IPv6 addresses (fe80::1%eth0) are not valid Nginx resolvers
+        case "${nameserver}" in *%*) continue ;; esac
+        # Nginx expects IPv6 resolver addresses in square brackets
+        case "${nameserver}" in *:*) nameserver="[${nameserver}]" ;; esac
+        found="${found}${found:+ }${nameserver}"
+    done < /etc/resolv.conf
+
+    printf '%s' "${found}"
+}
+export NGINX_RESOLVER="${NGINX_RESOLVER:-$(detect_dns_resolvers)}"
+# Fallback for containers without a readable resolv.conf: the embedded Docker
+# DNS, i.e. the previously hardcoded value
+export NGINX_RESOLVER="${NGINX_RESOLVER:-127.0.0.11}"
+export NGINX_RESOLVER_VALID_TIMEOUT="${NGINX_RESOLVER_VALID_TIMEOUT:-30s}"
+export NGINX_RESOLVER_TIMEOUT="${NGINX_RESOLVER_TIMEOUT:-5s}"

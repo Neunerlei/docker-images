@@ -13,7 +13,6 @@ RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
     bash /tmp/installer/installer.sh \
     --exec-after-dependencies "npm install -g pnpm" \
     --env-wrap "/usr/local/bin/node" \
-    --user-owned-dir "/var/www/.npm" \
     --user-owned-dir "/usr/local/lib/node_modules" \
     --www-data-wrap "/usr/local/bin/npm" \
     --www-data-wrap "/usr/local/bin/pnpm"
@@ -25,9 +24,10 @@ COPY --chown=www-data:www-data src /var/www/html
 SHELL ["/bin/bash", "-c"]
 WORKDIR /var/www/html
 
-RUN mkdir -p /var/www/.npm && chmod 755 /var/www/.npm \
-    && chown www-data:www-data /var/www/.npm \
-    && mkdir -p /usr/local/lib/node_modules \
+# Prepare the global node_modules directory so www-data can install global
+# packages. The npm cache no longer needs a dedicated directory: npm writes
+# it into the www-data home (/container/work/www-data-home) on demand.
+RUN mkdir -p /usr/local/lib/node_modules \
     && chown -R www-data:www-data /usr/local/lib/node_modules
 
 # Remove the "node" user, so we do not create conflicts with www-data

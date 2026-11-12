@@ -12,6 +12,36 @@ export GUNICORN_WORKERS="${GUNICORN_WORKERS:-4}"
 export GUNICORN_WORKER_CLASS="${GUNICORN_WORKER_CLASS:-sync}"
 export GUNICORN_LOG_LEVEL="${GUNICORN_LOG_LEVEL:-info}"
 
+# Gunicorn longevity settings (defaults match gunicorn's own, so nothing
+# changes unless a consumer opts in)
+export GUNICORN_TIMEOUT="${GUNICORN_TIMEOUT:-30}"
+export GUNICORN_GRACEFUL_TIMEOUT="${GUNICORN_GRACEFUL_TIMEOUT:-30}"
+export GUNICORN_MAX_REQUESTS="${GUNICORN_MAX_REQUESTS:-0}"
+export GUNICORN_MAX_REQUESTS_JITTER="${GUNICORN_MAX_REQUESTS_JITTER:-0}"
+
+# All five values below feed bash arithmetic or supervisor verbatim. Bash
+# arithmetic is dangerously lenient — leading zeros like "08" are parsed as
+# octal ("value too great for base" aborts the boot mid-run with a confusing
+# message) — so validate the numeric gunicorn settings up front and fail with
+# a clear error instead. The pattern rejects leading zeros on purpose.
+for _gunicorn_numeric_var in GUNICORN_TIMEOUT GUNICORN_GRACEFUL_TIMEOUT GUNICORN_MAX_REQUESTS GUNICORN_MAX_REQUESTS_JITTER; do
+    _value="${!_gunicorn_numeric_var}"
+    if ! [[ "${_value}" =~ ^(0|[1-9][0-9]*)$ ]]; then
+        echo "[ENTRYPOINT] Error: ${_gunicorn_numeric_var} must be a plain integer without leading zeros (seconds / requests), got: '${_value}'." >&2
+        exit 1
+    fi
+done
+unset _gunicorn_numeric_var _value
+
+# How long supervisor waits for gunicorn to shut down before SIGKILL.
+# Default: the graceful timeout plus a margin, so the workers get the full
+# graceful window (supervisor's own default of 10s would cut it short).
+export GUNICORN_STOP_WAIT_SECS="${GUNICORN_STOP_WAIT_SECS:-$((GUNICORN_GRACEFUL_TIMEOUT + 10))}"
+if ! [[ "${GUNICORN_STOP_WAIT_SECS}" =~ ^(0|[1-9][0-9]*)$ ]]; then
+    echo "[ENTRYPOINT] Error: GUNICORN_STOP_WAIT_SECS must be a plain integer without leading zeros (seconds), got: '${GUNICORN_STOP_WAIT_SECS}'." >&2
+    exit 1
+fi
+
 # Define the path to the Gunicorn socket
 export GUNICORN_SOCKET="/run/gunicorn.sock"
 

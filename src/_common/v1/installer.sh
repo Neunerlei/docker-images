@@ -104,7 +104,7 @@ set -e
 #     ownership correct on every boot. May be specified multiple times.
 #
 #     Example:
-#       --user-owned-dir "/var/www/.npm"
+#       --user-owned-dir "/opt/venv"
 #       --user-owned-dir "/usr/local/lib/node_modules"
 #
 #
@@ -543,6 +543,12 @@ fi
 # because a recursive chown does not descend through the work data symlink.
 ensure_user_owned_dir "${CONTAINER_DIR}"
 ensure_user_owned_dir "${CONTAINER_WORK_STAGING_DIR}"
+# The www-data home lives in the work directory: create and own it at build
+# time already, so the runtime user-permissions step stays a no-op on normal
+# boots (required for read-only filesystems). On read-only deployments a
+# writable mount at /container/work shadows it, and the entrypoint re-creates
+# it on every boot.
+ensure_user_owned_dir "${CONTAINER_WWW_DATA_HOME_DIR}"
 
 # -----------------------------------------------------------------
 # Ensure home permissions for www-data
@@ -561,6 +567,13 @@ if [ ! -d "/var/www/html" ]; then
     mkdir -p "/var/www/html"
 fi
 chown -R www-data:www-data "/var/www/html"
+# Point the www-data user at its runtime home in the work directory (created
+# above, and re-created by the entrypoint on every boot). This keeps gosu and
+# every getpwuid-based tool (~ expansion in git/ssh, docker exec --user) in
+# sync with the HOME the supervisor programs receive via their environment=.
+# NEVER use -m here: there is nothing to move, and -m would relocate the
+# whole /var/www application tree into the work directory.
+usermod -d "${CONTAINER_WWW_DATA_HOME_DIR}" www-data
 
 # -----------------------------------------------------------------
 # Install common dependencies

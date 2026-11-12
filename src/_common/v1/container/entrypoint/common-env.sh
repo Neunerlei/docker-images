@@ -29,6 +29,14 @@ export CONTAINER_ENTRYPOINT_SCRIPT="${CONTAINER_ENTRYPOINT_DIR}/entrypoint.sh"
 export CONTAINER_WORK_DIR="${CONTAINER_DIR}/work"
 # All template/entrypoint work data lives in this sub-directory of the work directory
 export CONTAINER_WORK_DATA_DIR="${CONTAINER_WORK_DIR}/data"
+# The home directory of the www-data service user. It deliberately lives in the
+# work directory: that is the one location guaranteed to be writable on every
+# deployment — including read-only filesystems, where /container/work is the
+# documented writable mount. Unlike work/data it is NOT reset on boot, so
+# caches and dotfiles survive container restarts. Read-only constant: the path
+# is baked into the image at build time (passwd entry, supervisor configs),
+# so overriding it at runtime would strand that baked state.
+export CONTAINER_WWW_DATA_HOME_DIR="${CONTAINER_WORK_DIR}/www-data-home"
 # Pristine build-time state of the work data. During the image build, work/data
 # is a symlink to this directory, so everything written "into the work data" —
 # by the installer, later build steps or child images — lands here. Every boot

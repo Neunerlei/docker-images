@@ -6,12 +6,12 @@ echo "[ENTRYPOINT] Starting bootstrapping process..."
 declare entrypoint_dir="$(dirname $(realpath "${BASH_SOURCE[0]}"))"
 declare step_dir="$entrypoint_dir/step.d"
 declare util_dir="$entrypoint_dir/util.d"
-declare entrypoint_command="$@"
+declare -a entrypoint_command=("$@")
 
 # If the entrypoint_command is empty, we automatically set the container mode to "build"
 # This is useful when building libraries, running unit tests or simply want to initialize a multi-step build.
 export CONTAINER_MODE=""
-if [ -z "$entrypoint_command" ]; then
+if [ ${#entrypoint_command[@]} -eq 0 ]; then
     export CONTAINER_MODE="build"
     echo "[ENTRYPOINT] No command specified, setting CONTAINER_MODE to 'build'."
 fi
@@ -59,8 +59,9 @@ declare -g -a user_owned_directories_registry=(
     "/var/log/nginx"
     "${CONTAINER_DIR}"
     "${NGINX_SERVE_ROOT}"
-    "/var/www" # This is important because this is the home directory for the www-data user, and we want to ensure it has the correct ownership and permissions.
+    "/var/www" # This is the home directory of the www-data user by distribution default. It remains the application tree parent — the writable service home lives in the work directory (CONTAINER_WWW_DATA_HOME_DIR).
     "${NGINX_DOC_ROOT}"
+    "${CONTAINER_WWW_DATA_HOME_DIR}"
 )
 # Additional user owned directories can be declared for the running container via the
 # USER_OWNED_DIRECTORIES environment variable (space separated), e.g. for volumes that
@@ -92,6 +93,62 @@ if [ ! -d "${CONTAINER_WORK_DIR}" ]; then
     echo "[ENTRYPOINT] Work directory is missing — creating it..."
     mkdir -p "${CONTAINER_WORK_DIR}"
 fi
+
+# --- Service user home bootstrap -----------------------------------------
+# The www-data home lives in the work directory, so it is writable on every
+# deployment — including read-only filesystems, where /container/work is the
+# documented writable mount (tmpfs or emptyDir start empty, so the home must
+# be created here). It has to exist before the entrypoint steps run: step 030
+# (git) already writes to $HOME of the www-data user via gosu. The chown is
+# conditional, matching ensure_user_owned_dir: already-correct setups — and
+# environments where chown is not permitted — are left untouched.
+if [ ! -d "${CONTAINER_WWW_DATA_HOME_DIR}" ]; then
+    echo "[ENTRYPOINT] Creating www-data home directory: ${CONTAINER_WWW_DATA_HOME_DIR}"
+    mkdir -p "${CONTAINER_WWW_DATA_HOME_DIR}"
+fi
+if [ "$(stat -c '%U' "${CONTAINER_WWW_DATA_HOME_DIR}")" != "www-data" ]; then
+    # Recursive, like ensure_user_owned_dir: on a named volume at /container/work
+    # the CONTENTS can keep a stale uid (e.g. PUID removed after a previous boot
+    # reset /etc/passwd to uid 33) while step 070 would see the — by then fixed —
+    # top-level owner and skip its repair. Conditional, so boots where the
+    # ownership already matches remain a no-op.
+    chown -R www-data:www-data "${CONTAINER_WWW_DATA_HOME_DIR}"
+fi
+
+# --- Legacy dotfile bridge -------------------------------------------------
+# Historically the www-data home was /var/www, so consumers may have baked or
+# mounted dotfiles there (.npmrc, .ssh, .gitconfig, .composer, ...). After the
+# home moved, those files would silently stop being read. Bridge them: every
+# dot-entry in /var/www that does not exist in the new home yet is symlinked.
+# Note: writes through a bridged entry (e.g. into ~/.ssh/) land back in
+# /var/www, which is unwritable on read-only systems — the bridge does not
+# change that, it only keeps the files readable where they were before.
+shopt -s nullglob
+# First sweep the home for leftover bridge links from earlier boots whose
+# source in /var/www has disappeared (e.g. a mount was removed while the home
+# lives on a named volume) — dangling links must not accumulate forever.
+for existing_home_entry in "${CONTAINER_WWW_DATA_HOME_DIR}"/.[!.]* "${CONTAINER_WWW_DATA_HOME_DIR}"/..?*; do
+    if [ -L "${existing_home_entry}" ]; then
+        existing_home_target="$(readlink "${existing_home_entry}")"
+        case "${existing_home_target}" in
+            /var/www/*)
+                if [ ! -e "${existing_home_entry}" ]; then
+                    echo "[ENTRYPOINT] Removing stale bridge link '${existing_home_entry}' (target '${existing_home_target}' is gone)."
+                    rm -f "${existing_home_entry}"
+                fi
+                ;;
+        esac
+    fi
+done
+for legacy_entry in /var/www/.[!.]* /var/www/..?*; do
+    bridge_target="${CONTAINER_WWW_DATA_HOME_DIR}/${legacy_entry##*/}"
+    if [ ! -e "${bridge_target}" ] && [ ! -L "${bridge_target}" ]; then
+        echo "[ENTRYPOINT] Warning: bridging legacy '${legacy_entry}' into the www-data home. Deprecated — move it to '${CONTAINER_WWW_DATA_HOME_DIR}'." >&2
+        echo "Migration guide: https://github.com/Neunerlei/docker-images/blob/main/docs/migration/2026-11-12-www-data-home-directory.md" >&2
+        ln -s "${legacy_entry}" "${bridge_target}"
+    fi
+done
+shopt -u nullglob
 
 echo "[ENTRYPOINT] Resetting work data from the staging area..."
 rm -rf "${CONTAINER_WORK_DATA_DIR}"
@@ -126,6 +183,6 @@ if [ "$CONTAINER_MODE" == "build" ]; then
     export -p > "${CONTAINER_VARS_SCRIPT}"
     rm -f "${CONTAINER_VARS_SCRIPT}"
 else
-    echo "[ENTRYPOINT] Running in NORMAL mode, executing entrypoint command: $entrypoint_command"
-    exec $entrypoint_command
+    echo "[ENTRYPOINT] Running in NORMAL mode, executing entrypoint command: $(printf '%q ' "${entrypoint_command[@]}")"
+    exec "${entrypoint_command[@]}"
 fi

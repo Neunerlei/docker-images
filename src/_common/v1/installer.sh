@@ -56,13 +56,14 @@ set -e
 #     variables are available when the binary is invoked — even from
 #     "docker exec" sessions that bypass the entrypoint.
 #
-#     The original binary is moved to PATH_orig, and a shell wrapper is
+#     The original binary is moved to a "_"-prefixed sibling path (e.g.
+#     /usr/local/bin/php -> /usr/local/bin/_php), and a shell wrapper is
 #     generated at the original PATH. The wrapper sources the variable
 #     file written by the entrypoint (/container/work/container-vars.sh)
 #     before exec-ing the original binary.
 #
 #     /bin/bash is wrapped by default. Its wrapper uses a special shebang
-#     (#!/bin/bash_orig) to avoid infinite recursion. /bin/sh is symlinked
+#     (#!/bin/_bash) to avoid infinite recursion. /bin/sh is symlinked
 #     to the wrapped /bin/bash.
 #
 #     Example:

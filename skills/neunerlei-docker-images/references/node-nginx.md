@@ -22,6 +22,8 @@ App code goes to `/var/www/html`. NGINX serves static files from `/var/www/html/
 
 Both installed. Both ALWAYS run as `www-data` — no permission worries from root shells. For global package installs or running as another user, call the unwrapped originals: `_npm`, `_pnpm`.
 
+`node` itself is env-wrapped like bash: `node script.js` and `docker exec … node` see entrypoint vars; `_node` is the original. Container values take precedence over inline overrides like `NODE_ENV=test node …` — see SKILL.md.
+
 ## Modes
 
 - **web** (default): NGINX (reverse proxy) + your Node server.

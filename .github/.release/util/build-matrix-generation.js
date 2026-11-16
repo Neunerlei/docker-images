@@ -3,7 +3,7 @@ const semver = require('semver');
 const path = require('path');
 const core = require('@actions/core');
 const constants = require('./constants');
-const {ensureSemverValidity, sortVersionList, sortVersionListReverse, isVersionLte, isVersionGte} = require('./docker-version-utils');
+const {ensureSemverValidity, sortVersionList, sortVersionListReverse, isVersionLte, isVersionGte, toRollingVersion} = require('./docker-version-utils');
 
 /*
 * Helper function for Semver-aware directory selection
@@ -56,6 +56,48 @@ function getLatestVersions(versions, take) {
 }
 
 /**
+ * Selects the versions to build, based on the tracked version limits.
+ *
+ * When all versions are patch versions (3 segments, e.g. "3.13.8"), the versions are grouped
+ * by their version line ("3.13"). The newest "trackedPatchVersions" patches of the newest
+ * "trackedVersions" lines get selected. So with trackedVersions=2 and trackedPatchVersions=2
+ * out of ["3.12.1", "3.12.9", "3.13.4", "3.13.8"] the result is
+ * ["3.12.1", "3.12.9", "3.13.4", "3.13.8"], while out of ["3.12.1", "3.13.4", "3.13.8", "3.14.2"]
+ * only ["3.13.4", "3.13.8", "3.14.2"] remains (the 3.12 line is no longer tracked).
+ *
+ * For versions with less than 3 segments (e.g. "3.13"), the behavior stays as it was:
+ * the newest "trackedVersions" versions get selected.
+ *
+ * @param {Map<string,string>} versions A map of version numbers of the source image to their docker tags
+ * @param {number} trackedVersions Number of version lines to track
+ * @param {number} trackedPatchVersions Number of latest patch versions to build per version line
+ * @return {string[]} Array of version strings, oldest first, latest last
+ */
+function selectVersionsToBuild(versions, trackedVersions, trackedPatchVersions) {
+    const sortedVersions = sortVersionList(versions.keys());
+    if (sortedVersions.length === 0 || !sortedVersions.every(version => version.split('.').length === 3)) {
+        return getLatestVersions(versions, trackedVersions);
+    }
+
+    const patchesByLine = new Map();
+    for (const version of sortedVersions) {
+        const line = toRollingVersion(version);
+        if (!patchesByLine.has(line)) {
+            patchesByLine.set(line, []);
+        }
+        patchesByLine.get(line).push(version);
+    }
+
+    const trackedLines = sortVersionList(patchesByLine.keys()).slice(0, trackedVersions);
+    const selectedVersions = [];
+    for (const line of trackedLines) {
+        selectedVersions.push(...patchesByLine.get(line).slice(0, Math.max(1, trackedPatchVersions)));
+    }
+
+    return sortVersionListReverse(selectedVersions);
+}
+
+/**
  * Generates a build matrix for CI/CD pipelines
  * @param {Object} options Options object
  * @param {string} options.sourceImage Fully qualified source image name (e.g. library/nginx)
@@ -63,11 +105,18 @@ function getLatestVersions(versions, take) {
  * @param {string} [options.targetImageType] Target image type (e.g., 'alpine', 'slim', etc.)
  * @param {boolean} options.detectLatestVersion Whether to mark the latest version in the matrix
  * @param {Map<string,string>} options.sourceVersions Map of version numbers of the source image to their docker tags
- * @param {number} [options.trackedVersions=3] Number of latest versions to include in the matrix
+ * @param {number} [options.trackedVersions=3] Number of latest version lines (minor versions) to include in the matrix
+ * @param {number} [options.trackedPatchVersions=1] Number of latest patch versions to build per version line.
+ *                                       Only used when the discovered versions are patch versions (version precision 3),
+ *                                       otherwise it is ignored.
+ * @param {boolean} [options.rollingTags=true] Whether each version line should additionally receive a "rolling" tag
+ *                                       (e.g. "3.13" pointing to the newest built "3.13.x" patch).
+ *                                       Only used when the discovered versions are patch versions (version precision 3).
  * @param {string|undefined} [options.lastVersion] Last version to build (for deprecation purposes). Can be set to a version that will be the last to build.
  *                                       Even if newer versions are discovered, they will not be built.
  *                                       If the given version is not found, no build will be performed. This must be in the format matching the precision.
- * @return {{include: {version: string, tag: string, sourceImageWithTag: string, buildPath: string, isLatest: boolean}[]}|null} Build matrix object, null if no versions found
+ * @return {{include: {version: string, tag: string, rollingTag: string, sourceImageWithTag: string, buildPath: string, isLatest: boolean}[]}|null} Build matrix object, null if no versions found.
+ *                                       The "rollingTag" is empty when no rolling tag applies to the entry.
  */
 function generateBuildMatrix(options) {
     const {
@@ -77,6 +126,8 @@ function generateBuildMatrix(options) {
         targetImageType,
         detectLatestVersion,
         trackedVersions = 3,
+        trackedPatchVersions = 1,
+        rollingTags = true,
         lastVersion
     } = options;
 
@@ -90,9 +141,9 @@ function generateBuildMatrix(options) {
         return null;
     }
 
-    core.info(`Generating build matrix with trackedVersions=${trackedVersions}, lastVersion=${lastVersion || 'not set'} of ${sourceVersions.size} available versions`);
+    core.info(`Generating build matrix with trackedVersions=${trackedVersions}, trackedPatchVersions=${trackedPatchVersions}, rollingTags=${rollingTags}, lastVersion=${lastVersion || 'not set'} of ${sourceVersions.size} available versions`);
 
-    let versionsToBuild = getLatestVersions(sourceVersions, trackedVersions);
+    let versionsToBuild = selectVersionsToBuild(sourceVersions, trackedVersions, trackedPatchVersions);
 
     if(lastVersion){
         if(!versionsToBuild.includes(lastVersion)){
@@ -140,12 +191,21 @@ function generateBuildMatrix(options) {
             continue;
         }
         let tag = version;
+        let rollingTag = '';
         if(targetImageType && targetImageType.trim() !== ''){
             tag = `${version}-${targetImageType.trim()}`;
+        }
+        // Rolling tags only apply to patch versions (3 segments), e.g. "3.13.8" -> "3.13"
+        if(rollingTags && version.split('.').length === 3){
+            rollingTag = toRollingVersion(version);
+            if(targetImageType && targetImageType.trim() !== ''){
+                rollingTag = `${rollingTag}-${targetImageType.trim()}`;
+            }
         }
         buildMatrix.include.push({
             version: version,
             tag,
+            rollingTag,
             sourceImageWithTag: `${sourceImage}:${sourceVersions.get(version)}`,
             buildPath: buildPath,
             isLatest: false
@@ -155,6 +215,22 @@ function generateBuildMatrix(options) {
     if(buildMatrix.include.length === 0){
         core.warning('No valid build paths found for any versions to build');
         return null;
+    }
+
+    // Make sure only the newest built patch of a version line carries the rolling tag,
+    // so the rolling tag always points to the newest patch of that line
+    const linesWithRollingTag = new Set();
+    for(let i = buildMatrix.include.length - 1; i >= 0; i--){
+        const entry = buildMatrix.include[i];
+        if(entry.rollingTag === ''){
+            continue;
+        }
+        const line = toRollingVersion(entry.version);
+        if(linesWithRollingTag.has(line)){
+            entry.rollingTag = '';
+        } else {
+            linesWithRollingTag.add(line);
+        }
     }
 
     if(detectLatestVersion){
@@ -170,5 +246,6 @@ function generateBuildMatrix(options) {
 
 module.exports = {
     generateBuildMatrix,
-    findBuildPath
+    findBuildPath,
+    selectVersionsToBuild
 };

@@ -2,7 +2,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const yaml = require('yaml');
 const constants = require('./util/constants');
-const {getAllTags, parseVersionTags, buildImageNameByArgs, buildTagFilterByArgs} = require('./util/docker-version-utils');
+const {getAllTags, parseVersionTags, resolvePartialVersion, sortVersionList, buildImageNameByArgs, buildTagFilterByArgs} = require('./util/docker-version-utils');
 const {generateBuildMatrix} = require('./util/build-matrix-generation');
 const child_process = require('node:child_process');
 
@@ -22,6 +22,7 @@ const child_process = require('node:child_process');
         console.error('Image name and source version are required arguments.');
         // Show usage
         console.error('Usage: bin/build.sh <image-name> <source-version> [image-type]');
+        console.error('The source version can be partial (e.g. 3.13), it will then be resolved to the newest matching version (e.g. 3.13.8)');
         process.exit(1);
     }
 
@@ -73,6 +74,10 @@ const child_process = require('node:child_process');
     const sourceImageType = jobWith['source-image-type'] || '';
     const sourceImageOs = jobWith['source-image-os'] || '';
     const trackedVersions = parseInt(jobWith['tracked-versions'] || '3', 10);
+    const trackedPatchVersions = parseInt(jobWith['tracked-patch-versions'] || '1', 10);
+    const rollingTags = typeof jobWith['rolling-tags'] === 'boolean'
+        ? jobWith['rolling-tags']
+        : (jobWith['rolling-tags'] || 'true').toLowerCase() === 'true';
     const deprecatedVersion = jobWith['deprecated'] || '';
     const versionPrecision = parseInt(jobWith['version-precision'] || '3', 10);
     const detectLatestVersion = typeof jobWith['latest-tag'] === 'boolean'
@@ -95,6 +100,8 @@ const child_process = require('node:child_process');
         console.log('Image type:', imageType);
     }
     console.log('Tracked versions:', trackedVersions);
+    console.log('Tracked patch versions:', trackedPatchVersions);
+    console.log('Rolling tags:', rollingTags);
     console.log('Deprecated version:', deprecatedVersion);
     console.log('Version precision:', versionPrecision);
     console.log('Detect latest version:', detectLatestVersion);
@@ -111,19 +118,30 @@ const child_process = require('node:child_process');
 
     console.log(`Found ${sourceVersions.size} source versions:`, Array.from(sourceVersions.keys()));
 
-    if (!sourceVersions.has(sourceVersion)) {
+    const resolvedVersion = resolvePartialVersion(sourceVersions, sourceVersion);
+    if (!resolvedVersion) {
         console.error(`Source version "${sourceVersion}" not found among available source image tags.`);
         console.log('Available source versions:', Array.from(sourceVersions.keys()));
         process.exit(1);
     }
+    if (resolvedVersion !== sourceVersion) {
+        console.log(`Resolved source version "${sourceVersion}" to "${resolvedVersion}"`);
+    }
+
+    // Mirror the CI behavior: if the resolved version is the newest discovered version,
+    // and the workflow uses the "latest" tag, the local build is tagged as "latest" as well
+    const newestVersion = sortVersionList(sourceVersions.keys())[0];
+    const isLatestVersion = detectLatestVersion && resolvedVersion === newestVersion;
 
     const buildMatrix = generateBuildMatrix({
         sourceImage,
-        sourceVersions: new Map([[sourceVersion, sourceVersions.get(sourceVersion)]]),
+        sourceVersions: new Map([[resolvedVersion, sourceVersions.get(resolvedVersion)]]),
         targetImageName: imageName,
         targetImageType: imageType,
-        detectLatestVersion: false,
-        trackedVersions: 1
+        detectLatestVersion: isLatestVersion,
+        trackedVersions: 1,
+        trackedPatchVersions: 1,
+        rollingTags
     });
 
     if (buildMatrix === null) {
@@ -135,11 +153,23 @@ const child_process = require('node:child_process');
     console.log('Build Entry:');
     console.log(` - Version: ${buildEntry.version}`);
     console.log(` - Tag: ${buildEntry.tag}`);
+    console.log(` - Rolling Tag: ${buildEntry.rollingTag || 'none'}`);
+    console.log(` - Latest Tag: ${buildEntry.isLatest ? 'yes' : 'no'}`);
     console.log(` - Source Image with Tag: ${buildEntry.sourceImageWithTag}`);
     console.log(` - Build Path: ${buildEntry.buildPath}`);
 
     let commonDirPath = path.join(__dirname, '..', '..', 'src', '_common');
 
-    const dockerBuildCommand = `cd "${buildEntry.buildPath}" && docker build -t ${targetImage}:${buildEntry.tag} --build-context common="${commonDirPath}" --progress=plain --build-arg SOURCE_IMAGE=${buildEntry.sourceImageWithTag} .`;
+    // Apply the same tags the CI pipeline would publish, so the local build can be tested like the published one
+    const tagsToApply = [buildEntry.tag];
+    if (buildEntry.rollingTag && buildEntry.rollingTag.length > 0) {
+        tagsToApply.push(buildEntry.rollingTag);
+    }
+    if (buildEntry.isLatest) {
+        tagsToApply.push('latest');
+    }
+    console.log('Applying tags:', tagsToApply.map(tag => `${targetImage}:${tag}`).join(', '));
+
+    const dockerBuildCommand = `cd "${buildEntry.buildPath}" && docker build ${tagsToApply.map(tag => `-t ${targetImage}:${tag}`).join(' ')} --build-context common="${commonDirPath}" --progress=plain --build-arg SOURCE_IMAGE=${buildEntry.sourceImageWithTag} .`;
     child_process.execSync(dockerBuildCommand, {stdio: 'inherit'});
 })();

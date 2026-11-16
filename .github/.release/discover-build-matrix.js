@@ -45,6 +45,17 @@ const {buildImageByArgs, buildImageNameByArgs, buildTagFilterByArgs} = require('
      */
     const trackedVersionsInput = core.getInput('tracked-versions');
     /**
+     * Number of most recent patch versions to build per tracked version line (default: 1)
+     * @type {string}
+     */
+    const trackedPatchVersionsInput = core.getInput('tracked-patch-versions');
+    /**
+     * If set to true, the newest built patch of each tracked version line also receives
+     * a "rolling" tag without the patch segment (e.g. 3.13.8 is also tagged as 3.13)
+     * @type {boolean}
+     */
+    const rollingTagsInput = core.getBooleanInput('rolling-tags');
+    /**
      * If this flag is set, it is expected that it is set to the last version to build before deprecating the image.
      * While the version set in this flag is present in the "tracked-versions", it will be built as usual.
      * Once the version is no longer in the tracked versions (because newer versions exist),
@@ -98,7 +109,8 @@ const {buildImageByArgs, buildImageNameByArgs, buildTagFilterByArgs} = require('
     core.info(`Parsed ${targetVersions.size} unique versions from target image tags`);
 
     const trackedVersions = (trackedVersionsInput && !isNaN(parseInt(trackedVersionsInput, 10))) ? parseInt(trackedVersionsInput, 10) : 3;
-    core.info(`Tracking the latest ${trackedVersions} versions for building`);
+    const trackedPatchVersions = (trackedPatchVersionsInput && !isNaN(parseInt(trackedPatchVersionsInput, 10))) ? parseInt(trackedPatchVersionsInput, 10) : 1;
+    core.info(`Tracking the latest ${trackedVersions} version line(s), with up to ${trackedPatchVersions} patch version(s) each, for building`);
 
     let lastVersion = deprecatedInput && deprecatedInput.trim() !== '' ? deprecatedInput.trim() : undefined;
     let deprecated = false;
@@ -114,6 +126,8 @@ const {buildImageByArgs, buildImageNameByArgs, buildTagFilterByArgs} = require('
         targetImageType: targetImageTypeInput,
         detectLatestVersion,
         trackedVersions,
+        trackedPatchVersions,
+        rollingTags: rollingTagsInput,
         lastVersion
     });
 
@@ -125,9 +139,13 @@ const {buildImageByArgs, buildImageNameByArgs, buildTagFilterByArgs} = require('
     if (buildNeeded) {
         core.info(`Build matrix generated with ${buildMatrix.include.length} entries:`);
         for (const entry of buildMatrix.include) {
-            core.info(` - Version: ${entry.version}, Tag: ${entry.tag}, Source Image: ${entry.sourceImageWithTag}, Build Path: ${entry.buildPath}, Is Latest: ${entry.isLatest}`);
-            allTags.set(entry.version, entry.tag);
+            core.info(` - Version: ${entry.version}, Tag: ${entry.tag}, Rolling Tag: ${entry.rollingTag || 'none'}, Source Image: ${entry.sourceImageWithTag}, Build Path: ${entry.buildPath}, Is Latest: ${entry.isLatest}`);
+            allTags.set(entry.tag, entry.tag);
             maintainedTags.push(entry.tag);
+            if(entry.rollingTag && entry.rollingTag.length > 0){
+                allTags.set(entry.rollingTag, entry.rollingTag);
+                maintainedTags.push(entry.rollingTag);
+            }
             if(entry.isLatest){
                 latestTagBuilt = true;
             }
@@ -138,7 +156,7 @@ const {buildImageByArgs, buildImageNameByArgs, buildTagFilterByArgs} = require('
 
     /**
      * The build matrix object to be used in the build step
-     * The matrix looks like: {include: {version: string, tag: string, sourceImageWithTag: string, buildPath: string, isLatest: boolean}[]}
+     * The matrix looks like: {include: {version: string, tag: string, rollingTag: string, sourceImageWithTag: string, buildPath: string, isLatest: boolean}[]}
      */
     core.setOutput('build-matrix', JSON.stringify(buildMatrix ?? {include: []}));
     /**

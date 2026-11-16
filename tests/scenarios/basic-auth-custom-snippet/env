@@ -1,0 +1,4 @@
+# Global auth is configured (so the ownership case is reachable at all) but a
+# custom server-level snippet declares its own auth_basic and takes over.
+NGINX_BASIC_AUTH=global-user global-password
+NGINX_BASIC_AUTH_REALM=Global Realm

@@ -1,0 +1,3 @@
+# Direct HTTPS termination: the service protocol defaults to the project
+# protocol, so this single variable flips the whole server to TLS.
+DOCKER_PROJECT_PROTOCOL=https

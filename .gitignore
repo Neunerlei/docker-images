@@ -13,3 +13,10 @@ node_modules
 
 # Pipeline files
 .github/.release/build
+
+# Test suite volatile state: capture caches, bats pins, built-image stamps
+# (tests/.cache) and the Phase-1 parity workspace with its git worktree and
+# per-run captures (tests/.parity) — nothing in there is ever committed
+# (plan §1.1: nothing from Phase 1 lands in the repository).
+tests/.cache/
+tests/.parity/

@@ -1,0 +1,3 @@
+# docker exec shell (root, no gosu)
+bash: HOME=/root
+gosu www-data python: /container/work/www-data-home

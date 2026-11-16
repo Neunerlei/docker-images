@@ -1,0 +1,24 @@
+# PR guard for the node-nginx image — see tests-nginx.yml for the pattern.
+name: Tests Node.js Nginx
+
+on:
+  pull_request:
+    paths:
+      - src/**
+      - tests/**
+
+permissions:
+  contents: read
+
+jobs:
+  call-tests-engine:
+    uses: ./.github/workflows/tests-engine.yml
+    with:
+      image-name: 'node-nginx'
+      source-image-namespace: 'library'
+      source-image-name: 'node'
+      source-image-type: ''
+      source-image-os: 'trixie'
+      # Newest version directory under src/node-nginx/ (see tests-php-nginx.yml)
+      source-image-version: '24'
+      version-precision: '1'

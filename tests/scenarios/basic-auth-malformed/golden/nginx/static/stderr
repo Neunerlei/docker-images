@@ -1,0 +1,4 @@
+Directory '/container/custom/env' does not exist. Skipping.
+Directory '/container/custom/env' does not exist. Skipping.
+[UTIL.basic-auth] Error: Malformed basic auth credential. Expected format: 'username clear-password' (separated by a space). The username must not be empty and must not contain ':' or spaces, the password must not be empty.
+[ENTRYPOINT.nginx] Error: Invalid NGINX_BASIC_AUTH / NGINX_BASIC_AUTH_<n> value. Aborting.

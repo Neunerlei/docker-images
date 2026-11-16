@@ -1,0 +1,6 @@
+# Explicit resolver override (space-separated list) plus non-default knobs —
+# the directive must render "resolver 127.0.0.11 8.8.8.8 valid=17s;" and
+# "resolver_timeout 9s;" verbatim.
+NGINX_RESOLVER=127.0.0.11 8.8.8.8
+NGINX_RESOLVER_VALID_TIMEOUT=17s
+NGINX_RESOLVER_TIMEOUT=9s

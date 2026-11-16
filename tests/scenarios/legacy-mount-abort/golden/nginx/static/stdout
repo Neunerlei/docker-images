@@ -1,0 +1,15 @@
+[ENTRYPOINT] Starting bootstrapping process...
+[ENTRYPOINT] Setting common environment variables...
+❌ [ERROR] Detected legacy mount paths. These are no longer supported.
+
+Please update your docker-compose.yml:
+
+  volumes:
+    # ❌ OLD (remove these):
+    # - ./docker/...:/etc/ssl/certs
+    # - ./docker/...:/usr/bin/container/custom
+
+    # ✅ NEW (use this instead):
+    - ./docker:/container/custom
+
+Migration guide: https://github.com/Neunerlei/docker-images/blob/main/docs/migration/2026-02-05-migrate-to-centralized-container-dir.md

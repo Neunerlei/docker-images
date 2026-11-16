@@ -1,0 +1,12 @@
+== GET / ==
+HTTP/1.1 502 Bad Gateway
+Server: nginx
+Content-Type: text/html
+== GET /api/ ==
+HTTP/1.1 502 Bad Gateway
+Server: nginx
+Content-Type: text/html
+== GET /api_v2/ ==
+HTTP/1.1 502 Bad Gateway
+Server: nginx
+Content-Type: text/html

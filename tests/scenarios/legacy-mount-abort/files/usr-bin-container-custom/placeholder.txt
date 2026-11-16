@@ -1,0 +1,3 @@
+# Stand-in content for the legacy custom-bin mount (never read: the boot
+# aborts).
+LEGACY-MOUNT-PLACEHOLDER

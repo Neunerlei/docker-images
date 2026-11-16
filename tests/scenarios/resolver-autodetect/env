@@ -1,0 +1,4 @@
+# Non-default knob values (defaults: valid=30s, timeout=5s) — they must land
+# verbatim in the resolver directive of the rendered snippet.
+NGINX_RESOLVER_VALID_TIMEOUT=17s
+NGINX_RESOLVER_TIMEOUT=9s

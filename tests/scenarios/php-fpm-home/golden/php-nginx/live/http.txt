@@ -1,0 +1,10 @@
+== GET /home-probe.php ==
+HTTP/1.1 200 OK
+Server: nginx
+Content-Type: text/html; charset=UTF-8
+X-Nl-Test-Home: /container/work/www-data-home
+X-Nl-Test-Euid: www-data:/container/work/www-data-home
+== GET /fpm-ping ==
+HTTP/1.1 200 OK
+Server: nginx
+Content-Type: text/plain;charset=UTF-8

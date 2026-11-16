@@ -1,0 +1,26 @@
+# PR guard for the php-nginx image — see tests-nginx.yml for the pattern.
+name: Tests PHP Nginx
+
+on:
+  pull_request:
+    paths:
+      - src/**
+      - tests/**
+
+permissions:
+  contents: read
+
+jobs:
+  call-tests-engine:
+    uses: ./.github/workflows/tests-engine.yml
+    with:
+      image-name: 'php-nginx'
+      source-image-namespace: 'library'
+      source-image-name: 'php'
+      source-image-type: 'fpm'
+      source-image-os: 'trixie'
+      # The newest version directory under src/php-nginx/ (the suite always
+      # builds "latest" = newest dir; the release tooling resolves the exact
+      # source tag, e.g. library/php:8.2-fpm-trixie)
+      source-image-version: '8.2'
+      version-precision: '2'

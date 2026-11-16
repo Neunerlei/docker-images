@@ -1,0 +1,14 @@
+# Several proxied services in one container (docs/nginx.md, "Proxy Service
+# Configuration Variables"). Upstream hostnames are deliberately nonexistent —
+# proxy_pass runs through a $variable (dynamic upstream), so the boot renders
+# the config without touching DNS; requests fail 502 at request time, which is
+# the deterministic observable for a proxy whose backend is down.
+PROXY_FRONTEND_CONTAINER=frontend-svc.invalid
+PROXY_FRONTEND_PATH=/
+
+PROXY_API_CONTAINER=api-svc.invalid
+PROXY_API_PATH=/api
+
+PROXY_API_V2_CONTAINER=api-v2-svc.invalid
+PROXY_API_V2_PATH=/api_v2
+PROXY_API_V2_PORT=8080

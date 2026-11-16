@@ -291,3 +291,14 @@ Naming: steps `NNN-descriptive-name.sh` (leave 5–10 gaps for insertions), mark
 1. **discover** — paginated Docker Hub tag fetch for the base image, semver filtering, version matrix; cascading source selection: `1.29.1` falls back `1.29.1` → `1.29` → `1.28` → … until a source dir exists (new patch/minor versions build without changes).
 2. **build-and-attest** — parallel matrix, multi-platform (`linux/amd64`, `linux/arm64`) via the `SOURCE_IMAGE` build arg; pushes SLSA build-provenance attestations.
 3. **publish-tag-list** — generates the tag-overview HTML pages deployed to GitHub Pages (the `docker.neunerlei.eu` links above).
+
+## Test suite (`tests/`)
+
+Three tiers, bash + pinned bats-core end to end (full guide: `docs/contributing.md`, "Test Suite"):
+
+- `tests/run.sh unit` — bats runs INSIDE each image (one throwaway container per image), sourcing the real `util.d/`/`legacy.d/` files; also runs the legacy-layer mapping check. `golden [--update]` — byte-compares every scenario capture against the recorded `golden/<image>/<mode>/` cells; `--update` only after reviewing the diff. `integration` — scenarios' `expect.bats` boot live containers on the host and assert behavior (auth matrix, read-only boot, …). `all` runs the tiers in order.
+- Filtering: `--only-image <name>`, pre-built tags via `--image <name>=<ref>` (no rebuild while iterating), `--label <name>`, `--force-build`. `bats-pin` verifies the pinned bats release under `tests/.cache/`.
+- A scenario is DATA under `tests/scenarios/<name>/`: `scenario.conf` (images, modes, `legacy-layer=`, http probes, optional scenario Dockerfile / container command), `env`, `docker-args`, `files/`, optional `expect.bats` + `golden/<image>/<mode>/`.
+- Volatile values are normalized ONLY in `tests/lib/normalize.sed`, one commented entry each; goldens must survive a second `golden` run unchanged (determinism). Test images are always tagged `nl-test/*`, never `neunerlei/*`; scenario credentials are throwaway.
+- Legacy-layer rule: every `legacy.d/*.sh` needs a scenario `legacy-layer=` tag (checked both directions in the unit tier).
+- CI is a PR guard only (no push trigger): `.github/workflows/tests-engine.yml` (reusable; resolves the exact SOURCE_IMAGE tag through the release tooling — `tests/lib/resolve-source-image.js` — builds amd64 with the GHA cache, no push) + one thin `tests-<image>.yml` caller per image with global `src/**`+`tests/**` paths. New image = copy one caller file + adjust `with:`; legacy `src/php` has none. Never edit `build-engine.yml` or the publish workflows.

@@ -1,0 +1,5 @@
+# Malformed on purpose: no separating space, so there is no password field.
+# The boot must abort with "[ENTRYPOINT.nginx] Error: Invalid NGINX_BASIC_AUTH
+# / NGINX_BASIC_AUTH_<n> value. Aborting." and exit 1 (write_basic_auth_file
+# validation in util.d/basic-auth.sh).
+NGINX_BASIC_AUTH=no-space-no-password

@@ -1,0 +1,2 @@
+app-worker:app-worker_00: user=www-data group=www-data (process environment unreadable — uid changed via supervisor/gosu; see the exec-shell-env section or the program own log output)
+crash-on-fatal: user=root group=root HOME=/root

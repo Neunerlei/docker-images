@@ -1,0 +1,4 @@
+# Mount the WSGI HOME probe into the document root (python-nginx only; the
+# module is resolved through PYTHON_APP_MODULE=wsgi-home-probe:app from the
+# env file). Inert mount for the other images of this scenario.
+-v "${SCENARIO_DIR}/files/wsgi-home-probe.py":/var/www/html/wsgi-home-probe.py:ro

@@ -1,0 +1,3 @@
+# docker exec shell (root, no gosu)
+bash: HOME=/home/nl-test-consumer
+gosu www-data node: /container/work/www-data-home

@@ -1,0 +1,3 @@
+# Mount the custom dir containing the owning snippet (read-only, like a
+# Kubernetes config map).
+-v "${SCENARIO_DIR}/files/custom":/container/custom:ro

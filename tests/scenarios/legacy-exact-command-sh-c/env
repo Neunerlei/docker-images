@@ -1,0 +1,3 @@
+# The payload's $X resolves through the container environment — proves the
+# exec'd payload sees the boot's exported variables, not just argv fidelity.
+X=sh-c-argv-preserved

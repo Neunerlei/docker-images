@@ -1,0 +1,2 @@
+# Stand-in content for the legacy certs mount (never read: the boot aborts).
+LEGACY-MOUNT-PLACEHOLDER

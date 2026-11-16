@@ -1,0 +1,5 @@
+== GET / ==
+HTTP/1.1 301 Moved Permanently
+Server: nginx
+Content-Type: text/html
+Location: https://127.0.0.1/

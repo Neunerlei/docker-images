@@ -1,0 +1,6 @@
+# Mount the scenario's custom dir read-only into the single customization
+# mount point (docs/common.md, "The Custom Directory"). Contains
+# nginx/proxy/api.conf — a per-service snippet named exactly "<key>.conf"
+# (legacy naming, §3.2) and nginx/proxy/api_v2.prefix.conf to pin the
+# prefix-disambiguation ("api" must not pick up "api_v2" snippets).
+-v "${SCENARIO_DIR}/files/custom":/container/custom:ro

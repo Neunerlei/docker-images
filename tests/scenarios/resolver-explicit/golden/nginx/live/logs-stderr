@@ -1,0 +1,10 @@
+Directory '/container/custom/env' does not exist. Skipping.
+Directory '/container/custom/env' does not exist. Skipping.
+Template directory '/container/custom/nginx' does not exist. Skipping.
+Template directory '/container/custom/nginx/global' does not exist. Skipping.
+Template directory '/container/custom/nginx/location' does not exist. Skipping.
+Processing templates from '/container/templates/supervisor/conf.d', matching '*.conf'...
+Processing files from /container/templates/supervisor/conf.d, matching '*.conf'...
+ - Rendering 'crash-on-fatal.eventlistener.conf' to '/container/work/data/supervisor-config'
+ - Rendering 'nginx.service.feat-nginx.conf' to '/container/work/data/supervisor-config'
+Directory '/container/custom/entrypoint' does not exist. Skipping.

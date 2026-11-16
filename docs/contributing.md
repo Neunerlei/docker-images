@@ -567,6 +567,74 @@ Use `--build-context` to share common files without bloating individual contexts
 docker build --build-context common=../../_common -t my-image .
 ```
 
+## Test Suite (tests/)
+
+The repository ships a three-tier test suite under top-level `tests/` — bash and [bats-core](https://github.com/bats-core/bats-core) end to end, deliberately no test framework. It runs on any machine with Docker and in CI as a pull-request guard. The suite never modifies image sources to make things testable: everything it observes is reachable through env vars, mounts and `docker run`.
+
+### Running the tiers
+
+```bash
+tests/run.sh unit            # Tier 1: bats INSIDE each image (one throwaway
+                             # container per image; sources the real util.d/
+                             # and legacy.d/ files; also runs the legacy-layer
+                             # mapping check)
+tests/run.sh golden          # Tier 2: re-capture every scenario and diff
+                             # against the recorded goldens
+tests/run.sh golden --update # re-record goldens (only AFTER reviewing a diff)
+tests/run.sh integration     # Tier 3: scenarios' expect.bats on the host,
+                             # asserting live container behavior
+tests/run.sh all             # the three tiers in order
+```
+
+Useful flags (put them before the subcommand):
+
+- `--only-image <name>` — limit every tier to one image (nginx, php-nginx, node-nginx, python-nginx). This is what the per-image CI workflows use.
+- `--image <name>=<ref>` — use a pre-built tag instead of building, e.g. `--image nginx=nl-test/nginx:1.29-branch`. Iterate on a test without rebuilding.
+- `--label <name>` — suffix for test container names, keeps parallel work sessions out of each other's way.
+- `--force-build` — rebuild the default images even if the tag exists.
+- `tests/run.sh bats-pin` — ensure/verify the pinned bats-core release under `tests/.cache/` (checksum-verified, downloaded on demand).
+
+Test images always live under `nl-test/*` — never `neunerlei/*`. A local `neunerlei/nginx` tag would shadow the registry image for every other project on the machine that builds `FROM neunerlei/...`.
+
+### Scenarios are data, not code
+
+A scenario is a directory under `tests/scenarios/<name>/`; everything except `scenario.conf` is optional:
+
+| File | Purpose |
+|---|---|
+| `scenario.conf` | `images=` (space separated), `modes=static live`, optional `http-probe=<path>` (repeatable), `legacy-layer=<file name>`, `dockerfile=<file>` for build-time scenarios, `command-mode=container` + `command=` where the container command IS the observable, `wait-http=false` for worker scenarios, `timeout=<seconds>` |
+| `env` | `--env-file` for the run |
+| `docker-args` | extra `docker run` args, one per line, shell-expanded (`${SCENARIO_DIR}` resolves to the scenario dir) |
+| `files/` | content to mount |
+| `Dockerfile` | built ON TOP of the image under test (`ARG BASE` / `FROM ${BASE}`) before the capture |
+| `expect.bats` | Tier 3 assertions against the live container (loads `tests/lib/integration-helpers.bash`: `nl_int_boot`, `nl_int_curl_status`, `nl_int_curl_header`, `nl_int_teardown`) |
+| `golden/<image>/<mode>/` | Tier 2 recorded capture for this image + mode |
+
+Static mode runs all entrypoint steps and then execs the probe instead of supervisord; live mode boots normally and probes via `docker exec`. Readiness is always polled with bounded deadlines — no fixed sleeps anywhere in the suite.
+
+### Goldens: review diffs like code
+
+`run.sh golden --update` records every scenario × declared image × mode from the CURRENT tree into `golden/<image>/<mode>/`. After a change that legitimately alters rendered output: run the check, REVIEW the diff, then re-record and commit the new goldens with your change. Never re-record to make a red run green without understanding it.
+
+- All normalization of volatile values lives in ONE file: `tests/lib/normalize.sed`, with a comment per entry saying what is volatile and why. If a diff needs a new entry, add it there with the reason — never normalize anywhere else.
+- The goldens are per image (not per engine variant): the duplication is cheap and the per-image overlays are exactly what can drift.
+- Scenario credentials are throwaway: clear passwords appear unmasked in the captured variable snapshot by design.
+- Determinism contract: `run.sh golden` twice in a row must be green both times; a red second run means something volatile leaked into a golden — fix the probe/normalization, not the diff.
+
+### Legacy-layer rule
+
+Every file in `src/_common/v1/container/entrypoint/legacy.d/` must be referenced by at least one scenario's `legacy-layer=` tag. The mapping is checked in BOTH directions at the start of the unit tier (a layer without a scenario fails; a scenario tag pointing at a removed layer fails). A layer's `until:` date is permission, not an obligation — removal is allowed any time after it, and an untouched layer may stay longer. When you do remove one: delete the file, its call sites, its migration guide note — and its scenarios.
+
+### CI: per-image PR guard
+
+`.github/workflows/tests-engine.yml` is the reusable test engine (the counterpart of `build-engine.yml`, never touching it): checkout → resolve the exact SOURCE_IMAGE tag by calling the release tooling (`tests/lib/resolve-source-image.js` over `.github/.release/util/docker-version-utils.js` — the same `getAllTags`/`resolvePartialVersion` chain the publish pipeline uses, so version logic exists exactly once) → buildx build with the GitHub Actions cache, amd64, **no push** → run all three tiers via `run.sh --only-image <image>`.
+
+Each image has one thin caller: `tests-nginx.yml`, `tests-php-nginx.yml`, `tests-node-nginx.yml`, `tests-python-nginx.yml`. They trigger on `pull_request` only, with global paths (`src/**` + `tests/**`) — a common-layer or test change tests every image. There is deliberately no push trigger: the publish pipelines own push/schedule builds, and this suite is a PR guard.
+
+**Adding a test workflow for a new image**: copy one of the `tests-<image>.yml` files, rename it, and adjust the `with:` block (`image-name` plus the same source-image values the image's publish workflow passes to `build-engine.yml`; `source-image-version` is the newest version directory under `src/<image>/`). Then add the image to `SUITE_IMAGES` in `tests/run.sh` and to the source-image table in `tests/lib/build-image.sh`.
+
+The legacy `src/php/` images are out of scope (deprecated, do not use `_common`) and have no test workflow.
+
 ## Testing and Debugging
 
 ### Debugging Templates

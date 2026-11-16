@@ -1,0 +1,29 @@
+# PR guard for the nginx image. One thin caller per image — a new image gets
+# its test workflow by copying this file and adjusting the "with:" block (see
+# docs/contributing.md, "Testing"). Deliberately NO push trigger: the suite is
+# a PR guard, the publish pipelines own the push/schedule builds.
+#
+# The paths are deliberately GLOBAL (src/** + tests/**, not src/nginx/**): a
+# common-layer or test-harness change must test every image.
+name: Tests Nginx
+
+on:
+  pull_request:
+    paths:
+      - src/**
+      - tests/**
+
+permissions:
+  contents: read
+
+jobs:
+  call-tests-engine:
+    uses: ./.github/workflows/tests-engine.yml
+    with:
+      image-name: 'nginx'
+      source-image-namespace: 'library'
+      source-image-name: 'nginx'
+      source-image-type: ''
+      source-image-os: 'trixie'
+      source-image-version: '1.29'
+      version-precision: '2'

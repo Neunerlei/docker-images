@@ -1,0 +1,27 @@
+# PR guard for the python-nginx image — see tests-nginx.yml for the pattern.
+name: Tests Python Nginx
+
+on:
+  pull_request:
+    paths:
+      - src/**
+      - tests/**
+
+permissions:
+  contents: read
+
+jobs:
+  call-tests-engine:
+    uses: ./.github/workflows/tests-engine.yml
+    with:
+      image-name: 'python-nginx'
+      source-image-namespace: 'library'
+      source-image-name: 'python'
+      source-image-type: 'slim'
+      source-image-os: 'trixie'
+      # Newest version directory under src/python-nginx/. Precision 3 is why
+      # the release tooling MUST resolve the tag: '3.13' resolves to the newest
+      # 3.13.x patch tag (e.g. library/python:3.13.8-slim-trixie) — exactly the
+      # mechanism the publish pipeline uses for its patch-precision builds.
+      source-image-version: '3.13'
+      version-precision: '3'

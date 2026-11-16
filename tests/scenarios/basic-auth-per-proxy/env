@@ -1,0 +1,14 @@
+# Global auth (server-wide default)...
+NGINX_BASIC_AUTH=global-user global-password
+NGINX_BASIC_AUTH_REALM=Global Realm
+
+# ...and per-proxy auth on ONE service, which replaces the global auth for
+# that location only (docs/nginx.md, "Basic Authentication"). Synthetic
+# credentials only — they appear UNMASKED in the captured vars.sh snapshot.
+PROXY_FRONTEND_CONTAINER=frontend-svc.invalid
+PROXY_FRONTEND_PATH=/
+
+PROXY_API_CONTAINER=api-svc.invalid
+PROXY_API_PATH=/api
+PROXY_API_BASIC_AUTH=api-user api-password
+PROXY_API_BASIC_AUTH_REALM=API Area

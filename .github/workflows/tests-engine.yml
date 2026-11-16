@@ -1,0 +1,116 @@
+# This workflow is designed to be called by the per-image test workflows.
+#
+# It is the test-suite counterpart of build-engine.yml — one reusable engine,
+# one thin caller per image — but strictly READ-ONLY on the registry side:
+# images are built under nl-test/* tags and never pushed, and no Docker Hub
+# credentials are involved.
+#
+# The exact SOURCE_IMAGE tag (e.g. "library/python:3.13.8-slim-trixie") is
+# resolved by calling the release tooling itself
+# (.github/.release/util/docker-version-utils.js via
+# tests/lib/resolve-source-image.js) — the publish pipeline's own mechanism,
+# so version logic exists exactly once in this repository.
+name: Reusable Test Engine
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        description: The name of the image to test (e.g. nginx) (This relates to the folder structure in src/)
+        required: true
+        type: string
+      source-image-namespace:
+        description: The namespace of the source image to resolve the version from (e.g. library)
+        required: true
+        type: string
+      source-image-name:
+        description: The name of the source image to resolve the version from (e.g. nginx)
+        required: true
+        type: string
+      source-image-type:
+        description: Type suffix used when filtering the source tags (e.g. "fpm", "slim")
+        type: string
+        default: ''
+      source-image-os:
+        description: OS suffix used when filtering the source tags (e.g. "trixie")
+        type: string
+        default: ''
+      source-image-version:
+        description: |
+          The (possibly partial) version line the tests build against — the
+          newest version directory under src/<image-name>/ (e.g. '1.29', '8.2',
+          '24', '3.13'). Bump it together with the source directory, exactly
+          like the publish workflows bump their tracked versions.
+        required: true
+        type: string
+      version-precision:
+        description: Number of version segments used when discovering source tags (see build-engine.yml)
+        type: string
+        default: '3'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test ${{ inputs.image-name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      # Node.js + the release tooling's node modules — the same setup the
+      # publish pipeline uses, because the source resolution below RUNS it.
+      - name: Setup release environment
+        uses: ./.github/actions/setup-release-environment
+
+      - name: Resolve the exact source image tag via the release tooling
+        id: source
+        run: |
+          SOURCE_IMAGE="$(node tests/lib/resolve-source-image.js \
+            "${{ inputs.source-image-namespace }}" \
+            "${{ inputs.source-image-name }}" \
+            "${{ inputs.source-image-type }}" \
+            "${{ inputs.source-image-os }}" \
+            "${{ inputs.source-image-version }}" \
+            "${{ inputs.version-precision }}")"
+          echo "Resolved SOURCE_IMAGE: ${SOURCE_IMAGE}"
+          echo "source-image=${SOURCE_IMAGE}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Generate weekly cache key
+        id: cache-key
+        run: echo "DATE=$(date +'%Y-%W')" >> "$GITHUB_ENV"
+
+      # Built like the release pipeline (same docker build invocation via
+      # lib/build-image.sh) but under an nl-test/* tag — local test tags may
+      # NEVER shadow neunerlei/* registry names (see build-image.sh).
+      - name: Build the image under test (amd64, no push)
+        run: |
+          tests/lib/build-image.sh build \
+            --image "${{ inputs.image-name }}" \
+            --version latest \
+            --source-tree . \
+            --tag "nl-test/${{ inputs.image-name }}:ci" \
+            --source-image "${{ steps.source.outputs.source-image }}" \
+            --cache-from "type=gha,scope=tests-${{ inputs.image-name }}-${{ env.DATE }}" \
+            --cache-to "type=gha,mode=max,scope=tests-${{ inputs.image-name }}-${{ env.DATE }}"
+
+      # Downloads + checksum-verifies the pinned bats-core once, before the
+      # tiers run (the tiers would do it lazily; doing it here keeps the log
+      # structure clean).
+      - name: Pin bats-core
+        run: tests/run.sh bats-pin
+
+      # unit (inside the image) + golden (every scenario for this image) +
+      # integration (live boots) — --image hands the pre-built tag to the
+      # suite so ensure_image does not rebuild it.
+      - name: Run the test tiers
+        run: |
+          tests/run.sh \
+            --only-image "${{ inputs.image-name }}" \
+            --label ci \
+            --image "${{ inputs.image-name }}=nl-test/${{ inputs.image-name }}:ci" \
+            all

@@ -294,7 +294,7 @@ Naming: steps `NNN-descriptive-name.sh` (leave 5–10 gaps for insertions), mark
 
 ## Test suite (`tests/`)
 
-Three tiers, bash + pinned bats-core end to end (full guide: `docs/contributing.md`, "Test Suite"):
+Three tiers, bash + pinned bats-core end to end (full guide: `docs/test.md`):
 
 - `tests/run.sh unit` — bats runs INSIDE each image (one throwaway container per image), sourcing the real `util.d/`/`legacy.d/` files; also runs the legacy-layer mapping check. `golden [--update]` — byte-compares every scenario capture against the recorded `golden/<image>/<mode>/` cells; `--update` only after reviewing the diff. `integration` — scenarios' `expect.bats` boot live containers on the host and assert behavior (auth matrix, read-only boot, …). `all` runs the tiers in order.
 - Filtering: `--only-image <name>`, pre-built tags via `--image <name>=<ref>` (no rebuild while iterating), `--label <name>`, `--force-build`. `bats-pin` verifies the pinned bats release under `tests/.cache/`.

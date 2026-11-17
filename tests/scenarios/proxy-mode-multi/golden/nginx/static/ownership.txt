@@ -95,6 +95,7 @@
 755 www-data www-data /container/work/data/nginx-custom-snippets-proxy 
 644 root root /container/work/data/nginx-custom-snippets-proxy/api.auth.conf 
 644 root root /container/work/data/nginx-custom-snippets-proxy/api.conf 
+644 root root /container/work/data/nginx-custom-snippets-proxy/api.legacy.api_v2.prefix.conf 
 644 root root /container/work/data/nginx-custom-snippets-proxy/api_v2.auth.conf 
 644 root root /container/work/data/nginx-custom-snippets-proxy/api_v2.prefix.conf 
 644 root root /container/work/data/nginx-custom-snippets-proxy/frontend.auth.conf 

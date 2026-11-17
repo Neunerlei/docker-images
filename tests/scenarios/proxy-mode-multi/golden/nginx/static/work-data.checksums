@@ -1,8 +1,9 @@
 30be469d0c5a7e3ba91ff23246a4c36c  /container/work/data/nginx-conf
 e60bd9a528b4ceb6ec06c1c7624212b2  /container/work/data/nginx-custom-snippets-proxy/api.auth.conf
-bcf9266ba78996fc5be1aacd8578291b  /container/work/data/nginx-custom-snippets-proxy/api.conf
+a1dc81dac9f58f4fc3b930fd52aec887  /container/work/data/nginx-custom-snippets-proxy/api.conf
+4063411169addcb71cfcf778263fc1a6  /container/work/data/nginx-custom-snippets-proxy/api.legacy.api_v2.prefix.conf
 e60bd9a528b4ceb6ec06c1c7624212b2  /container/work/data/nginx-custom-snippets-proxy/api_v2.auth.conf
-b29fbaa4decfdb2e274da93920575db9  /container/work/data/nginx-custom-snippets-proxy/api_v2.prefix.conf
+4063411169addcb71cfcf778263fc1a6  /container/work/data/nginx-custom-snippets-proxy/api_v2.prefix.conf
 e60bd9a528b4ceb6ec06c1c7624212b2  /container/work/data/nginx-custom-snippets-proxy/frontend.auth.conf
 0ce26783c965a0d0dd58ca97b00f70b4  /container/work/data/nginx-error-pages/400.html
 9d24ac953d61374b5e65d7bf6dcbc782  /container/work/data/nginx-error-pages/400.json

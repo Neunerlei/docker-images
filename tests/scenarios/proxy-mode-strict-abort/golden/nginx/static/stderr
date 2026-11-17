@@ -1,0 +1,16 @@
+Directory '/container/custom/env' does not exist. Skipping.
+Directory '/container/custom/env' does not exist. Skipping.
+Processing templates from '/container/custom/nginx', matching '*.conf'...
+Processing files from /container/custom/nginx, matching '*.conf'...
+Template directory '/container/custom/nginx/global' does not exist. Skipping.
+Template directory '/container/custom/nginx/location' does not exist. Skipping.
+[ENTRYPOINT.proxy] Found service key: API
+   - Location path: /api
+   - Upstream host: api-svc.invalid
+   - Upstream port: 80
+   - Upstream protocol: http
+Processing templates from '/container/custom/nginx/proxy', matching 'api.*conf'...
+Processing files from /container/custom/nginx/proxy, matching 'api.*conf'...
+ - Rendering 'api.cache.conf' to '/container/work/data/nginx-custom-snippets-proxy'
+[ENTRYPOINT.proxy] Error: Custom proxy snippet 'api-cors.conf' for service 'api' matches the LEGACY include pattern '<key>*.conf' (current pattern: '<key>.<name>.conf'), and LEGACY_20261116_FORCE_EXPLICIT_SNIPPET_NAME=true is set: the legacy include bridge is disabled, aborting so the snippet cannot rely on it. Rename the snippet.
+Migration guide: https://github.com/Neunerlei/docker-images/blob/main/docs/migration/2026-11-16-proxy-snippet-include-pattern.md

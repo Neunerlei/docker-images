@@ -128,12 +128,17 @@ function _render_proxy_location_for_key() {
     # files out, and snippets named exactly "<key>.conf" keep working
     render_filtered_templates_in_dir "${source_path}" "${output_path}" "${KEY_LOWER}.*conf"
 
-    # Files the OLD include pattern ("<key>*.conf") still matched but the current
-    # one does not (e.g. "api-cors.conf" / "apicache.conf") would be dropped
-    # SILENTLY — no error, no config, just a missing snippet. The legacy
-    # compatibility layer detects them and warns loudly (deprecated, expires
-    # 2027-11-16).
-    legacy_warn_on_legacy_proxy_snippet_names "${KEY_LOWER}" "${source_path}"
+    # Legacy compatibility layer (expires 2027-11-16): files matching only the
+    # OLD include pattern ("<key>*.conf" — e.g. "api-cors.conf", or another
+    # key's "api_v2.rewrite.conf" overlapping this key's prefix) are bridged
+    # back into this location: the layer renders them as
+    # "<key>.legacy.<name>.conf" so the include glob above picks them up
+    # again, exactly like before the pattern change, and warns for each of
+    # them. LEGACY_20261116_FORCE_EXPLICIT_SNIPPET_NAME=true disables the
+    # bridge and aborts the boot instead. Runs before
+    # _configure_proxy_basic_auth so the auth ownership scan sees the bridge
+    # renders.
+    legacy_restore_legacy_proxy_snippet_includes "${KEY_LOWER}" "${source_path}" "${output_path}"
 
     _configure_proxy_basic_auth "${KEY}" "${KEY_LOWER}"
 

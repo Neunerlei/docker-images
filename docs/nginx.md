@@ -99,6 +99,7 @@ The proxy is configured almost entirely through declarative environment variable
 | `NGINX_BASIC_AUTH_1..n`       | Adds additional users to the global basic auth, e.g. `NGINX_BASIC_AUTH_2="user2 pass2"`. Any number of suffixes.                                                                       | (none)                                 |
 | `NGINX_BASIC_AUTH_REALM`      | The realm name shown in the browser's login dialog for the global basic auth.                                                                                                          | `Restricted`                           |
 | `NGINX_BASIC_AUTH_FILE`       | Read-only. Path to the generated global password file, usable in your own custom snippets. The generated `auth_basic` directives live in the always-present snippet `/etc/nginx/snippets/basicAuth.nginx.conf` (empty when disabled). | (derived)                |
+| `LEGACY_20261116_FORCE_EXPLICIT_SNIPPET_NAME` | (temporary, proxy only) `true` disables the legacy include bridge for old proxy snippet names (`<key>*.conf`) and aborts the boot when such a file is found. Removed with the compatibility layer after **2027-11-16**. See the [migration guide](./migration/2026-11-16-proxy-snippet-include-pattern.md). | (unset — bridge active) |
 
 ### ENVIRONMENT
 
@@ -310,6 +311,7 @@ If you are using the container as proxy (`CONTAINER_MODE` = `proxy`), this featu
 
 * **How:** Inside your custom directory, create a `nginx/proxy/` sub-directory. Then create a new `.conf` file starting with the **lowercase version of your proxy key**, followed by a `.` and any name you like — the dot is the key boundary, so keys sharing a prefix (e.g. `api` and `api_v2`) do not include each other's snippets. For a service defined with `PROXY_API_CONTAINER`, the filename could be `api.cache.conf`. Your name can include markers like: `api.prod-or-env-staging.https.conf`. Snippets named exactly `api.conf` (without a purpose part) keep working for backward compatibility, but the dotted form is the recommended convention.
 * **Result:** All files following that schema will be included within the `location` block for the `API` service (if the marker conditions are met).
+* **Legacy names:** Snippets matching only the old `<key>*.conf` pattern (e.g. `api-cors.conf`, or another key's `api_v2.rewrite.conf`) are still included via a compatibility bridge until **2027-11-16** — rendered as `<key>.legacy.<name>.conf`, with a boot-time warning per file. Set `LEGACY_20261116_FORCE_EXPLICIT_SNIPPET_NAME=true` to disable the bridge and make the boot fail on such names instead. See the [migration guide](./migration/2026-11-16-proxy-snippet-include-pattern.md).
 
 **Directory structure:**
 

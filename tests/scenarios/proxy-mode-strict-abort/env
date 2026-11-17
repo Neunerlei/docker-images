@@ -1,0 +1,9 @@
+# One proxied service plus the strict-mode switch of the 2026-11-16 legacy
+# layer (docs/migration/2026-11-16-proxy-snippet-include-pattern.md). The
+# upstream host is deliberately nonexistent: the boot must abort at the
+# snippet check (step 025), long before any upstream would matter.
+PROXY_API_CONTAINER=api-svc.invalid
+PROXY_API_PATH=/api
+
+# Disable the legacy include bridge and refuse legacy snippet names instead.
+LEGACY_20261116_FORCE_EXPLICIT_SNIPPET_NAME=true

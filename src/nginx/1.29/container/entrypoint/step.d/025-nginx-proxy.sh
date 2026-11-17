@@ -5,6 +5,12 @@ declare rendered_location_blocks=""
 # "${NGINX_CUSTOM_SNIPPETS_PROXY_DIR}/${KEY_LOWER}.auth.conf", which is picked up by the
 # custom-snippet include of the location template.
 #
+# Sets the plain global "proxy_basic_auth_source" for the caller, telling it where this
+# location's "auth_basic" comes from:
+#   "generated" — the directives below were written into the generated snippet
+#   "snippet"   — a custom snippet owns the authentication for this location
+#   "none"      — no authentication is configured for this location
+#
 # NGINX does not allow the "auth_basic" directive twice in the same context. If one of
 # the service's custom snippets declares its own "auth_basic" (checked against the
 # already rendered snippet files), that snippet takes ownership of the authentication —
@@ -15,10 +21,13 @@ function _configure_proxy_basic_auth() {
     local KEY_LOWER="${2}"
     local auth_snippet="${NGINX_CUSTOM_SNIPPETS_PROXY_DIR}/${KEY_LOWER}.auth.conf"
 
+    # Where this location's "auth_basic" comes from (read by the caller after
+    # this function returns, e.g. for the Authorization header stripping)
+    proxy_basic_auth_source="none"
+
     # The snippet must always exist, so it starts with the "not configured" variant
     printf '# basic auth is not configured\n' > "${auth_snippet}"
 
-    local -a credentials=()
     mapfile -t credentials < <(collect_basic_auth_credentials "PROXY_${KEY}_BASIC_AUTH")
     if [[ ${#credentials[@]} -eq 0 ]]; then
         return 0
@@ -30,14 +39,28 @@ function _configure_proxy_basic_auth() {
         exit 1
     fi
 
-    # Skip our own generated snippet when looking for a snippet that takes ownership.
-    # The pattern matches "<key>.<anything>conf" — the dot after the key is the key
-    # boundary, the "conf" ending keeps unrelated files out, and snippets named
-    # exactly "<key>.conf" keep working
-    if grep -lsE '^\s*auth_basic' "${NGINX_CUSTOM_SNIPPETS_PROXY_DIR}"/${KEY_LOWER}.*conf | grep -qvF "${auth_snippet}"; then
-        echo "   - Custom snippet declares its own 'auth_basic' — skipping the generated directives, password file kept at ${auth_file}" >&2
-        return 0
-    fi
+    # Skip our own generated snippet when looking for a snippet that takes
+    # ownership (see snippet_manages_basic_auth): any "auth_basic" directive —
+    # enabled or "off" — at one of the snippets' top level (the location
+    # context the generated directives land in) takes ownership. A directive
+    # NESTED in a sub-location (e.g. a health-check opt-out) must not disable
+    # this service's generated auth. The "<key>.*conf" pattern is the same the
+    # include below uses — the dot after the key is the key boundary, the
+    # "conf" ending keeps unrelated files out, and snippets named exactly
+    # "<key>.conf" keep working. find runs with -H: the snippets directory is
+    # a SYMLINK into the work data, and without -H the default -P mode would
+    # not descend into the symlinked root at all — the scan would silently see
+    # zero candidates and every custom snippet would lose the ownership vote.
+    while IFS= read -r -d '' candidate; do
+        if [ "${candidate}" == "${auth_snippet}" ]; then
+            continue
+        fi
+        if snippet_manages_basic_auth "${candidate}"; then
+            echo "   - Custom snippet declares its own 'auth_basic' — skipping the generated directives, password file kept at ${auth_file}" >&2
+            proxy_basic_auth_source="snippet"
+            return 0
+        fi
+    done < <(find -H "${NGINX_CUSTOM_SNIPPETS_PROXY_DIR}" -maxdepth 1 -name "${KEY_LOWER}.*conf" -print0 | sort -z)
 
     local proxy_basic_auth_realm_var="PROXY_${KEY}_BASIC_AUTH_REALM"
     local auth_directives
@@ -46,6 +69,8 @@ function _configure_proxy_basic_auth() {
         exit 1
     fi
     printf '%s\n' "${auth_directives}" > "${auth_snippet}"
+
+    proxy_basic_auth_source="generated"
 
     echo "   - Basic auth enabled for ${#credentials[@]} user(s)" >&2
 }
@@ -103,7 +128,32 @@ function _render_proxy_location_for_key() {
     # files out, and snippets named exactly "<key>.conf" keep working
     render_filtered_templates_in_dir "${source_path}" "${output_path}" "${KEY_LOWER}.*conf"
 
+    # Files the OLD include pattern ("<key>*.conf") still matched but the current
+    # one does not (e.g. "api-cors.conf" / "apicache.conf") would be dropped
+    # SILENTLY — no error, no config, just a missing snippet. The legacy
+    # compatibility layer detects them and warns loudly (deprecated, expires
+    # 2027-11-16).
+    legacy_warn_on_legacy_proxy_snippet_names "${KEY_LOWER}" "${source_path}"
+
     _configure_proxy_basic_auth "${KEY}" "${KEY_LOWER}"
+
+    # Strip the client's Authorization header toward the upstream whenever this
+    # location is protected by GENERATED basic auth: the client authenticated
+    # against THIS server, so the credentials it sent are this image's own
+    # basic-auth credentials (global or per-proxy generated) — forwarding them
+    # would leak them to the upstream, where they have no business. A custom
+    # snippet that manages auth for this location decides for itself and stays
+    # untouched ("snippet"); with "none", the strip only applies when the
+    # GLOBAL generated auth is active — the server-level directives from
+    # basicAuth.nginx.conf protect this location, too (a server snippet having
+    # taken ownership would have reduced that file to a comment). Requests to
+    # the image's own app runtime are untouched entirely: the directive only
+    # ever exists inside proxy location blocks.
+    PROXY_AUTHORIZATION_HEADER_DIRECTIVE=""
+    if [ "${proxy_basic_auth_source}" == "generated" ] \
+        || { [ "${proxy_basic_auth_source}" == "none" ] && snippet_manages_basic_auth "${NGINX_SNIPPETS_DIR}/basicAuth.nginx.conf"; }; then
+        PROXY_AUTHORIZATION_HEADER_DIRECTIVE='proxy_set_header Authorization "";'
+    fi
 
     local CURRENT_LOCATION_BLOCK=$(render_template_string "${CONTAINER_TEMPLATES_NGINX_DIR}/proxy.location.nginx.conf")
     rendered_location_blocks="${rendered_location_blocks}"$'\n\n'"${CURRENT_LOCATION_BLOCK}"

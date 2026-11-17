@@ -134,7 +134,11 @@ detect_dns_resolvers() {
     # fall back to the Docker default below
     [ -r /etc/resolv.conf ] || return 0
 
-    while read -r key nameserver _; do
+    # The "|| [ -n ... ]" keeps the LAST line when /etc/resolv.conf lacks a
+    # trailing newline: plain "read" loses it (read reports EOF failure after
+    # the data was already assigned), silently dropping the final nameserver
+    # and falling back to the Docker default instead
+    while read -r key nameserver _ || [ -n "${key}" ]; do
         [[ "${key}" == "nameserver" ]] || continue
         [ -n "${nameserver}" ] || continue
         # Scoped IPv6 addresses (fe80::1%eth0) are not valid Nginx resolvers

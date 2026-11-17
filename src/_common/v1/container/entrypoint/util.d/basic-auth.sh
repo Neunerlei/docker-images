@@ -11,6 +11,44 @@
 #
 # Reference: https://docs.nginx.com/nginx/admin-guide/security-controls/configuring-http-basic-authentication/
 
+# Registers every currently-set basic auth credential variable in the
+# "entrypoint_only_vars_registry" (declared in entrypoint.sh), by NAME PATTERN
+# and unconditionally:
+#   NGINX_BASIC_AUTH, NGINX_BASIC_AUTH_1, NGINX_BASIC_AUTH_2, ...
+#   PROXY_<KEY>_BASIC_AUTH, PROXY_<KEY>_BASIC_AUTH_1, PROXY_<KEY>_BASIC_AUTH_2, ...
+# The "<PREFIX>_REALM" / "_FILE" / "_DIR" companions never match the patterns —
+# they are not secrets and stay in the snapshot and the environment on purpose.
+#
+# Why by pattern instead of registering each name the moment the collector
+# reads it: usage-based registration cannot see variables the current mode
+# never reads. In worker mode (PHP_WORKER_COMMAND set — no nginx feature)
+# nothing ever collects NGINX_BASIC_AUTH, and PROXY_<KEY>_BASIC_AUTH is only
+# collected in proxy mode when a matching PROXY_<KEY>_CONTAINER service exists.
+# A shared env file between the web and the worker container of one stack makes
+# that cross-mode leakage realistic: the credentials would end up in the
+# container-vars.sh snapshot AND in the environment of the exec'd process tree.
+# Called at the start of step 050, before any exporting happens; steps 090 and
+# 100 run later, so the registry is complete for all three consumers.
+#
+# The scan mirrors the collector below exactly ("compgen -A variable", the same
+# variable set the collector reads), so every name the collector could ever
+# consume is registered — whether or not the current mode actually reads it.
+#
+# Usage:
+#   register_basic_auth_credential_vars
+#
+register_basic_auth_credential_vars() {
+    local var
+    while IFS= read -r var; do
+        # Deduplicate: all consumers compare the registry by exact name, so a
+        # duplicate entry would only make steps 050/090/100 repeat their work
+        if [[ " ${entrypoint_only_vars_registry[*]} " == *" ${var} "* ]]; then
+            continue
+        fi
+        entrypoint_only_vars_registry+=("${var}")
+    done < <(compgen -A variable | grep -E '^(NGINX_BASIC_AUTH(_[0-9]+)?|PROXY_.+_BASIC_AUTH(_[0-9]+)?)$' | sort -V)
+}
+
 # Collects all basic auth credentials that follow the "<PREFIX>" / "<PREFIX>_<n>" convention.
 # Prints one "username clear-password" entry per line, in a deterministic order
 # (the unprefixed variable first, then the numbered ones in numeric order), so
@@ -33,6 +71,70 @@ collect_basic_auth_credentials() {
         fi
         printf '%s\n' "${value}"
     done < <(compgen -A variable | grep -E "^${prefix}(_[0-9]+)?$" | sort -V)
+}
+
+# Reports whether any of the given custom snippets MANAGES basic auth in the
+# context the snippet is included in, i.e. whether the generated "auth_basic"
+# directives must be suppressed to keep NGINX free of "directive is duplicate"
+# errors. This mirrors how NGINX itself finds duplicates: a snippet manages
+# auth when it declares an "auth_basic" directive — ENABLED or "off" — at its
+# TOP LEVEL (brace depth 0, "#" comments stripped), because the include point
+# (server context in step 020, location context in the proxy step) is exactly
+# where the generated directives land, and two "auth_basic" directives in the
+# same context make NGINX abort the whole configuration. A directive NESTED in
+# a "location" block (e.g. an indented "auth_basic off;" inside a health-check
+# opt-out, or an enabled one inside "location /admin") lives in a DIFFERENT
+# context: it only changes the authentication there and must NOT suppress the
+# generated directives — treating it as ownership would silently disable the
+# authentication for the whole server / location.
+#
+# The comment stripping is deliberately LINE-based ("#" to end of line),
+# matching NGINX's own parser tolerance. Known limitation: a "#" inside a
+# quoted argument (e.g. auth_basic "re#alm") truncates the rest of that LINE
+# for the scan, so a brace or directive later on the same line could be
+# misjudged. Full string-aware lexing is not worth it — one directive per line
+# is the convention here (as in all shipped templates), so the directive name
+# and its depth are always evaluated where it matters.
+#
+# Files that cannot be read (e.g. a non-matching glob) count as "no snippet
+# manages auth". "auth_basic_user_file" never matches: the directive name must
+# be followed by whitespace (its argument), which the longer name fails.
+#
+# Usage:
+#   if snippet_manages_basic_auth "${NGINX_CUSTOM_SNIPPETS_DIR}"/*.conf; then ...
+snippet_manages_basic_auth() {
+    local snippet
+    for snippet in "$@"; do
+        # An unmatched glob (no snippet files at all) stays a literal path —
+        # skip it instead of letting awk fail on the missing file
+        [ -f "${snippet}" ] || continue
+        if awk '
+            # Walk the comment-stripped line character by character, tracking
+            # the brace depth; only a depth-0 position can start a directive
+            # of the context the snippet is included in.
+            {
+                line = $0
+                sub(/#.*/, "", line)
+                len = length(line)
+                for (i = 1; i <= len; i++) {
+                    c = substr(line, i, 1)
+                    if (c == "{") { depth++; continue }
+                    if (c == "}") { if (depth > 0) depth--; continue }
+                    if (depth != 0 || substr(line, i, 10) != "auth_basic") continue
+                    # Left boundary: not the tail of a longer name ("my_auth_basic")
+                    if (i > 1 && substr(line, i - 1, 1) ~ /[A-Za-z0-9_-]/) continue
+                    # Right boundary: the directive name is followed by its
+                    # argument, which keeps "auth_basic_user_file" out
+                    nc = substr(line, i + 10, 1)
+                    if (nc == " " || nc == "\t") { found = 1; exit }
+                }
+            }
+            END { exit found ? 0 : 1 }
+        ' "${snippet}"; then
+            return 0
+        fi
+    done
+    return 1
 }
 
 # Writes an NGINX compatible basic auth password file from "username clear-password" strings.
@@ -76,6 +178,15 @@ write_basic_auth_file() {
         # Line breaks or tabs would corrupt the one-credential-per-line htpasswd format
         if [[ "${password}" == *[$'\t'$'\n'$'\r']* ]]; then
             echo "[UTIL.basic-auth] Error: Malformed basic auth credential for user '${username}': the password must not contain tabs or line breaks." >&2
+            return 1
+        fi
+        # "openssl passwd -apr1" silently truncates passwords after 256 characters
+        # (verified: a 300-char password hashes identically to its 256-char prefix),
+        # so the login would fail with a cryptic "password mismatch" while the boot
+        # log looks fine — reject loudly instead. The variable the credential came
+        # from is named by the calling step's abort message.
+        if [[ ${#password} -gt 256 ]]; then
+            echo "[UTIL.basic-auth] Error: The password for user '${username}' is ${#password} characters long. 'openssl passwd -apr1' silently truncates passwords after 256 characters — the stored hash would not match the intended password. Shorten the password." >&2
             return 1
         fi
 
@@ -127,8 +238,11 @@ build_basic_auth_directives() {
     local realm="$1"
     local auth_file="$2"
 
-    if [[ "${realm}" == *'"'* || "${realm}" == *'$'* || "${realm}" == *[$'\t'$'\n'$'\r']* ]]; then
-        echo "[UTIL.basic-auth] Error: Invalid basic auth realm '${realm}': must not contain double quotes, dollar signs, tabs or line breaks." >&2
+    # A trailing backslash would escape the closing quote of the generated
+    # 'auth_basic "...";' directive, leaving an unterminated string that makes
+    # nginx reject the configuration and crash-loop the container
+    if [[ "${realm}" == *'"'* || "${realm}" == *'$'* || "${realm}" == *[$'\t'$'\n'$'\r']* || "${realm: -1}" == "\\" ]]; then
+        echo "[UTIL.basic-auth] Error: Invalid basic auth realm '${realm}': must not contain double quotes, dollar signs, tabs or line breaks, and must not end in a backslash (a trailing backslash escapes the closing quote and corrupts the generated configuration)." >&2
         return 1
     fi
 

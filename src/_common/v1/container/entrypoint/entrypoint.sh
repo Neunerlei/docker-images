@@ -21,14 +21,16 @@ fi
 #
 #  - NEW (supported): the "init-build-env" utility (/container/bin) sets the
 #    CONTAINER_INIT_BUILD_ENV selector below before invoking this entrypoint.
-#    That run writes the build mode marker at the end, so the image can never
-#    be booted as a final image — for images built this way, refusing to boot
-#    is the expected behavior.
+#    That run writes the build mode marker at the end and syncs the work data
+#    back into the staging area (so repeated runs keep accumulated state), but
+#    an image built this way can never be booted as a final image — refusing
+#    to boot is the expected behavior.
 #  - NEW with --allow-boot: the same utility with the --allow-boot flag sets
-#    the selector to "allow-boot" — full build mode, but NO marker is written,
-#    so the image may be booted (e.g. CI stages that run tests against a
-#    builder image). The work data is synced back into the staging area, so
-#    changes made by later build steps survive boots (util.d/sync-work-data.sh).
+#    the selector to "allow-boot" — full build mode, but NO marker is written
+#    and a marker an earlier plain run left behind is REMOVED, so the image
+#    may be booted (e.g. CI stages that run tests against a builder image).
+#    The work data is synced back into the staging area, so changes made by
+#    later build steps survive boots (util.d/sync-work-data.sh).
 #  - LEGACY (deprecated compatibility layer, expires 2027-11-12): invoking the
 #    entrypoint directly without a command, the way builds worked before the
 #    marker existed. Everything runs, later `RUN` steps get the variables, no
@@ -146,6 +148,24 @@ declare -g -a user_owned_directories_registry=(
 # USER_OWNED_DIRECTORIES environment variable — the extension happens in step 070
 # (after the custom environment files were loaded), so the variable may also be
 # set from /container/custom/env/*.env.
+
+# Entrypoint-only variables
+# The EXACT names of the secret variables the entrypoint consumes itself — the
+# clear-text basic auth credentials. Registration happens by NAME PATTERN,
+# unconditionally, at the start of step 050 (register_basic_auth_credential_vars
+# in util.d/basic-auth.sh): usage-based registration could not see variables the
+# current mode never reads (worker mode never collects NGINX_BASIC_AUTH;
+# PROXY_<KEY>_BASIC_AUTH is only collected in proxy mode), yet a shared env file
+# between the web and the worker container of one stack makes exactly those
+# leak into the snapshot and the exec'd environment. Steps 050/090 keep the
+# registered names out of the container-vars.sh snapshot and step 100 unsets
+# them right before the final exec, so supervisord and all child processes
+# never inherit them — php-fpm runs with clear_env = no, so an inherited
+# credential would reach every PHP worker and every exec shell. The
+# <PREFIX>_REALM / _FILE / _DIR companions are not secrets and are not
+# registered.
+declare -g -a entrypoint_only_vars_registry=()
+
 # Custom directory children
 # The set of sub-directories that should exist inside CONTAINER_CUSTOM_DIR.
 # Used by 005-init-custom-on-dev.sh to create the skeleton on first startup in development.
@@ -188,8 +208,17 @@ if [ "$(stat -c '%U' "${CONTAINER_WWW_DATA_HOME_DIR}")" != "www-data" ]; then
     # the CONTENTS can keep a stale uid (e.g. PUID removed after a previous boot
     # reset /etc/passwd to uid 33) while step 070 would see the — by then fixed —
     # top-level owner and skip its repair. Conditional, so boots where the
-    # ownership already matches remain a no-op.
-    chown -R www-data:www-data "${CONTAINER_WWW_DATA_HOME_DIR}"
+    # ownership already matches remain a no-op. A failure is NOT fatal (matching
+    # the read-only philosophy of ensure_user_owned_dir): on a read-only work-dir
+    # mount the chown cannot succeed, but the world-readable files remain usable —
+    # aborting the boot would break every such deployment for no gain.
+    if ! chown -R www-data:www-data "${CONTAINER_WWW_DATA_HOME_DIR}" 2>/dev/null; then
+        if findmnt -no OPTIONS --target "${CONTAINER_WWW_DATA_HOME_DIR}" 2>/dev/null | grep -qw ro; then
+            echo "[ENTRYPOINT] Warning: ownership of '${CONTAINER_WWW_DATA_HOME_DIR}' could not be set to 'www-data' (read-only mount) — continuing, the world-readable files remain usable." >&2
+        else
+            echo "[ENTRYPOINT] Warning: ownership of '${CONTAINER_WWW_DATA_HOME_DIR}' could not be set to 'www-data' — continuing." >&2
+        fi
+    fi
 fi
 
 # --- Legacy dotfile bridge (2026-11-12, expires 2027-11-12) -----------------
@@ -231,7 +260,12 @@ if [ "$CONTAINER_MODE" == "build" ]; then
             # NEW build mode (init-build-env): write the build mode marker into
             # the image layer — an image built this way must never be booted as
             # a final image, and the check at the top enforces it. Rewriting the
-            # marker on every build-mode run is fine.
+            # marker on every build-mode run is fine. Like --allow-boot and the
+            # legacy mode, the run ENDS by syncing the work data back into the
+            # staging area and restoring the build-time symlink: files later
+            # RUN steps wrote into the work-data copy between two build-mode
+            # runs must survive the next run/boot, which resets work/data from
+            # staging (the documented "repeated runs keep working" contract).
             echo "[ENTRYPOINT] Running in BUILD mode, writing the build mode marker: ${CONTAINER_BUILD_MODE_MARKER}"
             {
                 echo "This image was built with 'init-build-env' (CONTAINER_MODE=build)."
@@ -240,18 +274,23 @@ if [ "$CONTAINER_MODE" == "build" ]; then
                 echo ""
                 echo "Build mode run finished at: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             } > "${CONTAINER_BUILD_MODE_MARKER}"
+            sync_work_data_into_staging
             ;;
         "allow-boot")
             # NEW build mode with --allow-boot: explicit opt-out of the marker.
             # The image may be booted (e.g. CI stages running tests against a
             # builder image) — a supported choice, so no deprecation warning.
-            # The work data is synced back into the staging area and the
-            # build-time symlink restored, so changes made by later build
-            # steps SURVIVE boots: the image is bootable AND consistent.
-            # Caveat: build-time rendered configuration (including anything
-            # rendered from build-time env values) becomes part of the
+            # A marker an EARLIER plain init-build-env run wrote is removed:
+            # switching the stage to --allow-boot means the image is meant to
+            # stay bootable, and a stale marker would make the next normal
+            # boot refuse to start. The work data is synced back into the
+            # staging area and the build-time symlink restored, so changes made
+            # by later build steps SURVIVE boots: the image is bootable AND
+            # consistent. Caveat: build-time rendered configuration (including
+            # anything rendered from build-time env values) becomes part of the
             # pristine staging state — don't render secrets at build time.
-            echo "[ENTRYPOINT] Running in BUILD mode with boot allowed — no build mode marker written."
+            rm -f "${CONTAINER_BUILD_MODE_MARKER}"
+            echo "[ENTRYPOINT] Running in BUILD mode with boot allowed — no build mode marker written, an existing marker was removed."
             sync_work_data_into_staging
             ;;
         *)

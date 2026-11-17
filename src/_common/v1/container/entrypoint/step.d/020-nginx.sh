@@ -92,7 +92,6 @@ _configure_nginx_basic_auth() {
     # The include file must always exist, so it starts with the "not configured" variant
     printf '# basic auth is not configured\n' > "${NGINX_SNIPPETS_DIR}/basicAuth.nginx.conf"
 
-    local -a credentials=()
     mapfile -t credentials < <(collect_basic_auth_credentials "NGINX_BASIC_AUTH")
 
     if [[ ${#credentials[@]} -eq 0 ]]; then
@@ -139,11 +138,17 @@ if [[ "${feature_registry}" == *"nginx"* ]]; then
     process_tpl "nginx-snippets-errors"
 
     # NGINX does not allow "auth_basic" twice in the same context. If a custom
-    # server-level snippet declares its own, it takes ownership of the
-    # authentication and we empty the generated include file instead.
-    # (The generated password file is still written, so the snippet may
-    # reference it via ${NGINX_BASIC_AUTH_FILE}.)
-    if grep -qsE '^\s*auth_basic' "${NGINX_SNIPPETS_DIR}/basicAuth.nginx.conf" && grep -qsE '^\s*auth_basic' "${NGINX_CUSTOM_SNIPPETS_DIR}"/*.conf; then
+    # server snippet MANAGES auth (it declares an "auth_basic" directive —
+    # enabled or "off" — at its top level, which is the server context the
+    # generated directives land in; see snippet_manages_basic_auth), it takes
+    # ownership and we empty the generated include file instead. (The
+    # generated password file is still written, so the snippet may reference
+    # it via ${NGINX_BASIC_AUTH_FILE}.) A directive NESTED in a "location"
+    # block — e.g. an indented "auth_basic off;" inside a "location /health"
+    # — lives in a different context and does NOT take ownership: the
+    # generated directives must stay in place or the server would end up
+    # unprotected.
+    if grep -qsE '^\s*auth_basic' "${NGINX_SNIPPETS_DIR}/basicAuth.nginx.conf" && snippet_manages_basic_auth "${NGINX_CUSTOM_SNIPPETS_DIR}"/*.conf; then
         echo "[ENTRYPOINT.nginx] A custom server snippet declares its own 'auth_basic' — skipping the generated NGINX_BASIC_AUTH directives."
         printf '# basic auth is managed by a custom server snippet\n' > "${NGINX_SNIPPETS_DIR}/basicAuth.nginx.conf"
     fi

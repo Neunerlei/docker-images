@@ -5,7 +5,14 @@
 # need to write into. This deliberately runs HERE — after the custom environment
 # files were loaded (step 017) — so the variable may also be set from
 # /container/custom/env/*.env, not only from the container environment.
-for user_owned_dir in ${USER_OWNED_DIRECTORIES}; do
+# Split WITHOUT glob expansion: a plain "for d in ${USER_OWNED_DIRECTORIES}"
+# word-splits (intended) but also glob-expands every entry (not intended — the
+# result is chown-ed recursively as root). "read -ra" splits on IFS whitespace
+# and keeps every entry literal; newlines are normalized to spaces first so
+# multi-line env files keep working like the documented space-separated format.
+declare -a user_owned_dirs_from_env=()
+read -r -a user_owned_dirs_from_env <<< "${USER_OWNED_DIRECTORIES//[$'\t'$'\n']/ }"
+for user_owned_dir in "${user_owned_dirs_from_env[@]}"; do
     user_owned_directories_registry+=("${user_owned_dir}")
 done
 

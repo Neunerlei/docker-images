@@ -21,14 +21,15 @@
 # Copy the artifacts into a fresh final stage (multi-stage build).
 #
 # Options:
-#   --allow-boot   Run the build mode WITHOUT writing the marker. The image may
-#                  then be booted — e.g. CI stages that run tests against a
-#                  builder image (`docker build --target builder` +
-#                  `docker run … phpunit`). The rendered work data is synced
-#                  back into the staging area and the build-time symlink
-#                  restored, so changes made by later build steps (e.g. a
-#                  docker-php-ext-enable dropping a conf.d file) survive
-#                  boots. Caveat: build-time rendered configuration —
+#   --allow-boot   Run the build mode WITHOUT writing the marker — a marker an
+#                  earlier plain run left behind is removed, so the image stays
+#                  bootable. The image may then be booted — e.g. CI stages that
+#                  run tests against a builder image (`docker build --target
+#                  builder` + `docker run … phpunit`). The rendered work data
+#                  is synced back into the staging area and the build-time
+#                  symlink restored, so changes made by later build steps
+#                  (e.g. a docker-php-ext-enable dropping a conf.d file)
+#                  survive boots. Caveat: build-time rendered configuration —
 #                  including anything rendered from build-time env values —
 #                  becomes part of the image; don't render secrets at build
 #                  time.

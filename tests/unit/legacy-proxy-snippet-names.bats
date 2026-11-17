@@ -40,10 +40,11 @@ teardown() {
 # Create snippet files in the sandbox source dir. Arguments are "name:body"
 # pairs; a body of "-" writes the default marker line.
 snippet_dir_with() {
-    local name body
-    for name in "$@"; do
-        body="${name#*:}"
-        [ "${body}" == "${name}" ] && body="# snippet"
+    local arg name body
+    for arg in "$@"; do
+        name="${arg%%:*}"
+        body="${arg#*:}"
+        [ "${body}" == "${arg}" ] && body="# snippet"
         printf '%s\n' "${body}" > "${NL_UNIT_SANDBOX}/snippets/${name}"
     done
 }

@@ -9,7 +9,7 @@ Template directory '/container/custom/nginx/location' does not exist. Skipping.
    - Upstream port: 80
    - Upstream protocol: http
 Template directory '/container/custom/nginx/proxy' does not exist. Skipping.
-find: '/container/custom/nginx/proxy': No such file or directory
+Directory '/container/custom/nginx/proxy' does not exist. Skipping.
    - Basic auth enabled for 1 user(s)
 [ENTRYPOINT.proxy] Found service key: FRONTEND
    - Location path: /
@@ -17,7 +17,7 @@ find: '/container/custom/nginx/proxy': No such file or directory
    - Upstream port: 80
    - Upstream protocol: http
 Template directory '/container/custom/nginx/proxy' does not exist. Skipping.
-find: '/container/custom/nginx/proxy': No such file or directory
+Directory '/container/custom/nginx/proxy' does not exist. Skipping.
 Processing templates from '/container/templates/supervisor/conf.d', matching '*.conf'...
 Processing files from /container/templates/supervisor/conf.d, matching '*.conf'...
  - Rendering 'crash-on-fatal.eventlistener.conf' to '/container/work/data/supervisor-config'

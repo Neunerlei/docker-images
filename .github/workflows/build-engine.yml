@@ -78,6 +78,17 @@ on:
       DOCKERHUB_PASSWORD:
         required: true
 
+# Serialize overlapping runs of the same caller workflow on the same ref
+# (github.workflow resolves to the CALLER's name in a reusable workflow, so
+# the group is per-image + per-ref): registry pushes are last-write-wins, so
+# two interleaved runs could push an OLDER patch over a newer one and move a
+# rolling tag or "latest" backward. Queuing (cancel-in-progress: false) keeps
+# every run's full push sequence intact — cancelling a run mid-push would
+# leave a worse, partially-updated registry behind.
+concurrency:
+  group: build-engine-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   discover:
     runs-on: ubuntu-latest
@@ -122,6 +133,11 @@ jobs:
       attestations: write
       id-token: write
     strategy:
+      # One flaky arm64 job must not cancel its siblings: a cancelled sibling
+      # leaves the registry half-advanced (some version tags pushed, others
+      # not, rolling tags stale). Each matrix entry pushes its own tags
+      # independently, so an unrelated failure must not abort them.
+      fail-fast: false
       matrix: ${{ fromJson(needs.discover.outputs.build-matrix) }}
     steps:
       - uses: actions/checkout@v7
@@ -134,7 +150,7 @@ jobs:
 
       - name: Generate weekly cache key
         id: cache-key
-        run: echo "DATE=$(date +'%Y-%W')" >> $GITHUB_ENV
+        run: echo "DATE=$(date +'%Y-%W')" >> "$GITHUB_ENV"
 
       - name: Generate tags
         id: meta

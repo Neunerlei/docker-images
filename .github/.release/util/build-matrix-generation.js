@@ -117,6 +117,11 @@ function selectVersionsToBuild(versions, trackedVersions, trackedPatchVersions) 
  *                                       If the given version is not found, no build will be performed. This must be in the format matching the precision.
  * @return {{include: {version: string, tag: string, rollingTag: string, sourceImageWithTag: string, buildPath: string, isLatest: boolean}[]}|null} Build matrix object, null if no versions found.
  *                                       The "rollingTag" is empty when no rolling tag applies to the entry.
+ *                                       A rolling/latest tag is only ever attached to the newest DISCOVERED
+ *                                       version (of its line / overall): a deprecation cutoff that stops the
+ *                                       selection below the newest upstream patch must not re-point tags that
+ *                                       already published builds hold, so the entry simply carries no
+ *                                       rollingTag and is not marked isLatest.
  */
 function generateBuildMatrix(options) {
     const {
@@ -176,6 +181,30 @@ function generateBuildMatrix(options) {
         return null;
     }
 
+    // The newest DISCOVERED version overall, and the newest discovered patch per
+    // version line — computed from the FULL discovered set (sourceVersions), not
+    // from versionsToBuild. Rolling tags and "latest" must never map to an older
+    // version than what earlier runs already published: a deprecation cutoff
+    // deliberately stops BUILDING newer patches, but those newer patches exist
+    // upstream and, once published, own the registry's rolling tag and "latest".
+    // Re-pointing them at the truncated tip (e.g. pushing 8.2 -> 8.2.4 while
+    // 8.2.8 is already published) would move every consumer BACKWARD. The cutoff
+    // must freeze the build set, not drag the pointers — so truncated entries
+    // simply carry no rollingTag and are not marked isLatest, leaving the
+    // already-published pointers untouched.
+    const discoveredSorted = sortVersionList(sourceVersions.keys());
+    const newestDiscoveredVersion = discoveredSorted[0] || '';
+    const newestPatchByLine = new Map();
+    for(const version of discoveredSorted){
+        if(version.split('.').length !== 3) continue;
+        const line = toRollingVersion(version);
+        // Discovered versions arrive sorted descending, so the FIRST patch seen
+        // per line is the newest one — exactly the findBuildPath idiom.
+        if(!newestPatchByLine.has(line)){
+            newestPatchByLine.set(line, version);
+        }
+    }
+
     const buildMatrix = {include:[]};
 
     let baseDir = path.join(constants.SOURCE_BASE_DIR, targetImageName);
@@ -195,11 +224,17 @@ function generateBuildMatrix(options) {
         if(targetImageType && targetImageType.trim() !== ''){
             tag = `${version}-${targetImageType.trim()}`;
         }
-        // Rolling tags only apply to patch versions (3 segments), e.g. "3.13.8" -> "3.13"
+        // Rolling tags only apply to patch versions (3 segments), e.g. "3.13.8" -> "3.13",
+        // and only to the newest DISCOVERED patch of the line (see newestPatchByLine):
+        // when a deprecation cutoff truncates the line below its newest patch, the
+        // truncated tip builds with its concrete tag only, so the registry's rolling
+        // pointer stays where the already-published newer patch left it.
         if(rollingTags && version.split('.').length === 3){
-            rollingTag = toRollingVersion(version);
-            if(targetImageType && targetImageType.trim() !== ''){
-                rollingTag = `${rollingTag}-${targetImageType.trim()}`;
+            if(newestPatchByLine.get(toRollingVersion(version)) === version){
+                rollingTag = toRollingVersion(version);
+                if(targetImageType && targetImageType.trim() !== ''){
+                    rollingTag = `${rollingTag}-${targetImageType.trim()}`;
+                }
             }
         }
         buildMatrix.include.push({
@@ -217,25 +252,17 @@ function generateBuildMatrix(options) {
         return null;
     }
 
-    // Make sure only the newest built patch of a version line carries the rolling tag,
-    // so the rolling tag always points to the newest patch of that line
-    const linesWithRollingTag = new Set();
-    for(let i = buildMatrix.include.length - 1; i >= 0; i--){
-        const entry = buildMatrix.include[i];
-        if(entry.rollingTag === ''){
-            continue;
-        }
-        const line = toRollingVersion(entry.version);
-        if(linesWithRollingTag.has(line)){
-            entry.rollingTag = '';
-        } else {
-            linesWithRollingTag.add(line);
-        }
-    }
+    // The rollingTag gate above admits at most one entry per version line (the
+    // newest discovered patch), so the rolling tag always points to the newest
+    // BUILT patch of its line as well — no per-line dedupe pass is needed.
 
     if(detectLatestVersion){
         const latestVersion = buildMatrix.include[buildMatrix.include.length - 1];
-        if(latestVersion){
+        // "latest" must not move backward either: only the newest DISCOVERED
+        // version may carry it. When a deprecation cutoff stops the selection at
+        // an older tip, the registry's "latest" stays where the already-published
+        // newer version left it (see newestPatchByLine above).
+        if(latestVersion && latestVersion.version === newestDiscoveredVersion){
             core.info(`Marking version ${latestVersion.version} as latest in the build matrix`);
             latestVersion.isLatest = true;
         }

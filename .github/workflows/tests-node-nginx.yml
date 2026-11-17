@@ -3,9 +3,12 @@ name: Tests Node.js Nginx
 
 on:
   pull_request:
+    # .github/.release/** runs inside the engine's source resolution — see
+    # tests-nginx.yml.
     paths:
       - src/**
       - tests/**
+      - .github/.release/**
 
 permissions:
   contents: read

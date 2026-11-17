@@ -4,7 +4,10 @@
 # a PR guard, the publish pipelines own the push/schedule builds.
 #
 # The paths are deliberately GLOBAL (src/** + tests/**, not src/nginx/**): a
-# common-layer or test-harness change must test every image.
+# common-layer or test-harness change must test every image. The same goes for
+# .github/.release/**: the engine resolves SOURCE_IMAGE tags by RUNNING the
+# release tooling (docker-version-utils.js, via tests/lib/resolve-source-image.js),
+# so a change there can break every image's resolution and must trigger tests.
 name: Tests Nginx
 
 on:
@@ -12,6 +15,7 @@ on:
     paths:
       - src/**
       - tests/**
+      - .github/.release/**
 
 permissions:
   contents: read

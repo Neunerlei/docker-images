@@ -9,7 +9,11 @@
 # resolved by calling the release tooling itself
 # (.github/.release/util/docker-version-utils.js via
 # tests/lib/resolve-source-image.js) — the publish pipeline's own mechanism,
-# so version logic exists exactly once in this repository.
+# so version logic exists exactly once in this repository. The goldens are
+# version-agnostic (lib/normalize.sed collapses upstream version VALUES to
+# <NL-TEST-UPSTREAM>), so the resolved tag moving with an upstream patch
+# release cannot turn the suite red; the version numbers themselves are not
+# pinned data.
 name: Reusable Test Engine
 
 on:
@@ -84,9 +88,26 @@ jobs:
         id: cache-key
         run: echo "DATE=$(date +'%Y-%W')" >> "$GITHUB_ENV"
 
+      # Exposes the Actions runtime environment (ACTIONS_RUNTIME_TOKEN,
+      # ACTIONS_CACHE_URL, ...) as regular env vars for the steps below.
+      # REQUIRED for the type=gha cache backend when buildx runs from an
+      # inline `run:` step: with a docker-container-driver builder (the
+      # setup-buildx-action default) the buildx CLI reads the GHA cache
+      # credentials from these variables, and they are only injected into
+      # official docker actions — an inline run step needs this helper.
+      # Without it the --cache-to/--cache-from specs below fail the build.
+      - name: Expose GitHub Actions runtime for the gha cache backend
+        uses: crazy-max/ghaction-github-runtime@v4
+
       # Built like the release pipeline (same docker build invocation via
       # lib/build-image.sh) but under an nl-test/* tag — local test tags may
       # NEVER shadow neunerlei/* registry names (see build-image.sh).
+      # --load is REQUIRED here: the setup-buildx-action step above creates a
+      # docker-container-driver builder, and with that driver the build result
+      # stays inside the buildx cache unless --load exports it into the local
+      # Docker image store — without it, `docker run nl-test/...` in the tiers
+      # below would find no image. (Local builds use the default docker driver,
+      # which loads automatically, so build-image.sh keeps the flag opt-in.)
       - name: Build the image under test (amd64, no push)
         run: |
           tests/lib/build-image.sh build \
@@ -95,6 +116,7 @@ jobs:
             --source-tree . \
             --tag "nl-test/${{ inputs.image-name }}:ci" \
             --source-image "${{ steps.source.outputs.source-image }}" \
+            --load \
             --cache-from "type=gha,scope=tests-${{ inputs.image-name }}-${{ env.DATE }}" \
             --cache-to "type=gha,mode=max,scope=tests-${{ inputs.image-name }}-${{ env.DATE }}"
 

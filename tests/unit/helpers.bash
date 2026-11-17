@@ -15,7 +15,13 @@
 
 # The real implementation inside the image under test — the unit under test is
 # the shipped file, not a checkout copy.
-readonly UNIT_ENTRYPOINT_DIR="/container/entrypoint"
+# bats evaluates this helper file several times per run inside one shell, and
+# a plain `readonly` fires on every load ("UNIT_ENTRYPOINT_DIR: readonly
+# variable" noise all over the TAP stream). The guard makes it a
+# single-assignment constant: set once, then only read.
+if [ -z "${UNIT_ENTRYPOINT_DIR:-}" ]; then
+    readonly UNIT_ENTRYPOINT_DIR="/container/entrypoint"
+fi
 
 # The helpers use the bats ≥ 1.5 `run` flags API (`run --separate-stderr` for
 # stderr assertions); the pinned release (1.11.0) guarantees it — declaring the

@@ -60,7 +60,7 @@
  - Exporting variable: ENVIRONMENT="production"
  - Exporting variable: MAX_UPLOAD_SIZE="100M"
  - Exporting variable: MAX_UPLOAD_SIZE_BYTES="104857600"
- - Exporting variable: NGINX_BASIC_AUTH_DIR="/c****th [masked]"
+ - Exporting variable: NGINX_BASIC_AUTH_DIR="**** [masked]"
  - Exporting variable: NGINX_BASIC_AUTH_FILE="**** [masked]"
  - Exporting variable: NGINX_CERT_PATH="/etc/ssl/certs/custom/cert.pem"
  - Exporting variable: NGINX_CLIENT_MAX_BODY_SIZE="100M"
@@ -71,7 +71,7 @@
  - Exporting variable: NGINX_DOC_ROOT="/var/www/html/public"
  - Exporting variable: NGINX_ERROR_ROOT="/var/www/errors"
  - Exporting variable: NGINX_KEEPALIVE_TIMEOUT="125s"
- - Exporting variable: NGINX_KEY_PATH="/e****em [masked]"
+ - Exporting variable: NGINX_KEY_PATH="**** [masked]"
  - Exporting variable: NGINX_PROXY_CONNECT_TIMEOUT="5s"
  - Exporting variable: NGINX_PROXY_READ_TIMEOUT="60s"
  - Exporting variable: NGINX_PROXY_SEND_TIMEOUT="60s"
@@ -83,14 +83,14 @@
  - Exporting variable: NGINX_TRY_FILES="$uri @nodeproxy"
  - Exporting variable: NODE_ENV="production"
  - Exporting variable: NODE_SERVICE_PORT="3000"
- - Exporting variable: NODE_VERSION="24.22.3"
+ - Exporting variable: NODE_VERSION="<NL-TEST-UPSTREAM>"
  - Exporting variable: NODE_WEB_COMMAND="node /var/www/html/server.js"
  - Exporting variable: NODE_WORKER_PROCESS_COUNT="1"
  - Exporting variable: NODE_WORKER_STOP_WAIT_SECS="10"
  - Exporting variable: SSL_CERTS_DIR="/etc/ssl/certs"
  - Exporting variable: SUPERVISOR_DIR="/etc/supervisor"
  - Exporting variable: TZ="UTC"
- - Exporting variable: YARN_VERSION="1.22.22"
+ - Exporting variable: YARN_VERSION="<NL-TEST-UPSTREAM>"
 [ENTRYPOINT.user-setup] User and group ID not set, skipping user configuration.
 [ENTRYPOINT.user-permissions] Setting ownership on application directories...
 [ENTRYPOINT.export-custom-vars] Checking for new or changed environment variables...
@@ -105,7 +105,7 @@ CONTAINER_WORK_STAGING_DIR=/container/work-data-staging
 DOCKER_SERVICE_ABS_PATH=/
 CONTAINER_WORK_DATA_DIR=/container/work/data
 MAX_UPLOAD_SIZE=100M
-YARN_VERSION=1.22.22
+YARN_VERSION=<NL-TEST-UPSTREAM>
 NGINX_PROXY_SEND_TIMEOUT=60s
 MAX_UPLOAD_SIZE_BYTES=104857600
 NGINX_RESOLVER_TIMEOUT=5s
@@ -152,7 +152,7 @@ PATH=/container/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 CONTAINER_CUSTOM_ENTRYPOINT_DIR=/container/custom/entrypoint
 NGINX_CUSTOM_SNIPPETS_LOCATION_DIR=/etc/nginx/snippets/location.d
 CONTAINER_ENTRYPOINT_DIR=/container/entrypoint
-NODE_VERSION=24.22.3
+NODE_VERSION=<NL-TEST-UPSTREAM>
 NGINX_RESOLVER_VALID_TIMEOUT=30s
 CONTAINER_CUSTOM_DIR=/container/custom
 NGINX_ERROR_ROOT=/var/www/errors
@@ -196,7 +196,7 @@ Directory '/container/custom/env' does not exist. Skipping.
  - Exporting variable: ENVIRONMENT="production"
  - Exporting variable: MAX_UPLOAD_SIZE="100M"
  - Exporting variable: MAX_UPLOAD_SIZE_BYTES="104857600"
- - Exporting variable: NGINX_BASIC_AUTH_DIR="/c****th [masked]"
+ - Exporting variable: NGINX_BASIC_AUTH_DIR="**** [masked]"
  - Exporting variable: NGINX_CERT_PATH="/etc/ssl/certs/custom/cert.pem"
  - Exporting variable: NGINX_CLIENT_MAX_BODY_SIZE="100M"
  - Exporting variable: NGINX_CUSTOM_SNIPPETS_DIR="/etc/nginx/snippets/custom.d"
@@ -206,7 +206,7 @@ Directory '/container/custom/env' does not exist. Skipping.
  - Exporting variable: NGINX_DOC_ROOT="/var/www/html/public"
  - Exporting variable: NGINX_ERROR_ROOT="/var/www/errors"
  - Exporting variable: NGINX_KEEPALIVE_TIMEOUT="125s"
- - Exporting variable: NGINX_KEY_PATH="/e****em [masked]"
+ - Exporting variable: NGINX_KEY_PATH="**** [masked]"
  - Exporting variable: NGINX_PROXY_CONNECT_TIMEOUT="5s"
  - Exporting variable: NGINX_PROXY_READ_TIMEOUT="60s"
  - Exporting variable: NGINX_PROXY_SEND_TIMEOUT="60s"
@@ -218,13 +218,13 @@ Directory '/container/custom/env' does not exist. Skipping.
  - Exporting variable: NGINX_TRY_FILES="$uri @nodeproxy"
  - Exporting variable: NODE_ENV="production"
  - Exporting variable: NODE_SERVICE_PORT="3000"
- - Exporting variable: NODE_VERSION="24.22.3"
+ - Exporting variable: NODE_VERSION="<NL-TEST-UPSTREAM>"
  - Exporting variable: NODE_WORKER_PROCESS_COUNT="1"
  - Exporting variable: NODE_WORKER_STOP_WAIT_SECS="10"
  - Exporting variable: SSL_CERTS_DIR="/etc/ssl/certs"
  - Exporting variable: SUPERVISOR_DIR="/etc/supervisor"
  - Exporting variable: TZ="UTC"
- - Exporting variable: YARN_VERSION="1.22.22"
+ - Exporting variable: YARN_VERSION="<NL-TEST-UPSTREAM>"
 [ENTRYPOINT.user-setup] User and group ID not set, skipping user configuration.
 [ENTRYPOINT.user-permissions] Setting ownership on application directories...
 [UTIL.user-owned-dir] Setting ownership of /run to user 'www-data'

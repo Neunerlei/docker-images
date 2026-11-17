@@ -170,24 +170,12 @@ nl_remove_container "${container_name}"
 # Build-time scenarios (plan §2.3)
 # ---------------------------------------------------------------------------
 # A scenario with a `dockerfile=` declaration builds that Dockerfile ON TOP of
-# the image under test (the Dockerfile starts with ARG BASE / FROM ${BASE})
-# and captures the DERIVED image — that is how the legacy no-command build
-# mode reaches a running container at all: the build steps must run at image
-# build time, not at capture time. The derived tag is per scenario AND per
-# label, so the -main and -branch derived images neither collide nor evict
-# each other's layer caches. --quiet keeps the capture log readable; a failed
-# build still prints its error to stderr and fails the capture loudly.
+# the image under test and captures the DERIVED image. The build (and the
+# per-scenario/per-image/per-label derived tag) lives in ONE shared
+# implementation, nl_build_scenario_image (lib/helpers.bash) — the golden and
+# integration tiers must always exercise the same derived image.
 if [ -n "${SCENARIO_DOCKERFILE}" ]; then
-    dockerfile_path="${scenario_dir}/${SCENARIO_DOCKERFILE}"
-    [ -f "${dockerfile_path}" ] || nl_die "Scenario '${scenario_name}' declares dockerfile='${SCENARIO_DOCKERFILE}', but ${dockerfile_path} does not exist."
-    built_ref="nl-test/scenario/${scenario_name}:${label}"
-    nl_log "Building scenario image ${built_ref} on top of ${image_ref}"
-    if ! docker build --platform linux/amd64 -q \
-            --build-arg "BASE=${image_ref}" \
-            -f "${dockerfile_path}" -t "${built_ref}" "${scenario_dir}"; then
-        nl_die "Scenario image build failed for '${scenario_name}' (base: ${image_ref}) — see the build output above."
-    fi
-    image_ref="${built_ref}"
+    image_ref="$(nl_build_scenario_image "${scenario_dir}" "${image_ref}" "${ref_name}" "${label}")"
 fi
 
 # ---------------------------------------------------------------------------

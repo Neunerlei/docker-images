@@ -43,7 +43,7 @@
  - Exporting variable: DOCKER_SERVICE_PROTOCOL="http"
  - Exporting variable: ENVIRONMENT="production"
  - Exporting variable: FLASK_ENV="production"
- - Exporting variable: GPG_KEY="71****05 [masked]"
+ - Exporting variable: GPG_KEY="<NL-TEST-UPSTREAM>"
  - Exporting variable: GUNICORN_GRACEFUL_TIMEOUT="30"
  - Exporting variable: GUNICORN_LOG_LEVEL="info"
  - Exporting variable: GUNICORN_MAX_REQUESTS="0"
@@ -55,7 +55,10 @@
  - Exporting variable: GUNICORN_WORKER_CLASS="sync"
  - Exporting variable: MAX_UPLOAD_SIZE="100M"
  - Exporting variable: MAX_UPLOAD_SIZE_BYTES="104857600"
- - Exporting variable: NGINX_BASIC_AUTH_DIR="/c****th [masked]"
+ - Not exporting variable: NGINX_BASIC_AUTH (clear-text basic auth credentials — used only to generate the password files during boot; intentionally not exported to later RUN steps or exec shells)
+ - Not exporting variable: NGINX_BASIC_AUTH_1 (clear-text basic auth credentials — used only to generate the password files during boot; intentionally not exported to later RUN steps or exec shells)
+ - Exporting variable: NGINX_BASIC_AUTH_DIR="**** [masked]"
+ - Exporting variable: NGINX_BASIC_AUTH_REALM="**** [masked]"
  - Exporting variable: NGINX_CERT_PATH="/etc/ssl/certs/custom/cert.pem"
  - Exporting variable: NGINX_CLIENT_MAX_BODY_SIZE="100M"
  - Exporting variable: NGINX_CUSTOM_SNIPPETS_DIR="/etc/nginx/snippets/custom.d"
@@ -65,7 +68,7 @@
  - Exporting variable: NGINX_DOC_ROOT="/var/www/html/public"
  - Exporting variable: NGINX_ERROR_ROOT="/var/www/errors"
  - Exporting variable: NGINX_KEEPALIVE_TIMEOUT="125s"
- - Exporting variable: NGINX_KEY_PATH="/e****em [masked]"
+ - Exporting variable: NGINX_KEY_PATH="**** [masked]"
  - Exporting variable: NGINX_PROXY_CONNECT_TIMEOUT="5s"
  - Exporting variable: NGINX_PROXY_READ_TIMEOUT="60s"
  - Exporting variable: NGINX_PROXY_SEND_TIMEOUT="60s"
@@ -77,9 +80,10 @@
  - Exporting variable: NGINX_TRY_FILES="/static/$uri @pythonproxy"
  - Exporting variable: NODE_WORKER_COMMAND="node -e 'console.log("WORKER-ARGV-OK HOME=", process.env.HOME === undefined ? "(unset)" : process.env.HOME); setInterval(function () {}, 1000);'"
  - Exporting variable: PHP_WORKER_COMMAND="php -r 'echo "WORKER-ARGV-OK HOME=", getenv("HOME") === false ? "(unset)" : getenv("HOME"), "\n"; while (true) { sleep(1); }'"
+ - Not exporting variable: PROXY_GHOST_BASIC_AUTH (clear-text basic auth credentials — used only to generate the password files during boot; intentionally not exported to later RUN steps or exec shells)
  - Exporting variable: PYTHON_APP_MODULE="'server:app'"
- - Exporting variable: PYTHON_SHA256="abb0102e6d4ae027509bcb82327d9dd85515b44a3ba8ad538cfc5e9847029f68"
- - Exporting variable: PYTHON_VERSION="3.13.18"
+ - Exporting variable: PYTHON_SHA256="<NL-TEST-UPSTREAM>"
+ - Exporting variable: PYTHON_VERSION="<NL-TEST-UPSTREAM>"
  - Exporting variable: PYTHON_WORKER_COMMAND="python -u -c 'import os, time; print("WORKER-ARGV-OK HOME=", os.environ.get("HOME", "(unset)")); [time.sleep(1) for _ in iter(int, 1)]'"
  - Exporting variable: PYTHON_WORKER_PROCESS_COUNT="1"
  - Exporting variable: PYTHON_WORKER_STOP_WAIT_SECS="10"
@@ -92,6 +96,10 @@
 [UTIL.user-owned-dir] Setting ownership of /var/lib/nginx to user 'www-data'
 [UTIL.user-owned-dir] Setting ownership of /var/log/nginx to user 'www-data'
 [ENTRYPOINT.export-custom-vars] Checking for new or changed environment variables...
+[ENTRYPOINT.export-custom-vars] Detected changes in environment variables, exporting new/changed variables:
+ - Not exporting variable: NGINX_BASIC_AUTH (clear-text basic auth credentials — used only to generate the password files during boot; intentionally not exported to later RUN steps or exec shells)
+ - Not exporting variable: NGINX_BASIC_AUTH_1 (clear-text basic auth credentials — used only to generate the password files during boot; intentionally not exported to later RUN steps or exec shells)
+ - Not exporting variable: PROXY_GHOST_BASIC_AUTH (clear-text basic auth credentials — used only to generate the password files during boot; intentionally not exported to later RUN steps or exec shells)
 [ENTRYPOINT.execute-command] Bootstrapping completed, starting command "supervisord -c /etc/supervisor/supervisord.conf "...
 <NL-TEST-TIMESTAMP> WARN For [program:app-worker], redirect_stderr=true but stderr_logfile has also been set to a filename, the filename has been ignored
 <NL-TEST-TIMESTAMP> INFO Included extra file "/etc/supervisor/conf.d/crash-on-fatal.eventlistener.conf" during parsing

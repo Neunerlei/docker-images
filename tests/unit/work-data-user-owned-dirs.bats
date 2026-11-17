@@ -158,16 +158,36 @@ teardown() {
     chown www-data:www-data "${dir}"
     printf 'x' > "${dir}/file"
     chown www-data:www-data "${dir}/file"
-    local ctime_before
-    ctime_before="$(stat -c '%Z' "${dir}")"
 
+    # Honest no-op proof, independent of timing: a chown SHIM placed earlier
+    # in PATH records every invocation the function makes. The previous
+    # approach compared `stat -c %Z` (ctime, one-second resolution) — a
+    # wrongly-executed chown WITHIN THE SAME SECOND as the before-value left
+    # the ctime equal and silently passed. A logged invocation cannot slip
+    # through any timing window.
+    local shim_dir="${NL_UNIT_SANDBOX}/shim-bin"
+    local chown_log="${NL_UNIT_SANDBOX}/chown-calls.log"
+    mkdir -p "${shim_dir}"
+    {
+        printf '#!/bin/bash\n'
+        printf 'printf "%%s\\n" "$*" >> %q\n' "${chown_log}"
+        printf 'exec %q "$@"\n' "$(command -v chown)"
+    } > "${shim_dir}/chown"
+    chmod +x "${shim_dir}/chown"
+
+    # Each bats test runs in its own process, so the PATH change cannot leak
+    # into other tests even when an assertion below aborts the test early.
+    local saved_path="${PATH}"
+    export PATH="${shim_dir}:${PATH}"
     run --separate-stderr ensure_user_owned_dir "${dir}"
+    export PATH="${saved_path}"
+
     [ "${status}" -eq 0 ]
-    # ctime only changes on metadata writes — equality proves NO chown ran.
-    # (Second granularity: a same-second chown could slip through the check,
-    # but the assertion failing would be the false alarm direction, never a
-    # silently-passing regression.)
-    [ "$(stat -c '%Z' "${dir}")" == "${ctime_before}" ]
+    # The shim log was never created — i.e. chown was never invoked at all
+    # (the shim creates it lazily on the first call).
+    [ ! -e "${chown_log}" ]
+    # And the correct ownership is of course still in place.
+    [ "$(stat -c '%U' "${dir}")" == "www-data" ]
     [ "$(stat -c '%U' "${dir}/file")" == "www-data" ]
 }
 

@@ -37,8 +37,13 @@ setup() {
 @test "the guard only reports the paths that ARE mounted" {
     # Only /etc/ssl/certs of the five legacy paths is a host bind mount here —
     # the other four sit on the container's overlay and must NOT be listed.
+    # (`run` + status assert, NOT a bare `! grep`: a command's return value
+    # inverted with `!` is exempt from errexit, so a bare mid-test `! grep`
+    # could never fail the test — grep succeeding would silently pass.)
     run legacy_fail_on_legacy_mount_paths
     [ "${status}" -eq 1 ]
-    ! grep -q '/usr/bin/container/custom' <<< "${output}"
-    ! grep -q '/etc/container/templates' <<< "${output}"
+    run grep -q '/usr/bin/container/custom' <<< "${output}"
+    [ "${status}" -eq 1 ]
+    run grep -q '/etc/container/templates' <<< "${output}"
+    [ "${status}" -eq 1 ]
 }

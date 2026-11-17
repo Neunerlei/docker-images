@@ -1,0 +1,4 @@
+# Global basic auth (the generated directives must stay in place — the custom
+# snippet below only opts a NESTED location out). Synthetic test credentials.
+NGINX_BASIC_AUTH=testuser test-password
+NGINX_BASIC_AUTH_REALM=NL Test Realm

@@ -35,7 +35,8 @@
 [TEMPLATE] Processing template group: supervisor-config
 [TEMPLATE] Rendering sources for 'supervisor-config': /container/templates/supervisor/conf.d
 [ENTRYPOINT.export-vars] Propagating known variables to default shell config
- - Exporting variable: ACME_VERSION="0.3.1"
+ - Exporting variable: ACME_VERSION="<NL-TEST-UPSTREAM>"
+ - Exporting variable: APP_ENV="nl-int-check"
  - Exporting variable: CONTAINER_BIN_DIR="/container/bin"
  - Exporting variable: CONTAINER_BUILD_MODE_MARKER="/container/build-mode.marker"
  - Exporting variable: CONTAINER_CUSTOM_DIR="/container/custom"
@@ -62,15 +63,15 @@
  - Exporting variable: DOCKER_SERVICE_ABS_PATH="/"
  - Exporting variable: DOCKER_SERVICE_PATH="/"
  - Exporting variable: DOCKER_SERVICE_PROTOCOL="http"
- - Exporting variable: DYNPKG_RELEASE="1~trixie"
+ - Exporting variable: DYNPKG_RELEASE="<NL-TEST-UPSTREAM>"
  - Exporting variable: ENVIRONMENT="production"
  - Exporting variable: MAX_UPLOAD_SIZE="100M"
  - Exporting variable: MAX_UPLOAD_SIZE_BYTES="104857600"
- - Exporting variable: NGINX_BASIC_AUTH="te****rd [masked]"
- - Exporting variable: NGINX_BASIC_AUTH_1="se****rd [masked]"
- - Exporting variable: NGINX_BASIC_AUTH_DIR="/c****th [masked]"
- - Exporting variable: NGINX_BASIC_AUTH_FILE="/c****wd [masked]"
- - Exporting variable: NGINX_BASIC_AUTH_REALM="NL****lm [masked]"
+ - Not exporting variable: NGINX_BASIC_AUTH (clear-text basic auth credentials — used only to generate the password files during boot; intentionally not exported to later RUN steps or exec shells)
+ - Not exporting variable: NGINX_BASIC_AUTH_1 (clear-text basic auth credentials — used only to generate the password files during boot; intentionally not exported to later RUN steps or exec shells)
+ - Exporting variable: NGINX_BASIC_AUTH_DIR="**** [masked]"
+ - Exporting variable: NGINX_BASIC_AUTH_FILE="**** [masked]"
+ - Exporting variable: NGINX_BASIC_AUTH_REALM="**** [masked]"
  - Exporting variable: NGINX_CERT_PATH="/etc/ssl/certs/custom/cert.pem"
  - Exporting variable: NGINX_CLIENT_MAX_BODY_SIZE="100M"
  - Exporting variable: NGINX_CUSTOM_SNIPPETS_DIR="/etc/nginx/snippets/custom.d"
@@ -81,7 +82,7 @@
  - Exporting variable: NGINX_DOC_ROOT="/var/www/html/public"
  - Exporting variable: NGINX_ERROR_ROOT="/var/www/errors"
  - Exporting variable: NGINX_KEEPALIVE_TIMEOUT="125s"
- - Exporting variable: NGINX_KEY_PATH="/e****em [masked]"
+ - Exporting variable: NGINX_KEY_PATH="**** [masked]"
  - Exporting variable: NGINX_PROXY_CONNECT_TIMEOUT="5s"
  - Exporting variable: NGINX_PROXY_READ_TIMEOUT="60s"
  - Exporting variable: NGINX_PROXY_SEND_TIMEOUT="60s"
@@ -91,10 +92,10 @@
  - Exporting variable: NGINX_SERVE_ROOT="/var/www/html"
  - Exporting variable: NGINX_SNIPPETS_DIR="/etc/nginx/snippets"
  - Exporting variable: NGINX_TRY_FILES="$uri $uri/ /index.html /index.htm =404"
- - Exporting variable: NGINX_VERSION="1.29.8"
- - Exporting variable: NJS_RELEASE="1~trixie"
- - Exporting variable: NJS_VERSION="0.9.6"
- - Exporting variable: PKG_RELEASE="1~trixie"
+ - Exporting variable: NGINX_VERSION="<NL-TEST-UPSTREAM>"
+ - Exporting variable: NJS_RELEASE="<NL-TEST-UPSTREAM>"
+ - Exporting variable: NJS_VERSION="<NL-TEST-UPSTREAM>"
+ - Exporting variable: PKG_RELEASE="<NL-TEST-UPSTREAM>"
  - Exporting variable: SSL_CERTS_DIR="/etc/ssl/certs"
  - Exporting variable: SUPERVISOR_DIR="/etc/supervisor"
  - Exporting variable: TZ="UTC"
@@ -105,4 +106,7 @@
 [UTIL.user-owned-dir] Setting ownership of /var/lib/nginx to user 'www-data'
 [UTIL.user-owned-dir] Setting ownership of /var/log/nginx to user 'www-data'
 [ENTRYPOINT.export-custom-vars] Checking for new or changed environment variables...
+[ENTRYPOINT.export-custom-vars] Detected changes in environment variables, exporting new/changed variables:
+ - Not exporting variable: NGINX_BASIC_AUTH (clear-text basic auth credentials — used only to generate the password files during boot; intentionally not exported to later RUN steps or exec shells)
+ - Not exporting variable: NGINX_BASIC_AUTH_1 (clear-text basic auth credentials — used only to generate the password files during boot; intentionally not exported to later RUN steps or exec shells)
 [ENTRYPOINT.execute-command] Bootstrapping completed, starting command "/nl-test/probe.sh static "...

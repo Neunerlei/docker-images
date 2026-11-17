@@ -28,7 +28,7 @@ export DOCKER_SERVICE_PATH=/
 export DOCKER_SERVICE_PROTOCOL=http
 export ENVIRONMENT=production
 export FLASK_ENV=production
-export GPG_KEY=7169605F62C751356D054A26A821E680E5FA6305
+export GPG_KEY=<NL-TEST-UPSTREAM>
 export GUNICORN_GRACEFUL_TIMEOUT=30
 export GUNICORN_LOG_LEVEL=info
 export GUNICORN_MAX_REQUESTS=0
@@ -41,6 +41,7 @@ export GUNICORN_WORKER_CLASS=sync
 export MAX_UPLOAD_SIZE=100M
 export MAX_UPLOAD_SIZE_BYTES=104857600
 export NGINX_BASIC_AUTH_DIR=/container/work/nginx-basic-auth
+export NGINX_BASIC_AUTH_REALM=NL\ Worker\ Realm
 export NGINX_CERT_PATH=/etc/ssl/certs/custom/cert.pem
 export NGINX_CLIENT_MAX_BODY_SIZE=100M
 export NGINX_CUSTOM_SNIPPETS_DIR=/etc/nginx/snippets/custom.d
@@ -63,8 +64,8 @@ export NGINX_TRY_FILES=/static/\$uri\ @pythonproxy
 export NODE_WORKER_COMMAND=node\ -e\ \'console.log\(\"WORKER-ARGV-OK\ HOME=\"\,\ process.env.HOME\ ===\ undefined\ \?\ \"\(unset\)\"\ :\ process.env.HOME\)\;\ setInterval\(function\ \(\)\ \{\}\,\ 1000\)\;\'
 export PHP_WORKER_COMMAND=php\ -r\ \'echo\ \"WORKER-ARGV-OK\ HOME=\"\,\ getenv\(\"HOME\"\)\ ===\ false\ \?\ \"\(unset\)\"\ :\ getenv\(\"HOME\"\)\,\ \"\\n\"\;\ while\ \(true\)\ \{\ sleep\(1\)\;\ \}\'
 export PYTHON_APP_MODULE=\'server:app\'
-export PYTHON_SHA256=abb0102e6d4ae027509bcb82327d9dd85515b44a3ba8ad538cfc5e9847029f68
-export PYTHON_VERSION=3.13.18
+export PYTHON_SHA256=<NL-TEST-UPSTREAM>
+export PYTHON_VERSION=<NL-TEST-UPSTREAM>
 export PYTHON_WORKER_COMMAND=python\ -u\ -c\ \'import\ os\,\ time\;\ print\(\"WORKER-ARGV-OK\ HOME=\"\,\ os.environ.get\(\"HOME\"\,\ \"\(unset\)\"\)\)\;\ \[time.sleep\(1\)\ for\ _\ in\ iter\(int\,\ 1\)\]\'
 export PYTHON_WORKER_PROCESS_COUNT=1
 export PYTHON_WORKER_STOP_WAIT_SECS=10

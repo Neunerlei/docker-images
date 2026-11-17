@@ -11,3 +11,8 @@
 NGINX_BASIC_AUTH=testuser test-password
 NGINX_BASIC_AUTH_1=seconduser other-password
 NGINX_BASIC_AUTH_REALM=NL Test Realm
+
+# A REGULAR (non-secret) variable: proves the entrypoint's pre-exec unset is
+# surgical — the registered credential names are removed, every other
+# variable still reaches a www-data exec shell (asserted in expect.bats).
+APP_ENV=nl-int-check

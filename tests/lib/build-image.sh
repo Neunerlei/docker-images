@@ -45,16 +45,11 @@ function nl_source_image_ref() {
     local version="${2:?version required}"
     local namespace name filter
     case "${image}" in
-        nginx)
-            namespace="library"; name="nginx"; filter="trixie" ;;
-        php-nginx)
-            namespace="library"; name="php"; filter="fpm-trixie" ;;
-        node-nginx)
-            namespace="library"; name="node"; filter="trixie" ;;
-        python-nginx)
-            namespace="library"; name="python"; filter="slim-trixie" ;;
-        *)
-            nl_die "No source image configuration for image '${image}'. Add it to lib/build-image.sh, mirroring .github/workflows/${image}.yml." ;;
+        nginx)        namespace="library"; name="nginx"; filter="trixie" ;;
+        php-nginx)    namespace="library"; name="php"; filter="fpm-trixie" ;;
+        node-nginx)   namespace="library"; name="node"; filter="trixie" ;;
+        python-nginx) namespace="library"; name="python"; filter="slim-trixie" ;;
+        *) nl_die "No source image configuration for image '${image}'. Add it to lib/build-image.sh, mirroring .github/workflows/${image}.yml." ;;
     esac
     printf '%s/%s:%s%s' "${namespace}" "${name}" "${version}" "${filter:+-${filter}}"
 }
@@ -148,8 +143,8 @@ function nl_resolve_version_dir() {
 #
 # Usage: nl_build_image --image <name> --version <version> \
 #           --source-tree <path> --tag <output-tag> \
-#           [--source-image <ref:tag>] [--no-platform] \
-#           [--cache-from <spec>] [--cache-to <spec>]
+#           [--source-image <ref:tag>] [--no-platform] [--no-cache] \
+#           [--cache-from <spec>] [--cache-to <spec>] [--load]
 #
 # --source-tree is the repository checkout to build from — NOT necessarily the
 # current one: Phase 1 builds "main" from a git worktree and the branch from
@@ -158,8 +153,21 @@ function nl_resolve_version_dir() {
 # --cache-from/--cache-to are optional buildx cache specs (repeatable). They
 # exist for CI (type=gha); the local default stays cache-flag-free so the
 # network-free local path is untouched.
+#
+# --load is an opt-in passthrough for CI: the test engine builds through a
+# docker-container-driver builder (docker/setup-buildx-action's default), and
+# with that driver the result stays INSIDE the buildx cache unless --load
+# exports it into the local Docker image store — without it, `docker run
+# <tag>` in the tiers would find no image. Local builds run on the default
+# docker driver, which loads automatically; they simply never pass the flag,
+# keeping the local invocation unchanged.
+#
+# --no-cache is a verbatim docker build --no-cache passthrough (run.sh
+# --no-cache): a full rebuild without layer reuse. The default rebuild stays
+# cheap through BuildKit's cache, so this exists only for the rare "the cache
+# itself is suspect" case.
 function nl_build_image() {
-    local image="" version="" source_tree="" tag="" source_image="" no_platform="false"
+    local image="" version="" source_tree="" tag="" source_image="" no_platform="false" no_cache="false" load="false"
     local -a cache_args=()
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -169,6 +177,8 @@ function nl_build_image() {
             --tag) tag="${2}"; shift 2 ;;
             --source-image) source_image="${2}"; shift 2 ;;
             --no-platform) no_platform="true"; shift ;;
+            --no-cache) no_cache="true"; shift ;;
+            --load) load="true"; shift ;;
             --cache-from) cache_args+=(--cache-from "${2}"); shift 2 ;;
             --cache-to) cache_args+=(--cache-to "${2}"); shift 2 ;;
             *) nl_die "Unknown option for nl_build_image: $1" ;;
@@ -203,6 +213,14 @@ function nl_build_image() {
         source_image_version="${build_dir##*/}"
     fi
     if [ -z "${source_image}" ]; then
+        # Derived floating tag ("<namespace>/<name>:<version>[-<filter>]" —
+        # the same ref the release tooling selects for a discovered version).
+        # An explicit --source-image (the CI workflow, the version-agnostic
+        # proof runs) still wins. The goldens are version-agnostic
+        # (lib/normalize.sed normalizes upstream version VALUES by variable
+        # name), so the floating tag moving with an upstream patch release
+        # cannot turn the suite red — docker build fails loudly when the
+        # derived tag does not exist at all.
         source_image="$(nl_source_image_ref "${image}" "${source_image_version}")"
     fi
 
@@ -224,6 +242,17 @@ function nl_build_image() {
     # CI cache specs land verbatim; empty locally (network-free default path)
     if [ ${#cache_args[@]} -gt 0 ]; then
         build_args+=("${cache_args[@]}")
+    fi
+    # Full rebuild without layer reuse (see the --no-cache docs above)
+    if [ "${no_cache}" == "true" ]; then
+        build_args+=(--no-cache)
+    fi
+    # Only appended when explicitly requested (see the --load docs above):
+    # the local default docker driver already puts results into the image
+    # store, so local callers never pass the flag and their invocation stays
+    # byte-identical to before.
+    if [ "${load}" == "true" ]; then
+        build_args+=(--load)
     fi
 
     (

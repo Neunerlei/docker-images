@@ -1,0 +1,5 @@
+# Mount the owning-snippet directory read-only (like a Kubernetes config map)
+# and the health-check payload into the document root, so /health can answer
+# a real 200 once auth is off there.
+-v "${SCENARIO_DIR}/files/custom":/container/custom:ro
+-v "${SCENARIO_DIR}/files/health":/var/www/html/public/health:ro

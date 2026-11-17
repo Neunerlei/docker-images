@@ -12,7 +12,9 @@
 #                          (default: this checkout). Phase 1 points this at a
 #                          git worktree to build "main".
 #   --label <name>         Label for test container names (default: branch)
-#   --force-build          Rebuild default images even if the tag exists
+#   --no-cache             Build the default images with docker build
+#                          --no-cache (full rebuild; the default rebuilds
+#                          through BuildKit's layer cache instead)
 #   --only-image <name>    Limit every tier to ONE image (nginx, php-nginx,
 #                          node-nginx, python-nginx) — used by the per-image
 #                          CI workflows and handy when iterating locally.
@@ -52,7 +54,7 @@ source "${tests_dir}/lib/bats.sh"
 # ---------------------------------------------------------------------------
 
 TREE="${repo_root}"
-FORCE_BUILD="false"
+NO_CACHE="false"
 LABEL="branch"
 declare -A IMAGE_OVERRIDES=()
 # The images the suite covers — the four _common-based images. The legacy
@@ -63,7 +65,7 @@ readonly SUITE_IMAGES=(nginx php-nginx node-nginx python-nginx)
 ONLY_IMAGE=""
 
 function usage() {
-    sed -n '2,37p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,39p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit 2
 }
 
@@ -72,9 +74,21 @@ function usage() {
 # ---------------------------------------------------------------------------
 
 # Resolve the image ref for an image name: the --image override when given,
-# otherwise build-if-needed from --tree under an nl-test/* tag. The tag uses
-# the RESOLVED version directory (nl-test/nginx:1.29-branch), so it stays
+# otherwise build from --tree under an nl-test/* tag. The tag uses the
+# RESOLVED version directory (nl-test/nginx:1.29-branch), so it stays
 # meaningful even though we build with --version latest.
+#
+# Why ALWAYS build (no tag-exists shortcut, no freshness stamp): BuildKit's
+# layer cache makes an unchanged rebuild take seconds — every layer up to the
+# first changed src/ byte is a cache hit — so the build IS the freshness
+# check, with nothing extra to keep correct. A previous implementation
+# compared a "nl-test-source-stamp" label (git HEAD + dirty marker over src/)
+# against the current tree and reused the tag on match; that is one more
+# mechanism that can silently agree while the image is stale (label written
+# but context changed underneath it), and it saved nothing worth having.
+# Explicit --image overrides are still exempt: the developer asked for
+# exactly that ref, no build happens at all. --no-cache forces a build
+# without layer reuse.
 function ensure_image() {
     local image="${1:?image name required}"
     local override="${IMAGE_OVERRIDES[${image}]:-}"
@@ -84,15 +98,16 @@ function ensure_image() {
     fi
 
     local version_dir tag
+    local -a build_args=()
     version_dir="$(nl_resolve_version_dir "${TREE}" "${image}" latest)"
     tag="nl-test/${image}:$(basename "${version_dir}")-${LABEL}"
+    build_args=(--image "${image}" --version latest --source-tree "${TREE}" --tag "${tag}")
+    [ "${NO_CACHE}" == "true" ] && build_args+=(--no-cache)
 
-    if [ "${FORCE_BUILD}" == "true" ] || ! docker image inspect "${tag}" >/dev/null 2>&1; then
-        # The derived SOURCE_IMAGE (nl_source_image_ref) is verified by the
-        # build itself: docker build fails loudly when the tag does not exist
-        # on the registry — there is deliberately no network tag listing.
-        nl_build_image --image "${image}" --version latest --source-tree "${TREE}" --tag "${tag}"
-    fi
+    # The derived SOURCE_IMAGE (nl_source_image_ref) is validated by the
+    # build itself: docker build fails loudly when the tag does not exist on
+    # the registry — there is deliberately no network tag listing.
+    nl_build_image "${build_args[@]}"
     printf '%s\n' "${tag}"
 }
 
@@ -174,6 +189,80 @@ function nl_check_legacy_layer_coverage() {
 }
 
 # ---------------------------------------------------------------------------
+# src/ variable-suffix guard (version-agnostic goldens)
+# ---------------------------------------------------------------------------
+# The goldens are version-agnostic (docs/test.md, "Goldens are version
+# agnostic"): lib/normalize.sed collapses the VALUE of every variable whose
+# NAME ends in _VERSION, _RELEASE, _SHA256 or _URL (plus exactly GPG_KEY and
+# GPG_KEYS) to <NL-TEST-UPSTREAM>, so an upstream patch release cannot turn
+# the suite red. That normalization assumes those names belong to the BASE
+# images' upstream bookkeeping — if src/ ever DEFINED a variable with such a
+# suffix, its value would be silently hidden from every golden diff, and a
+# real behavior change carried in that value would become invisible. This
+# static check fails the unit tier when such a definition appears.
+#
+# A definition is an assignment-shaped occurrence anywhere in src/ — shell
+# `NAME=…`/`export NAME=…`/`declare NAME=…`, Dockerfile `ENV NAME=…`, and
+# `["NAME"]=` array keys. Pure comment lines (first non-blank character '#')
+# are skipped: they cannot define anything. A future variable that
+# LEGITIMATELY needs such a name is exempted in the allowlist below — one
+# line "<path>:<line-number>" plus the reason why the name is safe despite
+# hiding its value from the goldens.
+function nl_check_src_version_suffix_guard() {
+    # "<path>:<line>" exemptions. Keep the why right here in the comment: the
+    # line exists so a justified case survives review, not to hide it.
+    local -a allowlist=(
+        # none today — add "<path>:<line>  # why this name is safe" entries here
+    )
+    local src_dir="${repo_root}/src"
+    local hit exempt failures=0
+    local -a hits=()
+
+    # Assignment shapes: an identifier ending in one of the suffixes directly
+    # followed by "=" (shell NAME=/export/declare, Dockerfile ENV NAME= and
+    # ["NAME"]= array keys all contain that shape), and GPG_KEY/GPG_KEYS with
+    # a name boundary so "MY_GPG_KEYS=" (a different name) is not a hit.
+    local -a patterns=(
+        '[A-Za-z_][A-Za-z0-9_]*(_VERSION|_RELEASE|_SHA256|_URL)='
+        '(^|[^A-Za-z0-9_])GPG_KEYS?='
+    )
+    local pattern
+    for pattern in "${patterns[@]}"; do
+        # -I skips binaries; the comment filter drops lines whose first
+        # non-blank character is '#' — a comment cannot define anything
+        # (the only _URL occurrence in src/ today is such a comment).
+        while IFS= read -r hit; do
+            [ -n "${hit}" ] || continue
+            hits+=("$(printf '%s' "${hit}" | cut -d: -f1-2)")
+        done < <(grep -rEnI -- "${pattern}" "${src_dir}" \
+            | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true)
+    done
+
+    # Sorted unique path:line pairs, minus the allowlist entries.
+    if [ ${#hits[@]} -gt 0 ]; then
+        local tmp_hits tmp_filtered
+        tmp_hits="$(mktemp)"
+        tmp_filtered="$(mktemp)"
+        printf '%s\n' "${hits[@]}" | LC_ALL=C sort -u > "${tmp_hits}"
+        for exempt in "${allowlist[@]}"; do
+            grep -vxF -- "${exempt}" "${tmp_hits}" > "${tmp_filtered}" || true
+            mv "${tmp_filtered}" "${tmp_hits}"
+        done
+        while IFS= read -r hit; do
+            nl_log "VERSION-SUFFIX GUARD FAIL: ${hit}"
+            nl_log "  src/ must not define variables whose name ends in _VERSION/_RELEASE/_SHA256/_URL or is GPG_KEY/GPG_KEYS — lib/normalize.sed would hide that value from every golden diff (docs/test.md). If the name is genuinely safe, add \"<path>:<line>\" to the allowlist in nl_check_src_version_suffix_guard (tests/run.sh) with the why."
+            failures=$((failures + 1))
+        done < "${tmp_hits}"
+        rm -f "${tmp_hits}" "${tmp_filtered}"
+    fi
+
+    if [ "${failures}" -gt 0 ]; then
+        nl_die "src/ version-suffix guard failed with ${failures} hit(s)."
+    fi
+    nl_log "src/ version-suffix guard: clean."
+}
+
+# ---------------------------------------------------------------------------
 # Tier 1 — unit
 # ---------------------------------------------------------------------------
 
@@ -189,6 +278,7 @@ function nl_check_legacy_layer_coverage() {
 # set up exactly the environment each function contract requires.
 function cmd_unit() {
     nl_check_legacy_layer_coverage
+    nl_check_src_version_suffix_guard
 
     local bats_dir image ref container_name rc failures=0
     bats_dir="$(nl_ensure_bats_pin)"
@@ -259,6 +349,15 @@ function cmd_integration() {
         for image in "${images[@]}"; do
             nl_image_selected "${image}" || continue
             ref="$(ensure_image "${image}")"
+            # Build-time scenarios (dockerfile=): the integration tier must
+            # boot the DERIVED image — the Dockerfile's build-time RUN steps
+            # are half of what is under test, and they only exist in the
+            # derived image. Same build + per-image tag as the golden tier
+            # (nl_build_scenario_image), so both tiers always exercise the
+            # same derived image for a scenario/image pair.
+            if [ -n "${SCENARIO_DOCKERFILE}" ]; then
+                ref="$(nl_build_scenario_image "${scenario_dir}" "${ref}" "${image}" "${LABEL}")"
+            fi
             nl_log "integration: ${scenario_name} / ${image} (${ref})"
             ran=$((ran + 1))
             # The bounded timeout only guards against a hung docker call —
@@ -392,7 +491,7 @@ while [ $# -gt 0 ]; do
             ;;
         --tree)        TREE="$(cd "${2:?--tree needs a path}" && pwd)"; shift 2 ;;
         --label)       LABEL="${2:?--label needs a name}"; shift 2 ;;
-        --force-build) FORCE_BUILD="true"; shift ;;
+        --no-cache)    NO_CACHE="true"; shift ;;
         --only-image)  ONLY_IMAGE="${2:?--only-image needs an image name}"; shift 2 ;;
         -h|--help)     usage ;;
         *)

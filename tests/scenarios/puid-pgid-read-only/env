@@ -1,0 +1,4 @@
+# Off the built-in 33/33, so the remap is genuinely requested and the
+# read-only guard must fire. Synthetic test values, like in every scenario.
+PUID=1000
+PGID=1000

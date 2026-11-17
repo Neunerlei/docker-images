@@ -29,6 +29,7 @@
 644 www-data www-data /container/entrypoint/legacy.d/2026-11-12-build-mode-marker-and-variables.sh 
 644 www-data www-data /container/entrypoint/legacy.d/2026-11-12-exact-command-arguments.sh 
 644 www-data www-data /container/entrypoint/legacy.d/2026-11-12-www-data-home-directory.sh 
+644 www-data www-data /container/entrypoint/legacy.d/2026-11-16-proxy-snippet-include-pattern.sh 
 644 www-data www-data /container/entrypoint/step.d/005-init-custom-on-dev.sh 
 644 www-data www-data /container/entrypoint/step.d/017-custom-env.sh 
 644 www-data www-data /container/entrypoint/step.d/020-nginx.sh 
@@ -85,8 +86,8 @@
 644 www-data www-data /container/work/data/nginx-snippets-root 
 644 www-data www-data /container/work/data/supervisor-conf 
 644 www-data www-data /run/adduser 
-664 1000 1000 /container/custom/nginx/proxy/api.conf 
-664 1000 1000 /container/custom/nginx/proxy/api_v2.prefix.conf 
+<NL-TEST-BIND-MOUNT-OWNER> /container/custom/nginx/proxy/api.conf 
+<NL-TEST-BIND-MOUNT-OWNER> /container/custom/nginx/proxy/api_v2.prefix.conf 
 664 www-data www-data /container/entrypoint/step.d/015-image-vars.sh 
 664 www-data www-data /container/entrypoint/step.d/025-nginx-proxy.sh 
 664 www-data www-data /container/entrypoint/step.d/025-nginx-static.sh 
@@ -132,9 +133,9 @@
 755 www-data www-data /var/www 
 755 www-data www-data /var/www/html 
 755 www-data www-data /var/www/html 
-775 1000 1000 /container/custom 
-775 1000 1000 /container/custom/nginx 
-775 1000 1000 /container/custom/nginx/proxy 
+<NL-TEST-BIND-MOUNT-OWNER> /container/custom 
+<NL-TEST-BIND-MOUNT-OWNER> /container/custom/nginx 
+<NL-TEST-BIND-MOUNT-OWNER> /container/custom/nginx/proxy 
 775 www-data www-data /container/entrypoint 
 775 www-data www-data /container/entrypoint/step.d 
 775 www-data www-data /container/templates 

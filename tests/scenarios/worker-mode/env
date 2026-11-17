@@ -12,3 +12,18 @@ PHP_WORKER_COMMAND=php -r 'echo "WORKER-ARGV-OK HOME=", getenv("HOME") === false
 PYTHON_WORKER_COMMAND=python -u -c 'import os, time; print("WORKER-ARGV-OK HOME=", os.environ.get("HOME", "(unset)")); [time.sleep(1) for _ in iter(int, 1)]'
 
 NODE_WORKER_COMMAND=node -e 'console.log("WORKER-ARGV-OK HOME=", process.env.HOME === undefined ? "(unset)" : process.env.HOME); setInterval(function () {}, 1000);'
+
+# ---------------------------------------------------------------------------
+# Shared-.env realism — the case the name-pattern credential registry exists
+# for: one env file feeds the web AND the worker container of a stack, so the
+# web container's basic-auth credentials also arrive HERE, in a mode that
+# never reads them (no nginx feature runs in worker mode, and PROXY_GHOST_*
+# has no matching PROXY_GHOST_CONTAINER service). Usage-based registration
+# would see nothing to register; the pattern-based registration (steps 050 +
+# 090) must keep the credentials out of the exported snapshot and the exec'd
+# process environment anyway, while _REALM — no credential — stays exported
+# on purpose. Synthetic throwaway values, like in every auth scenario.
+NGINX_BASIC_AUTH=worker-leak-check web-password
+NGINX_BASIC_AUTH_1=worker-leak-check-2 web-password-2
+NGINX_BASIC_AUTH_REALM=NL Worker Realm
+PROXY_GHOST_BASIC_AUTH=ghost-user ghost-password

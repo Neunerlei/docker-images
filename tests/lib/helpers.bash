@@ -219,6 +219,50 @@ function nl_parse_scenario_conf() {
     done < "${conf}"
 }
 
+# ---------------------------------------------------------------------------
+# Build-time scenarios (dockerfile=)
+# ---------------------------------------------------------------------------
+
+# A scenario with a `dockerfile=` declaration builds that Dockerfile ON TOP of
+# the image under test (the Dockerfile starts with ARG BASE / FROM ${BASE})
+# and captures/boots the DERIVED image — that is how the legacy no-command
+# build mode reaches a running container at all: the build steps must run at
+# image build time, not at capture/boot time.
+#
+# ONE implementation for both consumers (lib/capture.sh in the golden tier
+# and run.sh's integration tier), so both tiers always exercise the same
+# derived image for a scenario/image pair. The derived tag is per scenario,
+# per IMAGE and per label — a multi-image scenario would otherwise overwrite
+# its own tag from image to image (and evict the layer cache the next image's
+# build could have reused). --quiet keeps the capture/boot log readable; a
+# failed build still prints its error to stderr and fails the caller loudly.
+#
+# Usage: nl_build_scenario_image <scenario-dir> <base-image-ref> <image-name> <label>
+# Prints the derived image ref; nl_die on a failed build.
+function nl_build_scenario_image() {
+    local scenario_dir="${1:?scenario dir required}"
+    local image_ref="${2:?base image ref required}"
+    local image_name="${3:?image name required}"
+    local label="${4:?label required}"
+
+    local scenario_name="${scenario_dir##*/}"
+    local dockerfile_path="${scenario_dir}/${SCENARIO_DOCKERFILE}"
+    [ -f "${dockerfile_path}" ] || nl_die "Scenario '${scenario_name}' declares dockerfile='${SCENARIO_DOCKERFILE}', but ${dockerfile_path} does not exist."
+
+    local built_ref="nl-test/scenario/${scenario_name}:${image_name}-${label}"
+    nl_log "Building scenario image ${built_ref} on top of ${image_ref}"
+    # The function's stdout is its return channel (callers command-substitute
+    # it into the image ref) — docker build's own stdout (recent buildx
+    # versions print the built image ID there even with -q) is redirected to
+    # stderr, so the ref printf below stays the ONLY stdout line.
+    if ! docker build --platform linux/amd64 -q \
+            --build-arg "BASE=${image_ref}" \
+            -f "${dockerfile_path}" -t "${built_ref}" "${scenario_dir}" 1>&2; then
+        nl_die "Scenario image build failed for '${scenario_name}' (base: ${image_ref}) — see the build output above."
+    fi
+    printf '%s\n' "${built_ref}"
+}
+
 # Poll a container's supervisor until EVERY program is in the RUNNING state.
 # Used before the HTTP readiness poll in live captures: without this gate,
 # supervisord's "entered RUNNING state" log lines (emitted startsecs=1 after

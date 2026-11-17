@@ -10,7 +10,7 @@ Processing files from /container/templates/supervisor/conf.d, matching '*.conf'.
  - Rendering 'nginx.service.feat-nginx.conf' to '/container/work/data/supervisor-config'
  - Skipping 'python.service.mode-worker.conf': condition group 'mode-worker' was not satisfied.
 Directory '/container/custom/entrypoint' does not exist. Skipping.
-[<NL-TEST-TIMESTAMP>] [<NL-TEST-PID>] [INFO] Starting gunicorn 27.0.0
+[<NL-TEST-TIMESTAMP>] [<NL-TEST-PID>] [INFO] Starting gunicorn <NL-TEST-UPSTREAM>
 [<NL-TEST-TIMESTAMP>] [<NL-TEST-PID>] [INFO] Listening at: unix:/run/gunicorn.sock (<NL-TEST-PID>)
 [<NL-TEST-TIMESTAMP>] [<NL-TEST-PID>] [INFO] Using worker: sync
 [<NL-TEST-TIMESTAMP>] [<NL-TEST-PID>] [INFO] Booting worker with pid: <NL-TEST-PID>

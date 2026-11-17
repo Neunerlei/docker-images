@@ -1,0 +1,6 @@
+# Two --dns flags: Docker writes BOTH nameservers into /etc/resolv.conf, so
+# the entrypoint's resolver detection sees a genuine multi-server list.
+# TEST-NET addresses (RFC 5737): deterministic on every machine, never
+# queried at runtime.
+--dns 192.0.2.10
+--dns 192.0.2.11

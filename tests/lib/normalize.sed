@@ -42,11 +42,75 @@ s/^export NGINX_RESOLVER=.*/export NGINX_RESOLVER=<NL-TEST-RESOLVER>/
 # Unquoted form (any other NGINX_RESOLVER= token); runs after the two rules
 # above, so both collapse to the same normalized shape:
 s/NGINX_RESOLVER=[^ \t;]*/NGINX_RESOLVER=<NL-TEST-RESOLVER>/g
-# The nginx resolver directive, IPv4 and bracketed-IPv6 forms (the address
-# characters only, up to " valid=" — a resolver LIST with several servers
-# would need its own entry; none of our images produce one today):
-s/resolver [0-9.]\{7,\} valid=/resolver <NL-TEST-RESOLVER> valid=/g
-s/resolver \[[0-9A-Fa-f:]\{2,\}\] valid=/resolver <NL-TEST-RESOLVER> valid=/g
+# The nginx resolver directive, IPv4 and bracketed-IPv6 forms. Workstream A
+# (multi-nameserver detection) delivers the FULL list of detected resolvers
+# space-separated ("resolver 10.0.0.1 10.0.0.2 valid=30s;"), so both rules
+# match the whole ADDRESS LIST up to " valid=" — the context anchoring stays:
+# only what sits between "resolver" and "valid=" is normalized, everything
+# structural around it (knob values, presence of the directive, snippet
+# comment text) remains a visible, diffable fact. The hardcoded "127.0.0.11"
+# inside template COMMENT text is NOT normalized (see above — baked template
+# content must diff). A list MIXING bare-IPv4 and bracketed-IPv6 entries
+# matches neither rule on purpose: it would red the determinism check once
+# and get its own honest entry instead of a catch-all pattern:
+s/resolver [0-9.]\{7,\}\( [0-9.]\{7,\}\)* valid=/resolver <NL-TEST-RESOLVER> valid=/g
+s/resolver \[[0-9A-Fa-f:]\{2,\}\]\( \[[0-9A-Fa-f:]\{2,\}\]\)* valid=/resolver <NL-TEST-RESOLVER> valid=/g
+
+# --- Upstream version values (version-agnostic goldens) -----------------------
+# Which upstream patch a source image carries must not be part of any golden
+# diff: a floating SOURCE_IMAGE tag (library/nginx:1.29-trixie) moves with
+# every upstream patch release, and the goldens would turn red — or get
+# silently rewritten — for a change that is not ours. The normalizer therefore
+# collapses the VALUE of every variable whose NAME ends in _VERSION,
+# _RELEASE, _SHA256 or _URL, plus exactly GPG_KEY and GPG_KEYS (the base
+# images' upstream bookkeeping: NGINX_VERSION, PHP_URL, PYTHON_SHA256,
+# DYNPKG_RELEASE, ...), to <NL-TEST-UPSTREAM>. The NAME stays visible — a
+# renamed or vanished variable still diffs.
+#
+# The boundary of this rule is guarded: src/ must never DEFINE a variable
+# with one of these names, or this rule would hide its value from every
+# golden diff. nl_check_src_version_suffix_guard (tests/run.sh, unit tier)
+# fails the run when one appears (see docs/test.md, "Goldens are version
+# agnostic").
+#
+# These are the only three shapes such values appear in (verified over the
+# goldens); each rule is anchored to its shape, so nothing else on the line
+# is rewritten. Deliberately NOT matched: nginx -T output (checked — no
+# NAME=… shape with these suffixes occurs there; the rendered resolver line
+# above has its own context-anchored rule) and the NGINX_RESOLVER rules above
+# (NGINX_RESOLVER ends in none of these suffixes).
+#
+# Shape 1 — the vars.sh snapshot export line ("export NGINX_VERSION=1.29.8"):
+s/^export \(GPG_KEY\|GPG_KEYS\|[A-Za-z_][A-Za-z0-9_]*\(_VERSION\|_RELEASE\|_SHA256\|_URL\)\)=.*/export \1=<NL-TEST-UPSTREAM>/
+# Shape 2 — the boot log's export trace (' - Exporting variable:
+# NGINX_VERSION="1.29.8"'; GPG_KEY/GPG_KEYS arrive pre-masked by the
+# entrypoint, the placeholder replaces the mask so both forms agree):
+s/^\( - Exporting variable: \(GPG_KEY\|GPG_KEYS\|[A-Za-z_][A-Za-z0-9_]*\(_VERSION\|_RELEASE\|_SHA256\|_URL\)\)\)=".*"/\1="<NL-TEST-UPSTREAM>"/
+# Shape 3 — the bare assignment dump ("NODE_VERSION=24.22.3" at line start;
+# image-config/environment dumps and the legacy run-env evidence print this
+# shape):
+s/^\(GPG_KEY\|GPG_KEYS\|[A-Za-z_][A-Za-z0-9_]*\(_VERSION\|_RELEASE\|_SHA256\|_URL\)\)=.*/\1=<NL-TEST-UPSTREAM>/
+
+# Gunicorn's startup banner ("[INFO] Starting gunicorn 27.0.1" on
+# python-nginx logs-stderr): the pinned gunicorn release, same volatility
+# class — the version number moves with the dependency bump in src/, the
+# banner's presence and text stay visible.
+s/Starting gunicorn [0-9][0-9.]*/Starting gunicorn <NL-TEST-UPSTREAM>/g
+
+# --- Numeric-only ownership entries (host bind-mount artifacts) ---------------
+# ownership.txt records "mode owner group path" from find -printf '%m %u %g'.
+# %u/%g print NUMERIC ids exactly when the id does not resolve to a name in
+# the container's /etc/passwd — which for our images can only happen for files
+# bind-mounted straight from the HOST (scenario files/ mounts): their owner
+# exists on the machine running the suite (a GitHub runner's uid 1001 with
+# umask 022, a dev machine's uid 1000 with umask 002), never inside the image.
+# The mode AND the numeric ids of such entries are host-environment artifacts,
+# not image behavior — so mode+owner+group of NUMERIC entries collapse into
+# one placeholder; the PATH stays visible (a moved bind mount must diff).
+# Entries with NAMED owners (root, www-data) are fully visible: the name
+# resolution IS the image's ownership behavior — the PUID/PGID remap
+# (puid-pgid-user-dirs) resolves by name and must stay asserted there.
+s/^[0-7]\{3,4\} [0-9]\{1,\} [0-9]\{1,\} /<NL-TEST-BIND-MOUNT-OWNER> /
 
 # --- Salted basic-auth password hashes ---------------------------------------
 # write_basic_auth_file (util.d/basic-auth.sh) hashes passwords with

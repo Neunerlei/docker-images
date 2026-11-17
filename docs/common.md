@@ -15,6 +15,7 @@ Each image doc keeps its own complete environment variable table and everything 
 | Know what a mode (`web`, `worker`, `build`, …) means | [Container Modes](#container-modes) |
 | Compose public URLs from paths | [Path Composition](#path-composition) |
 | Serve HTTPS | [HTTP vs. HTTPS](#http-vs-https) |
+| Protect the server with a password | [Basic Authentication](#basic-authentication) |
 | Customize anything | [The Custom Directory](#the-custom-directory) and [Customizing the Container](#customizing-the-container) |
 | Understand `.prod.` / `.mode-web.` filename suffixes | [Filename Markers](#filename-markers) |
 | Use `${VAR}` placeholders in my own files | [Templating](#templating) |
@@ -41,10 +42,12 @@ All rendered configuration lives in `/container/work/` (see [Running on a Read-O
 |---|---|---|
 | `web` | Default | NGINX serves your app (PHP-FPM / Node / Gunicorn / static files behind it). |
 | `worker` | A `<RUNTIME>_WORKER_COMMAND` is set (e.g. `PHP_WORKER_COMMAND`) | The web server is disabled; Supervisor runs your command. See [Worker Mode](#worker-mode). |
-| `build` | The entrypoint runs in a Dockerfile `RUN` without a command | Full environment setup, services skipped. See [Build Mode](#build-mode). |
+| `build` | A `RUN init-build-env` step in a Dockerfile | Full environment setup, services skipped. See [Build Mode](#build-mode). |
 | `proxy` / `static` | nginx image only | Any `PROXY_*_CONTAINER` variable present → `proxy`, otherwise `static`. See the [nginx documentation](./nginx.md#proxy-mode-in-depth). |
 
 The mode also drives the filename markers `mode-web`, `mode-worker`, `mode-build`, `mode-proxy` and `mode-static`.
+
+One exception: the nginx image ignores the build mode. Its first configuration step overwrites `CONTAINER_MODE` with `proxy` or `static` before anything else runs — there is no build-time-only configuration for a pure proxy/static image. See [Build Mode](./nginx.md#build-mode) in the nginx documentation.
 
 ## The ENVIRONMENT Switch
 
@@ -95,6 +98,47 @@ NGINX resolves dynamic upstream names — a variable in `proxy_pass`, like `prox
 Override the detected servers with `NGINX_RESOLVER` (space-separated list for multiple servers); `NGINX_RESOLVER_VALID_TIMEOUT` (default `30s`, the `valid=` cache TTL for resolved addresses) and `NGINX_RESOLVER_TIMEOUT` (default `5s`, the query timeout) tune the corresponding `resolver` directives.
 
 > **Kubernetes note:** NGINX's resolver does not apply the `search` / `ndots` options from `/etc/resolv.conf`. Use fully qualified service names (`service.namespace.svc.cluster.local`) for variable-based upstreams — short names like `my-service` will not resolve.
+
+## Basic Authentication
+
+Every image that ships NGINX can protect itself with HTTP basic auth entirely through environment variables — no `htpasswd` utility or mounted password file needed. The entrypoint hashes the passwords (`openssl passwd -apr1`, the MD5-based format NGINX accepts) and writes the password file on every boot, so changing a password is an environment change plus a restart, not a rebuild.
+
+- **Global (whole server, every mode):** `NGINX_BASIC_AUTH` enables it, `NGINX_BASIC_AUTH_1`, `NGINX_BASIC_AUTH_2`, … add users (any combination of numbered suffixes works, empty values are ignored), `NGINX_BASIC_AUTH_REALM` names the login dialog (default `Restricted`).
+- **Per proxied service (nginx image, proxy mode):** the same scheme with a `PROXY_<KEY>_` prefix (`PROXY_API_BASIC_AUTH`, `PROXY_API_BASIC_AUTH_2`, `PROXY_API_BASIC_AUTH_REALM`) protects only that service's location and **replaces** the global auth there — its users apply, the global users do not.
+
+The value format is `username clear-password` — the **first space** separates the two, so passwords may contain spaces. A malformed value (missing password, empty username, a `:` in the username, tabs or line breaks in the password) aborts the boot with an error, so a typo can never silently disable the protection.
+
+Hard limits to plan around:
+
+- **Passwords longer than 256 characters are rejected at boot.** `openssl passwd -apr1` silently truncates after 256 characters — a longer password would hash to its 256-character prefix and every login would fail with a cryptic mismatch.
+- **The realm must not end in a backslash** (a trailing `\` would escape the closing quote of the generated `auth_basic "…";` directive and corrupt the NGINX configuration). Double quotes, `$`, tabs and line breaks are rejected as well.
+
+### Custom snippets and ownership
+
+NGINX forbids the `auth_basic` directive twice in one context, so the entrypoint checks whether a custom snippet manages authentication before writing its own directives. The rule (`snippet_manages_basic_auth`): a snippet counts as managing basic auth when it contains an `auth_basic` directive — **enabled or `off`** — at **brace depth 0** of the context the snippet is included in (the server context for `nginx/` snippets, the location context for the nginx image's `nginx/proxy/` snippets), evaluated after line-based `#` comment stripping. The six situations:
+
+| Situation | Outcome |
+|---|---|
+| Global auth set, no snippet owns it | Generated directives apply server-wide. |
+| Server-level snippet declares `auth_basic` (enabled) | Takes ownership — the entrypoint skips its generated directives, the snippet's users apply. |
+| Server-level snippet with a top-level `auth_basic off;` | Takes ownership — auth is off server-wide. |
+| `auth_basic` **nested inside a `location { }` block** | Does **not** take ownership: it only changes that location, and the generated directives stay in place for everything else. |
+| Per-proxy auth set, no `<key>…conf` proxy snippet declares `auth_basic` | Generated directives apply to that location. |
+| Per-proxy auth set, a proxy snippet declares `auth_basic` | Takes ownership — the generated snippet stays empty; the password file is still written, so the snippet can point `auth_basic_user_file` at `${NGINX_BASIC_AUTH_DIR}/proxy.<key>.htpasswd`. |
+
+The password files are always written (`${NGINX_BASIC_AUTH_FILE}`, `${NGINX_BASIC_AUTH_DIR}`), so an owning snippet can keep the env-var managed users. The generated directives are themselves snippets — `/etc/nginx/snippets/basicAuth.nginx.conf` for the server, `proxy.d/<key>.auth.conf` per proxied service — both always exist and are empty when the respective auth is disabled or owned by a custom snippet; do not name your own snippets like that.
+
+### Health check opt-out (php-nginx)
+
+The `/fpm-ping` and `/fpm-status` locations carry an unconditional `auth_basic off;` **plus `allow 127.0.0.1; deny all;`** — the opt-out exists so health checks from INSIDE the container keep working under a global auth they cannot send credentials for. The access rule is evaluated before authentication, so only in-container probes succeed: an orchestrator HTTP probe from outside (a Kubernetes `httpGet`, a load balancer) is answered **403** by the `deny all;` regardless of any credentials — auth is never even reached. Point such probes at an exec-based check instead (`kubectl exec <pod> -- curl -sf http://localhost/fpm-ping`), or at a location your configuration actually exposes.
+
+### The credentials never leave the entrypoint
+
+`NGINX_BASIC_AUTH(_<n>)` and `PROXY_<KEY>_BASIC_AUTH(_<n>)` hold clear-text passwords, so they are read at boot and never exported anywhere else: they are excluded from the `/container/work/container-vars.sh` snapshot (the file `docker exec` shells and later `RUN` steps source — the boot log prints `Not exporting variable: …` for each) and are `unset` right before the entrypoint execs the container command, so supervisord, nginx, php-fpm (`clear_env = no`!) and every worker run without them. The NGINX configuration references the generated password files, never the variables. The `_REALM`, `_FILE` and `_DIR` companions are not credentials and are exported normally.
+
+### Authorization headers are not forwarded
+
+A proxy location protected by **generated** basic auth (its own per-proxy users, or the global auth when the location has none of its own and no server snippet has taken the global auth over) renders `proxy_set_header Authorization "";` — the client authenticated against *this* server, so forwarding its credentials to the upstream would leak them. Locations owned by a custom snippet and the image's own application runtime are untouched.
 
 ## The Custom Directory
 
@@ -167,6 +211,8 @@ volumes:
   - { name: nginx-log, emptyDir: {} }
 ```
 
+> **PUID/PGID limitation:** the `PUID`/`PGID` user remapping (see the variable tables of the image docs) is **not supported** on a read-only root filesystem — the remap rewrites `/etc/passwd`/`/etc/group` (`usermod`/`groupmod`, plus their lock files), which cannot be written there. The boot detects this in the user-setup step and aborts cleanly — `[ENTRYPOINT.user-setup] Error: PUID/PGID are not supported with a read-only root filesystem (cannot update /etc/passwd and /etc/group). Aborting.` (exit 1) — instead of dying in a raw `usermod`/`groupmod` lock error or silently booting with the default ownership. The exception: `PUID=33`/`PGID=33` (the ids `www-data` already has) needs no write at all and keeps booting.
+
 ## The www-data Home Directory
 
 Every process running as `www-data` (supervisor services with `user=www-data`, `gosu` worker commands, wrapped CLIs like `pip`/`npm`/`composer`, FPM workers) gets the writable home **`/container/work/www-data-home`** (`CONTAINER_WWW_DATA_HOME_DIR`, read-only constant), so libraries that write to `~/` at import or runtime (playwright, huggingface, matplotlib, …) work. It is inside the work directory, so it is writable on read-only filesystems too, and it is not part of the per-boot work-data reset.
@@ -182,6 +228,7 @@ Breaking or behavior-changing releases are documented in [`docs/migration/`](./m
 - [2026-11-12: Build Mode Marker and RUN Variables](./migration/2026-11-12-build-mode-marker-and-variables.md) — builder-stage-only build mode, variables for later `RUN` steps fixed
 - [2026-11-12: Exact Command Arguments](./migration/2026-11-12-exact-command-arguments.md) — exact argv execution, single-string deprecation fallback
 - [2026-11-12: www-data Home Directory](./migration/2026-11-12-www-data-home-directory.md) — the home move and its dotfile bridge, npm/composer cache paths
+- [2026-11-16: Proxy Snippet Include Pattern](./migration/2026-11-16-proxy-snippet-include-pattern.md) — per-service proxy snippets must be named `<key>.<name>.conf` (dot after the key); the old `<key>*.conf` form is dropped
 
 One behavior change without its own guide: gunicorn's supervisor stop wait rises from 10s to `GUNICORN_GRACEFUL_TIMEOUT + 10` (default 40s, python-nginx) — see `GUNICORN_STOP_WAIT_SECS` in [python-nginx.md](./python-nginx.md).
 
@@ -334,6 +381,8 @@ COPY --from=builder /var/www/html ./
 ```
 
 **CI:** to start a builder-stage image anyway (e.g. `docker build --target builder` followed by `docker run … phpunit`), build it with `RUN init-build-env --allow-boot` — no marker is written and the image can boot. Changes made by later `RUN` steps (e.g. a `docker-php-ext-enable` dropping a conf.d file) **survive boots**: the rendered work data is synced back into the staging area. Caveat: build-time rendered configuration — including anything rendered from build-time env values — becomes part of the image, so don't render secrets at build time.
+
+**Deprecated legacy invocation:** running the entrypoint itself without a command (`RUN /container/entrypoint/entrypoint.sh`) still works as a compatibility layer until **2027-11-12** (see the [migration guide](./migration/2026-11-12-build-mode-marker-and-variables.md)). It behaves like `init-build-env --allow-boot` — no marker, the image stays bootable — but logs a deprecation warning on every build-mode run. New Dockerfiles use `init-build-env`.
 
 ### Variables in Later `RUN` Steps
 

@@ -91,14 +91,14 @@ This image is configured almost entirely through environment variables. This all
 | `NGINX_CERT_PATH`                      | Path to the SSL certificate file (used if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                         | `/etc/ssl/certs/custom/cert.pem`     |
 | `NGINX_KEY_PATH`                       | Path to the SSL key file (used if `DOCKER_SERVICE_PROTOCOL="https"`).                                                                                                                 | `/etc/ssl/certs/custom/key.pem`      |
 | `NGINX_PROXY_CONNECT_TIMEOUT`          | Sets `fastcgi_connect_timeout` in NGINX. This defines how long NGINX will wait when trying to connect to PHP-FPM.                                                                     | `5s`                                 |
-| `NGINX_PROXY_READ_TIMEOUT`             | Sets `fastcgi_send_timeout` in NGINX. This value defines the timeout for reading a response from a proxied server.                                                                    | `60s`                                |
-| `NGINX_PROXY_SEND_TIMEOUT`             | Sets `fastcgi_read_timeout` in NGINX. This value defines the timeout for transmitting a request to a proxied server.                                                                  | `60s`                                |
+| `NGINX_PROXY_READ_TIMEOUT`             | Sets `fastcgi_read_timeout` in NGINX. This value defines the timeout for reading a response from PHP-FPM — raise it together with long-running PHP requests.                           | `60s`                                |
+| `NGINX_PROXY_SEND_TIMEOUT`             | Sets `fastcgi_send_timeout` in NGINX. This value defines the timeout for transmitting the request to PHP-FPM.                                                                          | `60s`                                |
 | `NGINX_KEEPALIVE_TIMEOUT`              | Sets `keepalive_timeout` in NGINX. This value defines the timeout for keeping connections alive with clients. If omitted, automatically calculated based on the other TIMEOUT values. | (calculated)                         |
 | `NGINX_RESOLVER`                       | Sets the `resolver` directive in NGINX (DNS servers for dynamic upstream names — a variable in `proxy_pass`). Auto-detected from `/etc/resolv.conf`, see [NGINX DNS Resolution](./common.md#nginx-dns-resolution).                              | Auto-detected, fallback `127.0.0.11` |
 | `NGINX_RESOLVER_VALID_TIMEOUT`         | Sets the `valid=` parameter of the `resolver` directive: how long NGINX caches resolved DNS answers.                                                                                                                                            | `30s`                                |
 | `NGINX_RESOLVER_TIMEOUT`               | Sets `resolver_timeout` in NGINX: how long NGINX waits for an answer from a DNS server.                                                                                                                                                         | `5s`                                 |
 | `NGINX_TRY_FILES`                      | Sets the `try_files` directive in the root location of the nginx server.                                                                                                              | `$uri $uri/ /index.php$is_args$args` |
-| `NGINX_BASIC_AUTH`                      | Enables basic auth for the **whole server**. Format: `username clear-password`; additional users via `NGINX_BASIC_AUTH_1..n` (e.g. `NGINX_BASIC_AUTH_2="user2 pass2"`), login dialog realm via `NGINX_BASIC_AUTH_REALM` (default `Restricted`). | (disabled)              |
+| `NGINX_BASIC_AUTH`                      | Enables basic auth for the **whole server**. Format: `username clear-password`; additional users via `NGINX_BASIC_AUTH_1..n` (e.g. `NGINX_BASIC_AUTH_2="user2 pass2"`), login dialog realm via `NGINX_BASIC_AUTH_REALM` (default `Restricted`). See [Basic Authentication](./common.md#basic-authentication). | (disabled)              |
 | **PHP**                                |                                                                                                                                                                                       |                                      |
 | `PHP_UPLOAD_MAX_FILESIZE`              | Overrides PHP's `upload_max_filesize` directly. **Please prefer `MAX_UPLOAD_SIZE`**                                                                                                   | Matches `MAX_UPLOAD_SIZE`            |
 | `PHP_POST_MAX_SIZE`                    | Overrides PHP's `post_max_size` directly. **Please prefer `MAX_UPLOAD_SIZE`**                                                                                                         | Matches `MAX_UPLOAD_SIZE`            |
@@ -236,7 +236,7 @@ See [Supervisor and Fatal Failures](./common.md#supervisor-and-fatal-failures) i
 
 ## Build Mode at a Glance
 
-Invoking the entrypoint in a Dockerfile `RUN` without a command sets `CONTAINER_MODE=build`: full environment setup, services skipped — later `RUN` steps see exactly the production variables.
+`RUN init-build-env` in a Dockerfile sets `CONTAINER_MODE=build`: full environment setup, services skipped — later `RUN` steps see exactly the production variables.
 
 See [Build Mode](./common.md#build-mode) in the shared documentation for the full explanation.
 
@@ -356,7 +356,7 @@ docker/custom/
 auth_basic off;
 ```
 
-> For simple "protect everything with a username and password" cases, prefer the `NGINX_BASIC_AUTH` environment variable over hand-written snippets — it creates and maintains the password file for you.
+> For simple "protect everything with a username and password" cases, prefer the `NGINX_BASIC_AUTH` environment variable over hand-written snippets — it creates and maintains the password file for you. See [Basic Authentication](./common.md#basic-authentication) in the shared documentation for the value format, the snippet ownership rule and how the credentials are kept out of the runtime environment.
 
 #### 2. Adding Custom php.ini and php-fpm.conf Snippets `MARKER-AWARE` `TEMPLATES`
 
@@ -381,9 +381,12 @@ docker/custom/
 
 ```ini
 ; Custom PHP settings
-max_execution_time = ${PHP_MAX_EXECUTION_TIME}
+max_execution_time = 300
 default_socket_timeout = 300
+opcache.validate_timestamps = ${PHP_PROD_OPCACHE_VALIDATE_TIMESTAMPS}
 ```
+
+> `${VAR}` placeholders are substituted from the exported environment — the example uses `PHP_PROD_OPCACHE_VALIDATE_TIMESTAMPS` because it is one of the variables the image actually exports (see the table above). An undefined variable renders as an empty string.
 
 #### Shared Customization Methods
 
@@ -463,7 +466,7 @@ This feature allows you to leverage the container's fully configured environment
 
 ### How It Works
 
-The entrypoint runs in build mode when invoked without a command; the resulting variables are exported for the following `RUN` steps.
+`RUN init-build-env` runs the full entrypoint bootstrap in build mode; the resulting variables are exported for the following `RUN` steps.
 
 See [Build Mode](./common.md#build-mode) in the shared documentation for the full explanation.
 
@@ -490,8 +493,9 @@ COPY --chown=www-data:www-data ./composer*.json ./
 COPY --chown=www-data:www-data ./src ./src
 
 # === Build-Time Execution ===
-# 1. Run the entrypoint to set up the environment.
-RUN /container/entrypoint/entrypoint.sh
+# 1. Set up the environment (build mode; deprecated legacy form:
+#    RUN /container/entrypoint/entrypoint.sh).
+RUN init-build-env
 
 # 2. Run your build commands. They now have access to all container variables.
 RUN composer install --no-dev --optimize-autoloader

@@ -7,6 +7,8 @@ Not an app runtime: a standalone NGINX that either reverse-proxies to sibling co
 - **proxy** (main mode): any `PROXY_*_CONTAINER` variable present → builds one `location` block per service key. Project base path supported via `DOCKER_PROJECT_PATH` (combined with each service path).
 - **static** (fallback, no `PROXY_*` vars): serves files from `NGINX_DOC_ROOT` (`/var/www/html/public`). Ships a default `index.html` — mount your own files to replace it.
 
+No build mode: this image deliberately ignores it — its variable step always sets `proxy`/`static`, and there is no build-time-only configuration (see `docs/nginx.md` → Build Mode).
+
 `MAX_UPLOAD_SIZE` sets `client_max_body_size` only in proxy mode (all uploads pass through the proxy).
 
 ## Proxy service variables
@@ -52,7 +54,7 @@ Env-var driven, regenerated every boot; passwords hashed with `openssl passwd -a
 
 - **Global (all images, whole server):** `NGINX_BASIC_AUTH="user clear-pass"`, extra users `NGINX_BASIC_AUTH_1..n` (any suffix combo, empty values ignored), realm `NGINX_BASIC_AUTH_REALM` (default `Restricted`). First space separates user/password — passwords may contain spaces. Generated file path available as `NGINX_BASIC_AUTH_FILE`.
 - **Per service (this image, proxy mode):** `PROXY_<KEY>_BASIC_AUTH(_1..n/_REALM)` — replaces the global auth for that location only (its users apply, global users don't).
-- **Ownership rule:** a snippet declaring `auth_basic` — including `auth_basic off;` — takes ownership of its context; the entrypoint then skips its generated directives there (NGINX forbids the directive twice). Password files are always written, so an owning snippet can point `auth_basic_user_file` at `${NGINX_BASIC_AUTH_DIR}/proxy.<key>.htpasswd` (or `${NGINX_BASIC_AUTH_FILE}`) and keep the env-managed users.
+- **Ownership rule:** a snippet manages basic auth when it declares an `auth_basic` directive — enabled or `auth_basic off;` — at **brace depth 0** of the context the snippet is included in (server context for server snippets, location context for proxy snippets), evaluated after `#` comment stripping; a directive nested inside a `location { }` block does NOT take ownership. An owning snippet suppresses the entrypoint's generated directives there (NGINX forbids the directive twice). Password files are always written, so an owning snippet can point `auth_basic_user_file` at `${NGINX_BASIC_AUTH_DIR}/proxy.<key>.htpasswd` (or `${NGINX_BASIC_AUTH_FILE}`) and keep the env-managed users. Credentials are entrypoint-only: the `*_BASIC_AUTH(_<n>)` variables are never exported — kept out of the `docker exec` snapshot and unset before the command exec, so no process inherits them (full concept: `docs/common.md` → Basic Authentication).
 - Boot log prints every configured user with password length — compare against expectations when logins fail (env parsers may truncate at `#`/`$`); verify with `printenv NGINX_BASIC_AUTH` in the container.
 - Error pages stay reachable without credentials (the `@error_handler` location disables auth).
 - Malformed values abort the container at boot instead of serving unprotected.

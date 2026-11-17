@@ -57,6 +57,10 @@ The "brain" of this image is its entrypoint script. When the container starts, i
 1. **Proxy Mode:** This is the main mode. If the script detects any `PROXY_*_CONTAINER` environment variables, it scans all of them and builds a sophisticated reverse proxy configuration.
 2. **Static Mode:** If no `PROXY_*` variables are found, the image gracefully falls back to being a simple web server, serving static files from `/var/www/html/public`. This makes a single instance of the image useful for either being a gateway or a simple file server.
 
+### Build Mode
+
+This image **ignores the build mode**. Its first configuration step overwrites `CONTAINER_MODE` with `proxy` or `static` before anything else runs — there is no build-time-only configuration for a pure proxy/static image, so a `RUN init-build-env` in a Dockerfile performs an ordinary bootstrap pass instead of entering build mode. The build-mode workflow (builder stages, `init-build-env`, `--allow-boot`) applies to the runtime images and is described in [Build Mode](./common.md#build-mode) in the shared documentation.
+
 ## Configuration via Environment Variables
 
 The proxy is configured almost entirely through declarative environment variables.
@@ -110,6 +114,8 @@ See [MAX_UPLOAD_SIZE and Friends](./common.md#max_upload_size-and-friends) in th
 
 ### Basic Authentication
 
+> The basic auth concept — value format, limits, the snippet ownership rule, how the credentials are kept out of the runtime environment — is shared behavior and documented once in [Basic Authentication](./common.md#basic-authentication). This section keeps the image-specific parts.
+
 You can protect your server (or a single proxied service) with HTTP basic auth entirely through environment variables — no `htpasswd` utility or mounted password files needed. The entrypoint hashes the passwords (MD5-based `$apr1$`, as accepted by NGINX) and writes the password file on every boot, so changing a password is just an environment change and a restart.
 
 **Protecting the whole server** (works in `proxy` and `static` mode):
@@ -137,11 +143,13 @@ environment:
 A few details worth knowing:
 
 * If both global and per-service auth are configured, the per-service authentication **replaces** the global one for that location (its users apply, the global users do not).
-* Turning auth off again works through the same snippet mechanism: a snippet that declares `auth_basic` — including `auth_basic off;` — **takes ownership** for its context, and the entrypoint then skips its generated directives (NGINX forbids the directive twice in one context). For a single proxy service use `docker/custom/nginx/proxy/<key>.conf`, for the whole server a snippet in `docker/custom/nginx/`.
+* Turning auth off again works through the same snippet mechanism. A snippet counts as *managing* basic auth when it contains an `auth_basic` directive — **enabled or `auth_basic off;`** — at **brace depth 0** of the context the snippet is included in (after `#` comment stripping), and the entrypoint then skips its generated directives there (NGINX forbids the directive twice in one context). For a single proxy service use a snippet in `docker/custom/nginx/proxy/` named `<key>.<name>.conf`, for the whole server a snippet in `docker/custom/nginx/`. An `auth_basic` **nested inside a `location { }` block** does not take ownership — it only changes that location while the generated directives keep protecting everything else.
 * The password files are always written, so an owning snippet can point `auth_basic_user_file` at `${NGINX_BASIC_AUTH_DIR}/proxy.<key>.htpasswd` (or `${NGINX_BASIC_AUTH_FILE}`) and keep the env-var managed users.
 * The generated `auth_basic` directives are snippets like any other: `/etc/nginx/snippets/basicAuth.nginx.conf` for the server (registered like the built-in snippets, symlinked into the work directory) and `proxy.d/<key>.auth.conf` per service (picked up by the custom-snippet include of the location). Both always exist and are empty when the respective auth is disabled or owned by a custom snippet — do not give your own snippets those names.
+* Proxy locations protected by **generated** auth render `proxy_set_header Authorization "";` — the client's credentials authenticated against this proxy and are never forwarded to the upstream. A snippet-owned location decides for itself (see [Authorization headers are not forwarded](./common.md#authorization-headers-are-not-forwarded)).
+* The credential variables (`NGINX_BASIC_AUTH(_<n>)`, `PROXY_<KEY>_BASIC_AUTH(_<n>)`) hold clear-text passwords and are never exported: they are unset before the services start and excluded from the `docker exec` snapshot, so no process of the container command ever inherits them (see [The credentials never leave the entrypoint](./common.md#the-credentials-never-leave-the-entrypoint)). The one exception is `docker exec` sessions themselves — and that is deliberate: Docker injects the container's *configured* environment into every exec session, so a shell you open with `docker exec` still sees `NGINX_BASIC_AUTH` (like every other `-e`/compose variable). The `printenv` troubleshooting tip below relies on exactly that behavior; it is a diagnostic window, not a leak path for the services.
 * The error pages stay reachable without credentials, so failed logins still show the styled error page instead of a bare NGINX 401.
-* A malformed value (e.g. a missing password or a username containing `:`) aborts the container startup with an error message — a typo can never silently disable the protection.
+* A malformed value (e.g. a missing password or a username containing `:`) aborts the container startup with an error message — a typo can never silently disable the protection. Passwords over 256 characters are rejected as well: `openssl passwd -apr1` would silently truncate them.
 * **Troubleshooting "password mismatch":** the boot log prints every configured user with its password *length*. If logins fail although you entered the password correctly, compare that length with what you expect — some environment file parsers truncate values at characters like `#` or `$` before they reach the container. Verify what actually arrived with `docker exec <container> printenv NGINX_BASIC_AUTH` (or `PROXY_<KEY>_BASIC_AUTH`). Compose YAML lists and `.env` files pass such characters through unchanged, but unquoted values in shell scripts or third-party env UIs may not.
 
 ## Proxy Mode In-Depth

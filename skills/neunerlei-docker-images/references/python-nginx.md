@@ -30,7 +30,7 @@ WSGI callable expected at `server:app` (override with `PYTHON_APP_MODULE`).
 
 - **web** (default): NGINX + Gunicorn.
 - **worker**: set `PYTHON_WORKER_COMMAND` → NGINX off, Supervisor runs your command (venv `python` usable directly).
-- **build**: entrypoint in a Dockerfile `RUN` without a command.
+- **build**: `RUN init-build-env` in a Dockerfile.
 
 ```yaml
 my-app-worker:

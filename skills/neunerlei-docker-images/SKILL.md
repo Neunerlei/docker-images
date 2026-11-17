@@ -35,8 +35,8 @@ Human-facing docs mirror this skill: `docs/common.md` (shared concepts) + `docs/
 
 `CONTAINER_MODE` (read-only, exported for templates) is derived:
 - `<RUNTIME>_WORKER_COMMAND` set (e.g. `PHP_WORKER_COMMAND`) → `worker`: web server disabled, Supervisor runs your command.
-- Entrypoint invoked in a Dockerfile `RUN` without a command → `build` (see [Build mode](#build-mode-multi-stage-builds)).
-- Otherwise → `web` (nginx image: any `PROXY_*_CONTAINER` → `proxy`, else `static`).
+- `RUN init-build-env` in a Dockerfile → `build` (see [Build mode](#build-mode-multi-stage-builds)).
+- Otherwise → `web` (nginx image: any `PROXY_*_CONTAINER` → `proxy`, else `static` — the nginx image overrides this step and ignores the build mode).
 
 `mode-*` filename markers match against `CONTAINER_MODE`.
 
@@ -64,14 +64,14 @@ Dev-only: with `ENVIRONMENT=development` and `/container/custom` mounted, step 0
 | `NGINX_CLIENT_MAX_BODY_SIZE` | = `MAX_UPLOAD_SIZE` | Override only with a specific need. |
 | `NGINX_CERT_PATH` / `NGINX_KEY_PATH` | `/etc/ssl/certs/custom/{cert,key}.pem` | Cert paths when serving HTTPS directly. |
 | `NGINX_PROXY_CONNECT_TIMEOUT` | `5s` | Backend connect timeout (php-nginx: `fastcgi_connect_timeout`). |
-| `NGINX_PROXY_READ_TIMEOUT` | `60s` | Response read timeout (php-nginx: `fastcgi_send_timeout`). |
-| `NGINX_PROXY_SEND_TIMEOUT` | `60s` | Request send timeout (php-nginx: `fastcgi_read_timeout`). |
+| `NGINX_PROXY_READ_TIMEOUT` | `60s` | Response read timeout (php-nginx: `fastcgi_read_timeout`). |
+| `NGINX_PROXY_SEND_TIMEOUT` | `60s` | Request send timeout (php-nginx: `fastcgi_send_timeout`). |
 | `NGINX_KEEPALIVE_TIMEOUT` | (calculated) | Derived from the other timeouts if unset. |
 | `NGINX_RESOLVER` | auto-detected | DNS servers for dynamic upstream names (see [NGINX DNS resolution](#nginx-dns-resolution)); detected from `/etc/resolv.conf` each boot, fallback `127.0.0.11`. Space-separated list = multiple servers. |
 | `NGINX_RESOLVER_VALID_TIMEOUT` | `30s` | `valid=` cache TTL for resolved addresses. |
 | `NGINX_RESOLVER_TIMEOUT` | `5s` | DNS query timeout (`resolver_timeout`). |
 | `NGINX_TRY_FILES` | per image | Root-location routing; see references. |
-| `NGINX_BASIC_AUTH` | (disabled) | Basic auth for the whole server: `username clear-password`; extra users `NGINX_BASIC_AUTH_1..n`, realm `NGINX_BASIC_AUTH_REALM`. Per-proxy: `PROXY_<KEY>_BASIC_AUTH(_1..n/_REALM)` replaces it for that location. Directives are generated as snippets (`/etc/nginx/snippets/basicAuth.nginx.conf` server-wide, `proxy.d/<key>.auth.conf` per service — always present, empty when disabled); passwords hashed with `openssl passwd -apr1`; malformed values abort boot. |
+| `NGINX_BASIC_AUTH` | (disabled) | Basic auth for the whole server: `username clear-password`; extra users `NGINX_BASIC_AUTH_1..n`, realm `NGINX_BASIC_AUTH_REALM`. Per-proxy: `PROXY_<KEY>_BASIC_AUTH(_1..n/_REALM)` replaces it for that location. Directives are generated as snippets (`/etc/nginx/snippets/basicAuth.nginx.conf` server-wide, `proxy.d/<key>.auth.conf` per service — always present, empty when disabled); passwords hashed with `openssl passwd -apr1`; malformed values abort boot, passwords over 256 chars are rejected (openssl would silently truncate). A custom snippet with an `auth_basic` directive at brace depth 0 (enabled or `off`) takes ownership and suppresses the generated directives — a directive nested inside a `location {}` does not. The credential variables are entrypoint-only: kept out of the `container-vars.sh` snapshot and unset before exec, so no process of the container command inherits them — `docker exec` sessions still see them because Docker injects the configured environment into exec sessions (that is what makes `docker exec <container> printenv NGINX_BASIC_AUTH` a valid troubleshooting probe). Full concept: `docs/common.md` → Basic Authentication. |
 | `USER_OWNED_DIRECTORIES` | (none) | Space-separated extra dirs to create/own as www-data at boot (volumes the app writes into). Image-level dirs are declared at build via the installer's `--user-owned-dir` flag. |
 | `CONTAINER_WWW_DATA_HOME_DIR` | `/container/work/www-data-home` | Read-only constant: writable home of every www-data process (supervisor `user=` programs need `environment=HOME="${CONTAINER_WWW_DATA_HOME_DIR}"`; gosu and php-fpm workers derive it from the passwd entry). Lives in the work dir → writable on read-only filesystems; not reset per boot. Legacy `/var/www` dotfiles are bridged in as symlinks with a deprecation warning. Don't bake build-time content into `$HOME` (tmpfs hides it; named volumes go stale) — use `PLAYWRIGHT_BROWSERS_PATH`/`COMPOSER_HOME`/etc. |
 
@@ -123,6 +123,8 @@ Legacy mounts (`/etc/ssl/certs`, `/etc/container/templates/.../custom`) abort st
 1. `/container/work` — all rendered configuration. May start **empty** (tmpfs, `emptyDir`): the entrypoint seeds it on every boot from the image's pristine build state (`/container/work-data-staging`) and resets it on every restart, so stale config from a previous boot is discarded. Mount it writable.
 2. Runtime dirs as tmpfs: `/run`, `/tmp`, `/var/lib/nginx`, `/var/log/nginx`.
 
+`PUID`/`PGID` are **not supported** on a read-only root filesystem: the user remap rewrites `/etc/passwd`/`/etc/group`, which cannot be written there — the boot aborts cleanly before any `usermod`/`groupmod` runs (exit 1, named error in the log). Only `PUID=33`/`PGID=33` (already the built-in ids) boots, since it needs no write.
+
 ```bash
 docker run --read-only \
   --tmpfs /run --tmpfs /tmp --tmpfs /var/lib/nginx --tmpfs /var/log/nginx \
@@ -145,7 +147,7 @@ Loading conditions live in filenames — behavior visible at a glance. Applies t
 | `https` | `DOCKER_SERVICE_PROTOCOL=https` | `03-websockets.https.conf` |
 | `feat-*` | Feature present in `feature_registry` (mostly internal) | `nginx.service.feat-nginx.conf` |
 
-`20-hsts.prod.https.conf` = production AND https. New markers: define `_file_marker_is_*()` (zero args = scalar, one arg = wildcard suffix) and register in `file_marker_condition_registry`.
+`20-hsts.prod.https.conf` = production AND https. New markers for the repo's own images are defined in `docs/contributing.md`.
 
 ## Templating
 
@@ -241,64 +243,20 @@ Breaking or behavior-changing releases are documented in `docs/migration/`, one 
 - **2026-11-12 — build mode marker + variables for later `RUN` steps** (`docs/migration/2026-11-12-build-mode-marker-and-variables.md`):
   - New `init-build-env` command is the supported way to run build mode; it writes `/container/build-mode.marker`, and images containing it refuse to boot (the new work-data model would otherwise silently discard build-time changes). CI test stages use `init-build-env --allow-boot` (bootable, no marker, later-`RUN` work-data writes survive boots via staging sync-back). Legacy no-command invocation (`RUN entrypoint.sh`) keeps working as a deprecated compatibility layer until **2027-11-12** — identical to `--allow-boot` plus a deprecation warning.
   - **Fixed:** later `RUN` steps in a builder stage receive the container variables again (a regression had deleted `container-vars.sh` at the end of a build-mode run).
+- **2026-11-16 — proxy snippet include pattern** (`docs/migration/2026-11-16-proxy-snippet-include-pattern.md`):
+  - Per-service proxy snippets (nginx image, `nginx/proxy/`) must be named `<key>.<name>.conf` — a dot after the service key; a file named exactly `<key>.conf` still works. The old `<key>*.conf` pattern globbed across the key boundary, so keys sharing a prefix (`api`, `api_v2`) included each other's snippets. Files the old pattern still matched (`api-cors.conf`, `apicache.conf`) are not included anymore; a compatibility layer warns for each at boot until **2027-11-16**.
 - **2026-11-12 — gunicorn stop timeout (python-nginx)** (no separate guide — feature documentation lives in `docs/python-nginx.md`):
   - New `GUNICORN_TIMEOUT`/`GUNICORN_GRACEFUL_TIMEOUT`/`GUNICORN_MAX_REQUESTS(_JITTER)` knobs (opt-in, defaults match gunicorn's own). Supervisor now waits `GUNICORN_GRACEFUL_TIMEOUT + 10` (default 40s) for gunicorn to stop instead of 10s — a behavior change on rolling rebuilds, configurable via `GUNICORN_STOP_WAIT_SECS`. Raise `NGINX_PROXY_READ_TIMEOUT` together with `GUNICORN_TIMEOUT`.
 - **2026-02-05 — centralized container dir** (`docs/migration/2026-02-05-migrate-to-centralized-container-dir.md`): all custom mounts go to `/container/custom`. Legacy mount paths abort startup (legacy.d guard).
 
 ---
 
-# Working in the docker-images repo
+# Working in this repo
 
-## Two layers
+The skill documents how to *use* the images. Repo-internal information stays out of the skill and lives in the human-facing docs:
 
-- `src/_common/v1/` — shared engine: `installer.sh` + `container/{bin,entrypoint,templates}` copied verbatim into every image. Sacred: change only for features genuinely reusable in ALL images.
-- `src/<image>/<version>/` — image-specific: `container/entrypoint/step.d/` (e.g. `015-image-vars.sh`), `container/templates/`, `src/` (default app files like `index.php`), `Dockerfile`.
+- Architecture and extension guides — the two-layer model (`src/_common/v1/` + image layers), installer/template registries, Dockerfile patterns, the automated build engine, adding a new base image: `docs/contributing.md`.
+- The three-tier test suite (unit, golden, integration) — tiers, flags (`--only-image`, `--image <name>=<ref>`, `--label`, `--no-cache`), scenario anatomy, CI wiring: `docs/test.md`.
 
-Image templates with the same relative path override common ones (e.g. `templates/nginx/snippets/root.nginx.conf`).
+Image behavior is mirrored between this skill and `docs/common.md` + `docs/<image>.md`; when image behavior changes, update both. Behavior changes across releases are listed under [Migration notes](#migration-notes-behavior-changes) above.
 
-Env var layering (order matters): framework defaults (`common-env.sh` — must stay dependency-free, runs before every step and in `installer.sh`) → image defaults (`015-image-vars.sh`) → project vars (`custom/env/`, step 017) → shell wrapper.
-
-Registries (declared in `entrypoint.sh`, images append):
-- `file_marker_condition_registry` — marker name → condition function
-- `feature_registry` — space-separated string; gates whole chunks of step.d logic (`nginx`, `supervisor`); matched by `feat-*` markers
-- `user_owned_directories_registry` — dirs chowned to www-data when PUID/PGID change; created if missing
-
-## Dockerfile pattern
-
-```dockerfile
-ARG SOURCE_IMAGE
-FROM ${SOURCE_IMAGE}
-ENV INSTALLER_EXTRA_DEPENDENCIES="..."        # extra apt packages
-RUN --mount=type=bind,from=common,source=v1,target=/tmp/installer \
-    bash /tmp/installer/installer.sh \
-        --tpl nginx-custom-snippets \
-        --source-dir /container/custom/nginx \
-        --target-dir /etc/nginx/snippets/custom.d
-# --tpl names the snippet mechanism; --source-dir where user snippets land;
-# --target-dir where they are rendered to. --remove-dependency drops packages.
-COPY container /container
-COPY src /var/www/html
-```
-
-Build from the `src/` directory so relative paths resolve: `docker build --build-context common=../../_common -f <image>/<ver>/Dockerfile -t my-tag .`
-
-Naming: steps `NNN-descriptive-name.sh` (leave 5–10 gaps for insertions), marker functions `_file_marker_is_*` / `_file_marker_has_*`, templates carry their conditions in-filename. Keep installer layers before `COPY` for cache hits — `_common` changes invalidate the bind-mount layers.
-
-## Automated builds
-
-`.github/workflows/<image>.yml` is config only; the engine lives in `.github/.release/`:
-
-1. **discover** — paginated Docker Hub tag fetch for the base image, semver filtering, version matrix; cascading source selection: `1.29.1` falls back `1.29.1` → `1.29` → `1.28` → … until a source dir exists (new patch/minor versions build without changes).
-2. **build-and-attest** — parallel matrix, multi-platform (`linux/amd64`, `linux/arm64`) via the `SOURCE_IMAGE` build arg; pushes SLSA build-provenance attestations.
-3. **publish-tag-list** — generates the tag-overview HTML pages deployed to GitHub Pages (the `docker.neunerlei.eu` links above).
-
-## Test suite (`tests/`)
-
-Three tiers, bash + pinned bats-core end to end (full guide: `docs/test.md`):
-
-- `tests/run.sh unit` — bats runs INSIDE each image (one throwaway container per image), sourcing the real `util.d/`/`legacy.d/` files; also runs the legacy-layer mapping check. `golden [--update]` — byte-compares every scenario capture against the recorded `golden/<image>/<mode>/` cells; `--update` only after reviewing the diff. `integration` — scenarios' `expect.bats` boot live containers on the host and assert behavior (auth matrix, read-only boot, …). `all` runs the tiers in order.
-- Filtering: `--only-image <name>`, pre-built tags via `--image <name>=<ref>` (no rebuild while iterating), `--label <name>`, `--force-build`. `bats-pin` verifies the pinned bats release under `tests/.cache/`.
-- A scenario is DATA under `tests/scenarios/<name>/`: `scenario.conf` (images, modes, `legacy-layer=`, http probes, optional scenario Dockerfile / container command), `env`, `docker-args`, `files/`, optional `expect.bats` + `golden/<image>/<mode>/`.
-- Volatile values are normalized ONLY in `tests/lib/normalize.sed`, one commented entry each; goldens must survive a second `golden` run unchanged (determinism). Test images are always tagged `nl-test/*`, never `neunerlei/*`; scenario credentials are throwaway.
-- Legacy-layer rule: every `legacy.d/*.sh` needs a scenario `legacy-layer=` tag (checked both directions in the unit tier).
-- CI is a PR guard only (no push trigger): `.github/workflows/tests-engine.yml` (reusable; resolves the exact SOURCE_IMAGE tag through the release tooling — `tests/lib/resolve-source-image.js` — builds amd64 with the GHA cache, no push) + one thin `tests-<image>.yml` caller per image with global `src/**`+`tests/**` paths. New image = copy one caller file + adjust `with:`; legacy `src/php` has none. Never edit `build-engine.yml` or the publish workflows.

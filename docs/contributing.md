@@ -207,6 +207,7 @@ Current layers:
 | `2026-11-12-exact-command-arguments.sh` | 2027-11-12 | `step.d/100-execute-command.sh` |
 | `2026-11-12-www-data-home-directory.sh` | 2027-11-12 | `entrypoint.sh` (dotfile bridge, after the home bootstrap) |
 | `2026-11-12-build-mode-marker-and-variables.sh` | 2027-11-12 | `entrypoint.sh` (legacy build-mode end branch) |
+| `2026-11-16-proxy-snippet-include-pattern.sh` | 2027-11-16 | `nginx step.d/025-nginx-proxy.sh` (while the proxy locations render) |
 
 ## File Organization Patterns
 
@@ -586,7 +587,7 @@ tests/run.sh integration     # Tier 3: scenarios' expect.bats on the host,
 tests/run.sh all             # the three tiers in order
 ```
 
-Useful flags (before the subcommand): `--only-image <name>`, `--image <name>=<ref>` (use a pre-built tag while iterating), `--label <name>`, `--force-build`. Test images always live under `nl-test/*` — never `neunerlei/*`: a local `neunerlei/nginx` tag would shadow the registry image for every other project on the machine.
+Useful flags (before the subcommand): `--only-image <name>`, `--image <name>=<ref>` (use a pre-built tag while iterating), `--label <name>`, `--no-cache` (full rebuild without layer reuse). Test images always live under `nl-test/*` — never `neunerlei/*`: a local `neunerlei/nginx` tag would shadow the registry image for every other project on the machine.
 
 CI: one thin `tests-<image>.yml` caller per image triggers the reusable `tests-engine.yml` on pull requests only. Adding one for a new image: copy a caller, adjust its `with:` block, and add the image to `SUITE_IMAGES` in `tests/run.sh` and the source-image table in `tests/lib/build-image.sh`. The legacy `src/php/` images are out of scope (deprecated, do not use `_common`) and have no test workflow.
 

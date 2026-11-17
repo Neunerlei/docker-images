@@ -28,7 +28,7 @@ Both installed. Both ALWAYS run as `www-data` — no permission worries from roo
 
 - **web** (default): NGINX (reverse proxy) + your Node server.
 - **worker**: set `NODE_WORKER_COMMAND` → NGINX off, Supervisor runs your command.
-- **build**: entrypoint in a Dockerfile `RUN` without a command.
+- **build**: `RUN init-build-env` in a Dockerfile.
 
 ## Variables (image-specific)
 
@@ -73,7 +73,7 @@ ARG DOCKER_PROJECT_HOST
 ENV DOCKER_PROJECT_HOST=${DOCKER_PROJECT_HOST}
 COPY --chown=www-data:www-data ./package*.json ./
 COPY --chown=www-data:www-data ./src ./src
-RUN /container/entrypoint/entrypoint.sh      # env now matches production
+RUN init-build-env      # env now matches production
 RUN npm ci && npm run build
 
 FROM neunerlei/node-nginx:latest

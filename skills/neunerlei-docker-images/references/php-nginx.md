@@ -30,7 +30,7 @@ Pre-installed globally. ALWAYS runs as `www-data` — no permission worries. Run
 
 - **web** (default): NGINX + PHP-FPM serve the app.
 - **worker**: set `PHP_WORKER_COMMAND` → NGINX + FPM off, Supervisor runs your command.
-- **build**: entrypoint in a Dockerfile `RUN` without a command.
+- **build**: `RUN init-build-env` in a Dockerfile.
 
 ```yaml
 my-app-worker:
@@ -67,7 +67,7 @@ my-app-worker:
 | `PHP_FPM_MAX_REQUESTS` | `500` | `pm.max_requests`. |
 | `NGINX_TRY_FILES` | `$uri $uri/ /index.php$is_args$args` | Root-location routing into `index.php`. |
 
-NGINX timeout vars map to FastCGI: `NGINX_PROXY_CONNECT_TIMEOUT` → `fastcgi_connect_timeout`, `NGINX_PROXY_READ_TIMEOUT` → `fastcgi_send_timeout`, `NGINX_PROXY_SEND_TIMEOUT` → `fastcgi_read_timeout`.
+NGINX timeout vars map to FastCGI: `NGINX_PROXY_CONNECT_TIMEOUT` → `fastcgi_connect_timeout`, `NGINX_PROXY_READ_TIMEOUT` → `fastcgi_read_timeout` (waiting for the upstream response), `NGINX_PROXY_SEND_TIMEOUT` → `fastcgi_send_timeout` (transmitting the request to the upstream).
 
 ## ENVIRONMENT, `APP_ENV` & `APP_DEBUG`
 
@@ -90,8 +90,9 @@ Shared dirs plus:
 
 ```ini
 ; php/z-custom-settings.ini — full template syntax available
-max_execution_time = ${PHP_MAX_EXECUTION_TIME}
+max_execution_time = 300
 default_socket_timeout = 300
+opcache.validate_timestamps = ${PHP_PROD_OPCACHE_VALIDATE_TIMESTAMPS}
 ```
 
 ## Defaults
@@ -107,7 +108,7 @@ ARG DOCKER_PROJECT_HOST
 ENV DOCKER_PROJECT_HOST=${DOCKER_PROJECT_HOST}
 COPY --chown=www-data:www-data ./composer*.json ./
 COPY --chown=www-data:www-data ./src ./src
-RUN /container/entrypoint/entrypoint.sh
+RUN init-build-env
 RUN composer install --no-dev --optimize-autoloader
 RUN ./vendor/bin/phpunit
 ```

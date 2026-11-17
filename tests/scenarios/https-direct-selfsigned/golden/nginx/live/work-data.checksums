@@ -19,7 +19,6 @@ c435e379bd2c8da4a4f7837b7df5069e  /container/work/data/nginx-mime-types
 e60bd9a528b4ceb6ec06c1c7624212b2  /container/work/data/nginx-snippets-basic-auth
 ad8d59082efc30e89b577ed2ffb825bc  /container/work/data/nginx-snippets-errors
 e5405e767aee4fa5ca6931567865f98c  /container/work/data/nginx-snippets-global-default
-cbcfd3ace38e744e12c57704f9565031  /container/work/data/nginx-snippets-resolver
 4e43cd71954beaa3bae08efaa25c9a24  /container/work/data/nginx-snippets-root
 <NL-TEST-CERT-CHECKSUM>  /container/work/data/ssl/cert.pem
 <NL-TEST-CERT-CHECKSUM>  /container/work/data/ssl/key.pem

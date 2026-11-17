@@ -197,8 +197,18 @@ function collect_ownership() {
 # NOTE: the basic-auth password files live OUTSIDE /container/work/data (in
 # /container/work/nginx-basic-auth) precisely so their per-boot salted hashes
 # cannot make this list nondeterministic.
+# The rendered resolver snippet is EXCLUDED: its content embeds the resolver
+# address the entrypoint detected from /etc/resolv.conf at boot
+# (common-env.sh detect_dns_resolvers), so its md5 legitimately differs per
+# environment and no normalization can reach a checksum. Nothing goes
+# unasserted — the file's normalized CONTENT (resolver directive + knobs) is
+# pinned by the nginx-T.conf golden section, and the explicit-resolver
+# scenarios (resolver-explicit, resolver-multi-nameserver) pin the directive
+# list itself. Only this file is exempted: no other work-data file was shown
+# to embed environment values (CI divergence touched this file alone).
 function collect_work_data_checksums() {
-    find /container/work/data -type f -print0 \
+    find /container/work/data -type f \
+        ! -path '/container/work/data/nginx-snippets-resolver' -print0 \
         | LC_ALL=C sort -z \
         | xargs -0 -r md5sum
 }

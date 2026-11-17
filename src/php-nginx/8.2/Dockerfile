@@ -1,4 +1,4 @@
-# syntax = docker/dockerfile:1.4
+# syntax = docker/dockerfile:1.14
 ARG SOURCE_IMAGE
 FROM ${SOURCE_IMAGE}
 
@@ -43,9 +43,20 @@ RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt,sharing=locked \
         --target-dir "/usr/local/etc/php-fpm.d" \
         --pattern "*.conf"
 
-# Load image specific files
-COPY --chown=www-data:www-data container /container
-COPY --chown=www-data:www-data src /var/www/html
+# Load image specific files.
+# --chmod makes the copied modes independent of the checkout umask: COPY
+# otherwise preserves the build context's modes verbatim, so a umask-002
+# tree would bake 664/775 into the image where the umask-022 registry builds
+# bake 644/755. u=rwX,go=rX fixes that: capital X sets the execute bit only
+# on directories and on files that already carry it, and git preserves the
+# executable bit across checkouts regardless of umask — so the result is
+# stable (directories 755, files 644, executable files 755) and matches the
+# umask-022 builds. The common layer needs no equivalent: installer.sh
+# copies it inside a RUN step, which always runs with the daemon's fixed
+# umask. Symbolic --chmod needs Dockerfile frontend 1.14+ (the syntax pin
+# above): older frontends accept the flag and silently ignore it.
+COPY --chown=www-data:www-data --chmod=u=rwX,go=rX container /container
+COPY --chown=www-data:www-data --chmod=u=rwX,go=rX src /var/www/html
 
 SHELL ["/bin/bash", "-c"]
 WORKDIR /var/www/html

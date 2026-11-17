@@ -163,6 +163,21 @@ function collect_passwd() {
 # link pointing at the wrong path is a real regression class (the work-data
 # staging link is exactly such a symlink).
 #
+# The sort key is field 4 onward (path + symlink target), NOT the whole line.
+# Why: %m/%u/%g of host bind mounts are environment artifacts (see the
+# NL-TEST-BIND-MOUNT-OWNER entry in normalize.sed) — a dev checkout carries
+# umask-002 modes (664/775), CI carries umask-022 (644/755) with the runner's
+# uid. normalize.sed masks exactly those fields into the placeholder, but it
+# runs AFTER this capture; sorting on the whole line let the masked values
+# decide the placeholder lines' POSITIONS, so the same capture came out in a
+# different order per environment (the 2026-11-17 run-2 golden divergence:
+# 8/36 scenarios red, identical line multisets). Sorting on fields 4+ makes
+# the order a function of the content that survives normalization. Paths are
+# unique (find never prints one twice within a tree; the overlapping trees
+# below repeat only byte-identical lines), so equal keys cannot reorder
+# observably — sort's last-resort whole-line comparison only ever sees
+# duplicates that are identical on both sides.
+#
 # The directory set mirrors user_owned_directories_registry in entrypoint.sh
 # (built-in entries). NGINX_SERVE_ROOT / NGINX_DOC_ROOT defaults are
 # replicated here rather than read from the environment: in live mode the
@@ -187,7 +202,7 @@ function collect_ownership() {
         else
             printf '(absent: %s)\n' "${dir}"
         fi
-    done | sorted
+    done | sorted -k4
 }
 
 # Sorted checksum list of the work data — the boot-reset staging copy. Any

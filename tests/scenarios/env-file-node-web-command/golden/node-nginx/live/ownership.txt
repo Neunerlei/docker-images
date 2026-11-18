@@ -134,10 +134,8 @@
 640 www-data www-data /var/log/nginx/error.log 
 755 www-data www-data /var/www 
 777 www-data www-data /var/www/errors /container/work/data/nginx-error-pages
-775 www-data www-data /var/www/html 
-775 www-data www-data /var/www/html 
-664 www-data www-data /var/www/html/.gitkeep 
-664 www-data www-data /var/www/html/.gitkeep 
+755 www-data www-data /var/www/html 
+755 www-data www-data /var/www/html 
 755 www-data www-data /var/www/html/public 
 755 www-data www-data /var/www/html/public 
 755 www-data www-data /var/www/html/public 

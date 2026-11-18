@@ -98,6 +98,9 @@
 [UTIL.user-owned-dir] Setting ownership of /run to user 'www-data'
 [UTIL.user-owned-dir] Setting ownership of /var/lib/nginx to user 'www-data'
 [UTIL.user-owned-dir] Setting ownership of /var/log/nginx to user 'www-data'
+[UTIL.user-owned-dir] Setting ownership of /var/www/html to user 'www-data'
+[UTIL.user-owned-dir] Creating missing directory: /var/www/html/public
+[UTIL.user-owned-dir] Setting ownership of /var/www/html/public to user 'www-data'
 [ENTRYPOINT.export-custom-vars] Checking for new or changed environment variables...
 [ENTRYPOINT.execute-command] Bootstrapping completed, starting command "supervisord -c /etc/supervisor/supervisord.conf "...
 <NL-TEST-TIMESTAMP> INFO Included extra file "/etc/supervisor/conf.d/crash-on-fatal.eventlistener.conf" during parsing

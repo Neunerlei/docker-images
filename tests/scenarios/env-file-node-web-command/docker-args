@@ -1,2 +1,2 @@
 -v ${SCENARIO_DIR}/files/custom:/container/custom:ro
--v ${SCENARIO_DIR}/files/empty-html:/var/www/html
+--tmpfs /var/www/html

@@ -63,7 +63,7 @@ export NGINX_SNIPPETS_DIR=/etc/nginx/snippets
 export NGINX_TRY_FILES=/static/\$uri\ @pythonproxy
 export NODE_WORKER_COMMAND=node\ -e\ \'console.log\(\"WORKER-ARGV-OK\ HOME=\"\,\ process.env.HOME\ ===\ undefined\ \?\ \"\(unset\)\"\ :\ process.env.HOME\)\;\ setInterval\(function\ \(\)\ \{\}\,\ 1000\)\;\'
 export PHP_WORKER_COMMAND=php\ -r\ \'echo\ \"WORKER-ARGV-OK\ HOME=\"\,\ getenv\(\"HOME\"\)\ ===\ false\ \?\ \"\(unset\)\"\ :\ getenv\(\"HOME\"\)\,\ \"\\n\"\;\ while\ \(true\)\ \{\ sleep\(1\)\;\ \}\'
-export PYTHON_APP_MODULE=\'server:app\'
+export PYTHON_APP_MODULE=server:app
 export PYTHON_SHA256=<NL-TEST-UPSTREAM>
 export PYTHON_VERSION=<NL-TEST-UPSTREAM>
 export PYTHON_WORKER_COMMAND=python\ -u\ -c\ \'import\ os\,\ time\;\ print\(\"WORKER-ARGV-OK\ HOME=\"\,\ os.environ.get\(\"HOME\"\,\ \"\(unset\)\"\)\)\;\ \[time.sleep\(1\)\ for\ _\ in\ iter\(int\,\ 1\)\]\'

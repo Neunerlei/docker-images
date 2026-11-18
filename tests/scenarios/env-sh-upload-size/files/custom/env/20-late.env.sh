@@ -1,0 +1,1 @@
+export MAX_UPLOAD_SIZE=300M

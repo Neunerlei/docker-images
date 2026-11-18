@@ -28,15 +28,17 @@ Human-facing docs mirror this skill: `docs/common.md` (shared concepts) + `docs/
 `/container/entrypoint/entrypoint.sh` is a dumb orchestrator: sources `util.d/` and `legacy.d/` (deprecated compat layers, one file per migration guide), runs `step.d/` scripts in numeric order, then `exec`s the command. Steps build on each other:
 
 ```
-005-init-custom-on-dev   017-custom-env        040-supervisor      070-user-permissions
-015-image-vars (image)   020-nginx            050-export-vars     080-custom (hooks)
-                        030-git               060-user-setup      090-export-custom-vars → 100-execute-command
+005-init-custom-on-dev   020-nginx              050-export-vars    080-custom (hooks)
+015-environment          030-git               060-user-setup     090-export-custom-vars
+   (pipeline, see below) 040-supervisor         070-user-permissions  100-execute-command
 ```
 
-`CONTAINER_MODE` (read-only, exported for templates) is derived:
+Step 015 is the environment pipeline orchestrator: it sources the per-image `container/entrypoint/image-env.sh` (three optional functions — `image_env_features`, `image_env_defaults`, `image_env_validate`), derives the framework defaults, loads `custom/env/`, and re-derives after each pass — so env-file values reach derived variables (`MAX_UPLOAD_SIZE`, `APP_ENV` family, HTTPS, upload limits, ...) while `${VAR}` references inside `.env` still expand against pass-1 values. Defaults go through the tracked `default_var` helper: user-set values survive every pass. The former `015-image-vars.sh` (image) and `017-custom-env.sh` steps no longer exist; downstream overrides keep working via a legacy layer until **2027-11-17** (migration guide: `docs/migration/2026-11-17-environment-pipeline.md`).
+
+`CONTAINER_MODE` (read-only, exported for templates) is derived by the image's `image_env_features()`:
 - `<RUNTIME>_WORKER_COMMAND` set (e.g. `PHP_WORKER_COMMAND`) → `worker`: web server disabled, Supervisor runs your command.
 - `RUN init-build-env` in a Dockerfile → `build` (see [Build mode](#build-mode-multi-stage-builds)).
-- Otherwise → `web` (nginx image: any `PROXY_*_CONTAINER` → `proxy`, else `static` — the nginx image overrides this step and ignores the build mode).
+- Otherwise → `web` (nginx image: any `PROXY_*_CONTAINER` → `proxy`, else `static`; nginx's `image_env_features()` also overrides a `build` mode — there is no build-time config for a plain web server).
 
 `mode-*` filename markers match against `CONTAINER_MODE`.
 
@@ -157,7 +159,7 @@ Note: `get_all_vars()` filters out bash internals, system vars, and anything sta
 
 ## Custom env files (`custom/env/`)
 
-The single place for project-level derived/dynamic variables, instead of scattering them across Dockerfile `ENV`, Compose `environment:`, and `-e` flags. Loaded by step 017 — before any service configuration.
+The single place for project-level derived/dynamic variables, instead of scattering them across Dockerfile `ENV`, Compose `environment:`, and `-e` flags. Loaded by the environment pipeline (step 015), which re-derives the framework/image defaults after each pass — so env-file values flow into derived variables; a reference to a derived value *in the same file that sets its input* still expands to the old (pass-1) value.
 
 - `*.env` — plain `KEY=VALUE`; auto-exported; `${VAR}` references expand at source time.
 - `*.env.sh` — real shell for dynamic lookups; MUST `export` explicitly (`set -a` is not active).
@@ -236,6 +238,8 @@ Anything in `$CONTAINER_BIN_DIR` (`/container/bin`, prepended to `PATH`) is call
 
 Breaking or behavior-changing releases are documented in `docs/migration/`, one file per change, prefixed with the release date (`YYYY-MM-DD-…`). Check them when a container behaves differently after a rebuild, since rolling tags pick up changes without an opt-in.
 
+- **2026-11-17 — environment pipeline reordering** (`docs/migration/2026-11-17-environment-pipeline.md`):
+  - Env-file values now reach derived variables (upload limits, `APP_ENV`/`APP_DEBUG`/`FLASK_ENV`/`NODE_ENV` family, HTTPS, `DOCKER_SERVICE_ABS_PATH`, `NGINX_SERVE_ROOT` ownership, `NODE_WEB_COMMAND`). ⚠️ An env file with `ENVIRONMENT=development` now really enables dev behavior (`APP_DEBUG=1`) — check env files before rebuilding. `PYTHON_APP_MODULE`'s default lost its literal quotes. The per-image `step.d/015-image-vars.sh` and the shared `step.d/017-custom-env.sh` steps no longer exist (image environment logic moved to `container/entrypoint/image-env.sh`); downstream overrides keep working with a deprecation warning until **2027-11-17**.
 - **2026-11-12 — exact command arguments** (`docs/migration/2026-11-12-exact-command-arguments.md`):
   - Commands keep their exact argument boundaries (`sh -c '…'` works). Passing a command as a **single string** (`command: ["npm run dev"]`, K8s `args: ["php artisan queue:work"]`) still runs but logs a deprecation warning and will fail in a future release. Use separate arguments. `$entrypoint_command` is now an array.
 - **2026-11-12 — www-data home directory** (`docs/migration/2026-11-12-www-data-home-directory.md`):

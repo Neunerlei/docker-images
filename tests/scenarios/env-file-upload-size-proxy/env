@@ -1,0 +1,4 @@
+# Proxy mode is decided BEFORE the custom env files load (image_env_features),
+# so the PROXY variable must live in the container environment, not the .env.
+PROXY_DEMO_CONTAINER=upload-svc.invalid
+PROXY_DEMO_PATH=/

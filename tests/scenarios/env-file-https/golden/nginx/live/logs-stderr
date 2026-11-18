@@ -1,0 +1,15 @@
+Processing files from /container/custom/env, matching '*.env'...
+Processing files from /container/custom/env, matching '*.env.sh'...
+Template directory '/container/custom/nginx' does not exist. Skipping.
+Template directory '/container/custom/nginx/global' does not exist. Skipping.
+Template directory '/container/custom/nginx/location' does not exist. Skipping.
+<NL-TEST-CERT-KEYGEN-PROGRESS>
+<NL-TEST-CERT-KEYGEN-PROGRESS>
+-----
+Processing templates from '/container/templates/supervisor/conf.d', matching '*.conf'...
+Processing files from /container/templates/supervisor/conf.d, matching '*.conf'...
+ - Rendering 'crash-on-fatal.eventlistener.conf' to '/container/work/data/supervisor-config'
+ - Rendering 'nginx.service.feat-nginx.conf' to '/container/work/data/supervisor-config'
+Directory '/container/custom/entrypoint' does not exist. Skipping.
+<NL-TEST-TIMESTAMP> [warn] <NL-TEST-PID>#<NL-TEST-CONNECTION>: "ssl_stapling" ignored, issuer certificate not found for certificate "/etc/ssl/certs/custom/cert.pem"
+nginx: [warn] "ssl_stapling" ignored, issuer certificate not found for certificate "/etc/ssl/certs/custom/cert.pem"

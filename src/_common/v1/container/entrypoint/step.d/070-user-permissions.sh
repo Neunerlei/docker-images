@@ -1,5 +1,25 @@
 #!/bin/bash
 
+# Static built-in entries for the user owned directories registry. They are
+# PREPENDED here — not declared in entrypoint.sh — because they reference
+# variables the environment pipeline derives (NGINX_SERVE_ROOT,
+# NGINX_DOC_ROOT), which the custom env files may have changed by now
+# (step 015 ran long before this step). Prepending keeps everything the
+# installer's --user-owned-dir registrations added to the registry before
+# the steps ran (e.g. /opt/venv, /usr/local/lib/node_modules) — a plain
+# reassignment would lose them.
+user_owned_directories_registry=(
+    "/run"
+    "/var/lib/nginx"
+    "/var/log/nginx"
+    "${CONTAINER_DIR}"
+    "${NGINX_SERVE_ROOT}"
+    "/var/www" # This is the home directory of the www-data user by distribution default. It remains the application tree parent — the writable service home lives in the work directory (CONTAINER_WWW_DATA_HOME_DIR).
+    "${NGINX_DOC_ROOT}"
+    "${CONTAINER_WWW_DATA_HOME_DIR}"
+    "${user_owned_directories_registry[@]}"
+)
+
 # Additional user owned directories can be declared via the USER_OWNED_DIRECTORIES
 # environment variable (space separated), e.g. for volumes the www-data processes
 # need to write into. This deliberately runs HERE — after the custom environment

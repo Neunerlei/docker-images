@@ -53,14 +53,22 @@ echo "[ENTRYPOINT] Setting common environment variables..."
 
 source "${entrypoint_dir}/common-env.sh"
 
-# Sources all .sh files in the given directory in alphabetical order
+# Sources all .sh files in the given directory in alphabetical order.
+# The optional second argument is a filter function: a file is SKIPPED when
+# the filter returns true for it. Used by the step loop to skip step files a
+# legacy compatibility layer absorbed (legacy_is_absorbed_step — see
+# legacy.d/2026-11-17-environment-pipeline.sh).
 #
 # Usage:
-#   source_files_in_dir_alphabetically "/path/to/directory"
+#   source_files_in_dir_alphabetically "/path/to/directory" [filter_function]
 function source_files_in_dir_alphabetically() {
     local dir_path="$1"
+    local filter_func="${2:-}"
     if [ -d "$dir_path" ]; then
         while IFS= read -r -d '' file; do
+            if [ -n "$filter_func" ] && "$filter_func" "$file"; then
+                continue
+            fi
             source "$file"
         done < <(find "$dir_path" -maxdepth 1 -name "*.sh" -print0 | sort -z)
     fi
@@ -133,17 +141,14 @@ declare -gA file_marker_condition_registry
 # entrypoint features
 declare -g feature_registry
 # User directories
-# A list of directory paths that should be owned by the www-data user inside the container
-declare -g -a user_owned_directories_registry=(
-    "/run"
-    "/var/lib/nginx"
-    "/var/log/nginx"
-    "${CONTAINER_DIR}"
-    "${NGINX_SERVE_ROOT}"
-    "/var/www" # This is the home directory of the www-data user by distribution default. It remains the application tree parent — the writable service home lives in the work directory (CONTAINER_WWW_DATA_HOME_DIR).
-    "${NGINX_DOC_ROOT}"
-    "${CONTAINER_WWW_DATA_HOME_DIR}"
-)
+# A list of directory paths that should be owned by the www-data user inside the container.
+# Deliberately EMPTY here: the static built-in entries reference variables the
+# environment pipeline derives (NGINX_SERVE_ROOT, NGINX_DOC_ROOT), so they are
+# PREPENDED in step 070 — after the environment orchestrator ran, with the
+# values the custom env files may have changed. Entries added before the steps
+# run (the installer's --user-owned-dir registrations via the installer
+# registry script) are kept: step 070 prepends, it does not reassign.
+declare -g -a user_owned_directories_registry=()
 # Additional user owned directories can be declared for the running container via the
 # USER_OWNED_DIRECTORIES environment variable — the extension happens in step 070
 # (after the custom environment files were loaded), so the variable may also be
@@ -251,8 +256,12 @@ fi
 # Load utility scripts first
 source_files_in_dir_alphabetically "$util_dir"
 
-# Iterate all the steps to configure the container
-source_files_in_dir_alphabetically "$step_dir"
+# Iterate all the steps to configure the container. legacy_is_absorbed_step
+# (legacy.d/2026-11-17-environment-pipeline.sh) skips the absorbed step files
+# a downstream image may still ship — the environment orchestrator
+# (step.d/015-environment.sh) runs them at their correct position instead.
+# When that layer expires, drop the filter argument and delete the layer file.
+source_files_in_dir_alphabetically "$step_dir" legacy_is_absorbed_step
 
 if [ "$CONTAINER_MODE" == "build" ]; then
     case "$container_build_mode_invocation" in

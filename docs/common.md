@@ -229,6 +229,7 @@ Breaking or behavior-changing releases are documented in [`docs/migration/`](./m
 - [2026-11-12: Exact Command Arguments](./migration/2026-11-12-exact-command-arguments.md) — exact argv execution, single-string deprecation fallback
 - [2026-11-12: www-data Home Directory](./migration/2026-11-12-www-data-home-directory.md) — the home move and its dotfile bridge, npm/composer cache paths
 - [2026-11-16: Proxy Snippet Include Pattern](./migration/2026-11-16-proxy-snippet-include-pattern.md) — per-service proxy snippets must be named `<key>.<name>.conf` (dot after the key); the old `<key>*.conf` form is dropped
+- [2026-11-17: Environment Pipeline Reordering](./migration/2026-11-17-environment-pipeline.md) — env-file values now reach derived variables (upload limits, `APP_ENV` family, HTTPS, …); `step.d/015-image-vars.sh`/`017-custom-env.sh` replaced by `image-env.sh` + the step 015 orchestrator
 
 One behavior change without its own guide: gunicorn's supervisor stop wait rises from 10s to `GUNICORN_GRACEFUL_TIMEOUT + 10` (default 40s, python-nginx) — see `GUNICORN_STOP_WAIT_SECS` in [python-nginx.md](./python-nginx.md).
 
@@ -284,6 +285,15 @@ export CACHE_TTL=$(fetch-from-secrets-manager cache_ttl 2>/dev/null || echo "360
 # docker/custom/env/10-routing.env
 APP_URL=${APP_PROTOCOL}://${APP_HOST}
 ```
+
+**How env-file values reach derived variables.** The entrypoint's environment pipeline derives every framework and image default **three times**: once before your env files load (so `${VAR}` references inside them see sane values — exactly the values they expanded to before this pipeline existed), once after the static `*.env` pass, and once after the dynamic `*.env.sh` pass. A default that is still in place is recomputed from the (possibly changed) inputs; a value you set is never touched. In practice: `MAX_UPLOAD_SIZE=500M` in a `.env` now really sets `MAX_UPLOAD_SIZE_BYTES`, `NGINX_CLIENT_MAX_BODY_SIZE`, the PHP upload limits, and so on.
+
+Caveats worth knowing:
+
+- **References see load-time values.** A `.env` that sets an input and references the derived value *in the same file* gets the pass-1 value (`UPLOAD_BYTES=${MAX_UPLOAD_SIZE_BYTES}` next to `MAX_UPLOAD_SIZE=500M` expands to the old byte count). The corrected value exists one pass later and is what every service and template uses.
+- **A derived variable set to exactly its default counts as "not set".** Setting `NGINX_CLIENT_MAX_BODY_SIZE=100M` (the default) pins nothing — it is recomputed when `MAX_UPLOAD_SIZE` changes. To pin a derived value, set it to something *different* from its default, or set the input instead (e.g. only `MAX_UPLOAD_SIZE`) and let everything derive from it.
+- **Markers apply per pass.** `*.env` files are marker-filtered using the container-environment values; `*.env.sh` files use the values after the `.env` pass. An env-file `ENVIRONMENT=dev` is normalized before the `.env.sh` pass, so `.dev.`-marked `.env.sh` files are selected.
+- **Mode and features cannot come from env files.** `PHP_WORKER_COMMAND` & co. decide `CONTAINER_MODE` *before* the env files load (they are marker-filtered by it) — set them via `docker -e`/compose, not in a `.env`.
 
 ### Entrypoint Hooks
 

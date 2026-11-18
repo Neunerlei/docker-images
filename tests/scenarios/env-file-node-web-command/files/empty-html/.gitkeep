@@ -1,0 +1,2 @@
+# Intentionally empty: hides the image's baked /var/www/html (and its
+# server.js), so the web command can only come from the env file.

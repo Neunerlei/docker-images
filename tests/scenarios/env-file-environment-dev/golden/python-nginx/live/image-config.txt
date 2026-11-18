@@ -1,0 +1,44 @@
+# ---- /etc/gunicorn.conf.py ----
+# Gunicorn configuration file
+
+# The socket to bind to.
+bind = "unix:/run/gunicorn.sock"
+
+# The number of worker processes.
+workers = "4"
+
+# The type of worker processes.
+worker_class = "sync"
+
+# The log level.
+loglevel = "info"
+
+# The number of seconds a worker may handle a request before it is killed.
+# NOTE: NGINX sits in front of gunicorn and applies its own
+# proxy_read_timeout (NGINX_PROXY_READ_TIMEOUT, default 60s) — raise both
+# together, or nginx will answer 504 before this timeout is ever reached.
+timeout = "30"
+
+# The number of seconds to wait for workers during a graceful shutdown
+# before they are force-killed. Supervisor must allow at least this long
+# (GUNICORN_STOP_WAIT_SECS) or it SIGKILLs the workers first.
+graceful_timeout = "30"
+
+# Restart workers after the given number of requests (0 = never) to mitigate
+# memory leaks. Jitter spreads the restarts so not all workers recycle at once.
+max_requests = "0"
+max_requests_jitter = "0"
+
+# The user and group to run as.
+user = "www-data"
+group = "www-data"
+
+# The application to run.
+# This variable will be provided by the entrypoint.
+# We can't use ${...} syntax here as this is a Python file, not a simple text template.
+# The entrypoint will need to render this dynamically.
+wsgi_app = "server:app"
+# ---- /usr/local/etc/php/conf.d ----
+(not present)
+# ---- /usr/local/etc/php-fpm.d ----
+(not present)

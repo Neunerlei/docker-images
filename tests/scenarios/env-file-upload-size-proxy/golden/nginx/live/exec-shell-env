@@ -1,0 +1,2 @@
+# docker exec shell (root, no gosu)
+bash: HOME=/root

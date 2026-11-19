@@ -4,7 +4,8 @@
 [ENTRYPOINT] Sourcing installer registry...
 [ENTRYPOINT.dev-setup] Initializing custom directory skeleton for development...
 [ENTRYPOINT.dev-setup] Custom directory not found at '/container/custom', skipping skeleton creation.
-[ENTRYPOINT] Image configuration settings initialization started.
+[ENTRYPOINT.environment] Configuring the environment pipeline...
+[ENTRYPOINT.environment] Environment pipeline completed.
 [ENTRYPOINT.php] Configuring PHP
 [TEMPLATE] Processing template group: php-ini
 [TEMPLATE] Rendering sources for 'php-ini': /container/templates/php /container/custom/php

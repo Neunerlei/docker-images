@@ -1,0 +1,7 @@
+583ad3d81ca65e3d259c94d82b89bd36  /container/work/data/nginx-conf
+d41d8cd98f00b204e9800998ecf8427e  /container/work/data/nginx-mime-types
+d41d8cd98f00b204e9800998ecf8427e  /container/work/data/nginx-snippets-basic-auth
+d41d8cd98f00b204e9800998ecf8427e  /container/work/data/nginx-snippets-errors
+d41d8cd98f00b204e9800998ecf8427e  /container/work/data/nginx-snippets-global-default
+d41d8cd98f00b204e9800998ecf8427e  /container/work/data/nginx-snippets-root
+d41d8cd98f00b204e9800998ecf8427e  /container/work/data/supervisor-conf

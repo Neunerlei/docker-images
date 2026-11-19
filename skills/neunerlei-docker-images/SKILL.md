@@ -1,6 +1,6 @@
 ---
 name: neunerlei-docker-images
-description: Neunerlei docker image family (nginx, node-nginx, php-nginx, python-nginx, legacy php) — self-configuring service containers driven by environment variables and a filename-marker DSL. Use when configuring these images in docker-compose/Dockerfiles, working with /container/custom mounts, templates or env vars, debugging a running container, or when modifying/adding images in the docker-images repo.
+description: Neunerlei docker image family (nginx, node-nginx, php-nginx, python-nginx, legacy php) — self-configuring service containers driven by environment variables and a filename-marker DSL. Use when configuring these images in docker-compose/Dockerfiles, scaffolding a project setup around them (multi-target Dockerfile, dev/prod compose), working with /container/custom mounts, templates or env vars, debugging a running container, or when modifying/adding images in the docker-images repo.
 ---
 
 # Neunerlei Docker Images
@@ -19,24 +19,26 @@ Self-configuring "service-in-a-box" containers: NGINX plus a runtime (PHP-FPM, N
 
 Tag lists: `https://docker.neunerlei.eu/neunerlei-<image>-tags.html` (e.g. `neunerlei-php-nginx-tags.html`).
 
-Read the matching reference for exact env vars, defaults, and image-specific dirs — they differ per image. Everything below applies to all images.
+Read the matching reference for exact env vars, defaults, and image-specific dirs — they differ per image. Everything below applies to all images. Setting up a project on these images (recommended multi-target Dockerfile, dev/prod compose split, containerized tests, CI wiring): [references/suggested-setup.md](references/suggested-setup.md).
 
-Human-facing docs mirror this skill: `docs/common.md` (shared concepts) + `docs/<image>.md` (quick starts, complete ENV tables, per-image examples). When image behavior changes, update both the docs and this skill.
+Human-facing docs mirror this skill: `docs/common.md` (shared concepts) + `docs/<image>.md` (quick starts, complete ENV tables, per-image examples) + `docs/suggested-setup-and-usage.md` (project setup → [references/suggested-setup.md](references/suggested-setup.md)). When image behavior changes, update both the docs and this skill.
 
 ## Entrypoint model
 
 `/container/entrypoint/entrypoint.sh` is a dumb orchestrator: sources `util.d/` and `legacy.d/` (deprecated compat layers, one file per migration guide), runs `step.d/` scripts in numeric order, then `exec`s the command. Steps build on each other:
 
 ```
-005-init-custom-on-dev   017-custom-env        040-supervisor      070-user-permissions
-015-image-vars (image)   020-nginx            050-export-vars     080-custom (hooks)
-                        030-git               060-user-setup      090-export-custom-vars → 100-execute-command
+005-init-custom-on-dev   020-nginx              050-export-vars    080-custom (hooks)
+015-environment          030-git               060-user-setup     090-export-custom-vars
+   (pipeline, see below) 040-supervisor         070-user-permissions  100-execute-command
 ```
 
-`CONTAINER_MODE` (read-only, exported for templates) is derived:
+Step 015 is the environment pipeline orchestrator: it sources the per-image `container/entrypoint/image-env.sh` (three optional functions — `image_env_features`, `image_env_defaults`, `image_env_validate`), derives the framework defaults, loads `custom/env/`, and re-derives after each pass — so env-file values reach derived variables (`MAX_UPLOAD_SIZE`, `APP_ENV` family, HTTPS, upload limits, ...) while `${VAR}` references inside `.env` still expand against pass-1 values. Defaults go through the tracked `default_var` helper: user-set values survive every pass. The former `015-image-vars.sh` (image) and `017-custom-env.sh` steps no longer exist; downstream overrides keep working via a legacy layer until **2027-11-17** (migration guide: `docs/migration/2026-11-17-environment-pipeline.md`).
+
+`CONTAINER_MODE` (read-only, exported for templates) is derived by the image's `image_env_features()`:
 - `<RUNTIME>_WORKER_COMMAND` set (e.g. `PHP_WORKER_COMMAND`) → `worker`: web server disabled, Supervisor runs your command.
 - `RUN init-build-env` in a Dockerfile → `build` (see [Build mode](#build-mode-multi-stage-builds)).
-- Otherwise → `web` (nginx image: any `PROXY_*_CONTAINER` → `proxy`, else `static` — the nginx image overrides this step and ignores the build mode).
+- Otherwise → `web` (nginx image: any `PROXY_*_CONTAINER` → `proxy`, else `static`; nginx's `image_env_features()` also overrides a `build` mode — there is no build-time config for a plain web server).
 
 `mode-*` filename markers match against `CONTAINER_MODE`.
 
@@ -71,7 +73,7 @@ Dev-only: with `ENVIRONMENT=development` and `/container/custom` mounted, step 0
 | `NGINX_RESOLVER_VALID_TIMEOUT` | `30s` | `valid=` cache TTL for resolved addresses. |
 | `NGINX_RESOLVER_TIMEOUT` | `5s` | DNS query timeout (`resolver_timeout`). |
 | `NGINX_TRY_FILES` | per image | Root-location routing; see references. |
-| `NGINX_BASIC_AUTH` | (disabled) | Basic auth for the whole server: `username clear-password`; extra users `NGINX_BASIC_AUTH_1..n`, realm `NGINX_BASIC_AUTH_REALM`. Per-proxy: `PROXY_<KEY>_BASIC_AUTH(_1..n/_REALM)` replaces it for that location. Directives are generated as snippets (`/etc/nginx/snippets/basicAuth.nginx.conf` server-wide, `proxy.d/<key>.auth.conf` per service — always present, empty when disabled); passwords hashed with `openssl passwd -apr1`; malformed values abort boot, passwords over 256 chars are rejected (openssl would silently truncate). A custom snippet with an `auth_basic` directive at brace depth 0 (enabled or `off`) takes ownership and suppresses the generated directives — a directive nested inside a `location {}` does not. The credential variables are entrypoint-only: kept out of the `container-vars.sh` snapshot and unset before exec, so no process of the container command inherits them — `docker exec` sessions still see them because Docker injects the configured environment into exec sessions (that is what makes `docker exec <container> printenv NGINX_BASIC_AUTH` a valid troubleshooting probe). Full concept: `docs/common.md` → Basic Authentication. |
+| `NGINX_BASIC_AUTH` | (disabled) | Basic auth for the whole server: `username clear-password`; extra users `NGINX_BASIC_AUTH_1..n`, realm `NGINX_BASIC_AUTH_REALM`. Per-proxy: `PROXY_<KEY>_BASIC_AUTH(_1..n/_REALM)` replaces it for that location. Directives are generated as snippets (`/etc/nginx/snippets/basicAuth.nginx.conf` server-wide, `proxy.d/<key>.auth.conf` per service — always present, empty when disabled); passwords hashed with `openssl passwd -apr1`; malformed values abort boot, passwords over 256 chars are rejected (openssl would silently truncate). A custom snippet with an `auth_basic` directive at brace depth 0 (enabled or `off`) takes ownership and suppresses the generated directives — a directive nested inside a `location {}` does not. The credential variables are entrypoint-only: kept out of the `container-vars.sh` snapshot and unset before exec, so no process of the container command inherits them — `docker exec` sessions still see them because Docker injects the configured environment into exec sessions (that is what makes `docker exec <container> printenv NGINX_BASIC_AUTH` a valid troubleshooting probe). php-nginx keeps `/fpm-ping`/`/fpm-status` probeable in-container (`auth_basic off` + `allow 127.0.0.1; deny all;`): external HTTP probes (K8s `httpGet`, load balancers) get 403 — use exec-based checks. Locations under generated auth strip the incoming `Authorization` header before proxying (client credentials authenticated against this server must not leak upstream); custom-snippet-owned locations and the app runtime are untouched. Full concept: `docs/common.md` → Basic Authentication. |
 | `USER_OWNED_DIRECTORIES` | (none) | Space-separated extra dirs to create/own as www-data at boot (volumes the app writes into). Image-level dirs are declared at build via the installer's `--user-owned-dir` flag. |
 | `CONTAINER_WWW_DATA_HOME_DIR` | `/container/work/www-data-home` | Read-only constant: writable home of every www-data process (supervisor `user=` programs need `environment=HOME="${CONTAINER_WWW_DATA_HOME_DIR}"`; gosu and php-fpm workers derive it from the passwd entry). Lives in the work dir → writable on read-only filesystems; not reset per boot. Legacy `/var/www` dotfiles are bridged in as symlinks with a deprecation warning. Don't bake build-time content into `$HOME` (tmpfs hides it; named volumes go stale) — use `PLAYWRIGHT_BROWSERS_PATH`/`COMPOSER_HOME`/etc. |
 
@@ -157,7 +159,7 @@ Note: `get_all_vars()` filters out bash internals, system vars, and anything sta
 
 ## Custom env files (`custom/env/`)
 
-The single place for project-level derived/dynamic variables, instead of scattering them across Dockerfile `ENV`, Compose `environment:`, and `-e` flags. Loaded by step 017 — before any service configuration.
+The single place for project-level derived/dynamic variables, instead of scattering them across Dockerfile `ENV`, Compose `environment:`, and `-e` flags. Loaded by the environment pipeline (step 015), which re-derives the framework/image defaults after each pass — so env-file values flow into derived variables; a reference to a derived value *in the same file that sets its input* still expands to the old (pass-1) value.
 
 - `*.env` — plain `KEY=VALUE`; auto-exported; `${VAR}` references expand at source time.
 - `*.env.sh` — real shell for dynamic lookups; MUST `export` explicitly (`set -a` is not active).
@@ -236,6 +238,8 @@ Anything in `$CONTAINER_BIN_DIR` (`/container/bin`, prepended to `PATH`) is call
 
 Breaking or behavior-changing releases are documented in `docs/migration/`, one file per change, prefixed with the release date (`YYYY-MM-DD-…`). Check them when a container behaves differently after a rebuild, since rolling tags pick up changes without an opt-in.
 
+- **2026-11-17 — environment pipeline reordering** (`docs/migration/2026-11-17-environment-pipeline.md`):
+  - Env-file values now reach derived variables (upload limits, `APP_ENV`/`APP_DEBUG`/`FLASK_ENV`/`NODE_ENV` family, HTTPS, `DOCKER_SERVICE_ABS_PATH`, `NGINX_SERVE_ROOT` ownership, `NODE_WEB_COMMAND`). ⚠️ An env file with `ENVIRONMENT=development` now really enables dev behavior (`APP_DEBUG=1`) — check env files before rebuilding. `PYTHON_APP_MODULE`'s default lost its literal quotes. The per-image `step.d/015-image-vars.sh` and the shared `step.d/017-custom-env.sh` steps no longer exist (image environment logic moved to `container/entrypoint/image-env.sh`); downstream overrides keep working with a deprecation warning until **2027-11-17**.
 - **2026-11-12 — exact command arguments** (`docs/migration/2026-11-12-exact-command-arguments.md`):
   - Commands keep their exact argument boundaries (`sh -c '…'` works). Passing a command as a **single string** (`command: ["npm run dev"]`, K8s `args: ["php artisan queue:work"]`) still runs but logs a deprecation warning and will fail in a future release. Use separate arguments. `$entrypoint_command` is now an array.
 - **2026-11-12 — www-data home directory** (`docs/migration/2026-11-12-www-data-home-directory.md`):

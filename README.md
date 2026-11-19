@@ -12,6 +12,7 @@ A collection of Docker images; optimized for production use with common extensio
 - **[php (deprecated)](docs/php.md)**: PHP-FPM only (without NGINX) (legacy, deprecated since PHP 8.4)
 - **[python-nginx](docs/python-nginx.md)**: Python in a box with NGINX as reverse proxy
 - **[common](docs/common.md)**: Concepts shared by all images (entrypoint, modes, customization, read-only/Kubernetes)
+- **[suggested-setup-and-usage](docs/suggested-setup-and-usage.md)**: A recommended project setup around the images — multi-target Dockerfile, dev/prod compose split, containerized tests and CI wiring
 
 ## Skill for AI Coding Agents
 

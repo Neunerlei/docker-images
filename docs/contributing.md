@@ -94,13 +94,27 @@ Variables are managed in four layers, in declaration order:
 
 1. **Framework defaults** (`common-env.sh`): Exports well-known directory paths and service
    settings (routing, Nginx timeouts, …). Runs before *every* entrypoint step and also during
-   `installer.sh` — keep this file dependency-free.
-2. **Image-specific defaults** (e.g. `step.d/015-image-vars.sh`): Each base image exports its
-   own defaults (e.g. `GUNICORN_WORKERS`, `PHP_MEMORY_LIMIT`) and populates `feature_registry`.
+   `installer.sh` — keep this file dependency-free. At source time it exports only **constants**
+   (expressions with no user input); every value derived from a user-settable variable lives in
+   its `derive_common_env()` function, which the environment orchestrator calls once per
+   environment-file pass. The installer sources the file too and must only ever see the
+   constants — it never calls the function.
+2. **Image-specific defaults** (`container/entrypoint/image-env.sh`): Each base image provides
+   up to three optional functions, called by the orchestrator step (`step.d/015-environment.sh`)
+   at their pipeline positions:
+   - `image_env_features()` — `CONTAINER_MODE` and `feature_registry`. Runs **before** the
+     custom env files load, so `mode-*`/`feat-*` markers filter the env files.
+   - `image_env_defaults()` — the image's runtime defaults. Runs after **every** derive pass
+     (three times), so it must be idempotent, and every default must go through `default_var`.
+   - `image_env_validate()` — checks that only make sense on final values (after all env files
+     loaded), e.g. node's web-command check. Runs once, at the end of the orchestrator.
+   The file is optional; an image without it boots with the common defaults only. It lands at
+   `/container/entrypoint/image-env.sh` via the standard `COPY container /container` overlay.
 3. **Project-specific variables** (`/container/custom/env/`): The canonical place for downstream
    projects to declare derived or dynamic variables — things that are computed from other
    variables, fetched at runtime, or simply don't belong in a Dockerfile `ENV`. Two file types
-   are supported (both loaded by `step.d/017-custom-env.sh`, before any service is configured):
+   are supported (both loaded by the orchestrator step `step.d/015-environment.sh`, before any
+   service is configured):
    - `*.env` — plain `KEY=VALUE` files; all assignments are auto-exported.
    - `*.env.sh` — full shell scripts for dynamic logic; must `export` explicitly.
    See [Custom Environment Variables](#custom-environment-variables) for details.
@@ -112,6 +126,40 @@ execution contexts (`docker exec`, interactive shells, etc.). Our system ensures
 variable availability, and `custom/env/` provides a single, discoverable location for all
 project-level variable declarations instead of scattering them across Dockerfiles, Compose
 files, custom entrypoint scripts, and `-e` flags.
+
+### The environment pipeline (step.d/015-environment.sh)
+
+The orchestrator step runs the whole sequence — the order lives in code, not in step file
+names. Derived values are computed **more than once** so that env-file values reach them,
+while `${VAR}` references inside `.env` files still see the pass-1 values they expanded to
+before:
+
+```
+derive_common_env            # pass 1: defaults exist (env files may reference them)
+legacy 015 override          # (only if a downstream image ships one — deprecation warning)
+image_env_features           # mode + features, before the env files are marker-filtered
+image_env_defaults           # image defaults, pass 1
+load *.env                   # static data
+derive_common_env            # pass 2: .env inputs reach the derived values
+image_env_defaults
+load *.env.sh                # dynamic data
+derive_common_env            # pass 3: .env.sh inputs too
+image_env_defaults
+image_env_validate           # checks on the final values
+```
+
+Recomputation is safe because of two rules:
+
+- **Every default goes through `default_var NAME VALUE`** (`util.d/default-var.sh`): it sets
+  and exports the value only when the variable is empty or still holds the value the helper
+  itself recorded last time — a user-set value survives every pass untouched, a still-defaulted
+  value is recomputed when its inputs changed. `export X="${X:-default}"` and
+  `if [ -z "$X" ]; then …; fi` blocks in image defaults are always written as `default_var`.
+- **No variable may have defaults in two layers.** A default belongs to exactly one place —
+  `common-env.sh`'s `derive_common_env()` for framework variables, the image's
+  `image_env_defaults()` for image variables. Two layers both defaulting the same variable
+  would fight across passes in ways the tracker cannot resolve.
+
 
 ### 5. **Template Rendering Engine**
 
@@ -156,7 +204,8 @@ The `step.d/` directory enforces a predictable bootstrap sequence. Scripts are e
 ```
 entrypoint/step.d/
 ├── 005-init-custom-on-dev.sh  # Dev skeleton creation
-├── 017-custom-env.sh          # Project variables (custom/env/)
+├── 015-environment.sh         # Environment pipeline orchestrator (image-env.sh,
+│                              #   derive passes, custom env files)
 ├── 020-nginx.sh               # Web server setup
 ├── 040-supervisor.sh          # Process manager
 ├── 060-user-setup.sh          # Permission handling
@@ -167,7 +216,11 @@ entrypoint/step.d/
 
 **Rationale**: Complex initialization broken into logical stages that execute in order. Each image can:
 - Add new steps by creating numbered files
-- Override existing steps by providing same-numbered files
+- Override existing steps by providing same-numbered files — **except 015 and 017**: the
+  environment pipeline owns those positions (a downstream `015-image-vars.sh` or
+  `017-custom-env.sh` is a deprecated legacy override, see
+  [legacy.d](#legacy-compatibility-layers-legacyd)); image environment logic goes into
+  `container/entrypoint/image-env.sh`
 - Insert steps between existing ones using intermediate numbers
 
 ## Build Mode Internals (Marker, Legacy Layer)
@@ -208,6 +261,7 @@ Current layers:
 | `2026-11-12-www-data-home-directory.sh` | 2027-11-12 | `entrypoint.sh` (dotfile bridge, after the home bootstrap) |
 | `2026-11-12-build-mode-marker-and-variables.sh` | 2027-11-12 | `entrypoint.sh` (legacy build-mode end branch) |
 | `2026-11-16-proxy-snippet-include-pattern.sh` | 2027-11-16 | `nginx step.d/025-nginx-proxy.sh` (while the proxy locations render) |
+| `2026-11-17-environment-pipeline.sh` | 2027-11-17 | `entrypoint.sh` (step-loop filter `legacy_is_absorbed_step`); `step.d/015-environment.sh` (`legacy_run_image_vars_override`, `legacy_custom_env_override_present`, `legacy_run_custom_env_override`) |
 
 ## File Organization Patterns
 
@@ -217,11 +271,12 @@ We aim to keep the structure of each image consistent for ease of navigation and
 
 ```
 image-name/
-├── bin/entrypoint/
-│   ├── step.d/            # Image-specific entrypoint steps
-│   └── util.d/            # Image-specific utility functions
-├── templates/             # Image-specific configuration templates  
-├── src/                   # Application source code
+├── container/entrypoint/
+│   ├── image-env.sh        # Image environment (features/defaults/validate)
+│   ├── step.d/             # Image-specific entrypoint steps
+│   └── util.d/             # Image-specific utility functions
+├── templates/              # Image-specific configuration templates  
+├── src/                    # Application source code
 └── Dockerfile
 ```
 
@@ -236,7 +291,7 @@ e.g. `CONTAINER_CERTS_DIR`, `NGINX_DIR` or `SUPERVISOR_DIR`.
 
 ### Naming Conventions
 
-**Entrypoint Steps**: `NNN-descriptive-name.sh` (e.g., `015-image-vars.sh`)
+**Entrypoint Steps**: `NNN-descriptive-name.sh` (e.g., `015-environment.sh`)
 - Lower numbers = earlier execution
 - Use increments of 5-10 to allow insertion of intermediate steps
 
@@ -253,22 +308,30 @@ e.g. `CONTAINER_CERTS_DIR`, `NGINX_DIR` or `SUPERVISOR_DIR`.
 ### 1. **Create Image Structure**
 
 ```bash
-mkdir -p new-image/bin/entrypoint/{step.d,util.d}
+mkdir -p new-image/container/entrypoint/{step.d,util.d}
 mkdir -p new-image/templates
 ```
 
 ### 2. **Define Image-Specific Variables**
 
 ```bash
-# new-image/bin/entrypoint/step.d/015-image-vars.sh
-export IMAGE_SPECIFIC_VAR="default_value"
-feature_registry="${feature_registry} nginx supervisor"
+# new-image/container/entrypoint/image-env.sh — three optional functions;
+# every default goes through default_var (see "The environment pipeline")
+image_env_features() {
+  if [ -z "${CONTAINER_MODE}" ]; then
+    export CONTAINER_MODE="web"
+    feature_registry="${feature_registry} nginx supervisor"
+  fi
+}
+image_env_defaults() {
+  default_var IMAGE_SPECIFIC_VAR "default_value"
+}
 ```
 
 ### 3. **Add Custom Markers**
 
 ```bash
-# new-image/bin/entrypoint/util.d/image-markers.sh
+# new-image/container/entrypoint/util.d/image-markers.sh
 _file_marker_is_debug_mode() {
   [[ "${DEBUG_MODE}" == "true" ]]
 }
@@ -306,9 +369,13 @@ COPY --chmod=+x bin/ "$CONTAINER_BIN_DIR/"
 
 `/container/custom/env/` (pointed to by `$CONTAINER_CUSTOM_ENV_DIR`) is the single,
 discoverable place for all project-level environment variable declarations. It is loaded by
-`step.d/017-custom-env.sh`, which runs **before** any service configuration step (`020-nginx.sh`,
-`040-supervisor.sh`, …), so every variable declared here is available to templates and all
-subsequent steps.
+the environment orchestrator (`step.d/015-environment.sh`, via
+`util.d/load-custom-env-files.sh`), which runs **before** any service configuration step
+(`020-nginx.sh`, `040-supervisor.sh`, …), so every variable declared here is available to
+templates and all subsequent steps. The pipeline derives the framework/image defaults
+**again after each env-file pass**, so env-file values reach every derived variable — see
+[The environment pipeline](#the-environment-pipeline-stepd015-environmentsh) above and the
+caveats in [Shared Concepts](./common.md#environment-files).
 
 **Why here instead of the Dockerfile or Compose file?**
 
@@ -481,10 +548,10 @@ Create a new directory `src/python-nginx/3.12`. It should contain the standard d
 
 ```
 src/python-nginx/3.12/
-├── bin/
+├── container/
 │   └── entrypoint/
-│       ├── step.d/
-│       │   └── 015-image-vars.sh       # Python-specific variables
+│       ├── image-env.sh             # Python-specific environment (optional
+│       │                            #   functions: features/defaults/validate)
 │       └── util.d/
 │           └── python-conditions.sh  # Python-specific markers
 ├── templates/
@@ -531,8 +598,8 @@ CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf"]
 
 ### Step 3: Define Image-Specific Logic
 
--   **`bin/entrypoint/step.d/015-image-vars.sh`**: This is where you define and export environment variables specific to Python (e.g., `GUNICORN_WORKERS`, `PYTHONPATH`). This is also where you should set the `CONTAINER_MODE` and populate the `feature_registry` based on the image's purpose.
--   **`bin/entrypoint/util.d/python-conditions.sh`**: If your Python image needs a unique marker (e.g., `.mode-gunicorn`), define the condition function and register it here.
+-   **`container/entrypoint/image-env.sh`**: This is where you define and export environment variables specific to Python (e.g., `GUNICORN_WORKERS`, `PYTHONPATH`). This is also where you set the `CONTAINER_MODE` and populate the `feature_registry` based on the image's purpose. All three functions are optional; every default goes through `default_var` so the environment pipeline can re-derive it after the custom env files loaded (see [The environment pipeline](#the-environment-pipeline-stepd015-environmentsh)).
+-   **`container/entrypoint/util.d/python-conditions.sh`**: If your Python image needs a unique marker (e.g., `.mode-gunicorn`), define the condition function and register it here.
 
     ```bash
     # In python-conditions.sh

@@ -1,0 +1,3 @@
+crash-on-fatal: user=root group=root HOME=/root
+nginx: user=root group=root HOME=(unset)
+node-server: user=www-data group=www-data (process environment unreadable — uid changed via supervisor/gosu; see the exec-shell-env section or the program own log output)

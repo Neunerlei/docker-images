@@ -1,0 +1,3 @@
+crash-on-fatal: user=root group=root HOME=/root
+nginx: user=root group=root HOME=(unset)
+php-fpm: (process environment unreliable for this program — probe via its own runtime instead)

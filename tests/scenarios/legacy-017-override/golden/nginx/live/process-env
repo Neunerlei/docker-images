@@ -1,0 +1,2 @@
+crash-on-fatal: user=root group=root HOME=/root
+nginx: user=root group=root HOME=(unset)

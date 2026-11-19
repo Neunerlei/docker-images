@@ -2,7 +2,8 @@
 [ENTRYPOINT] Setting common environment variables...
 [ENTRYPOINT] Resetting work data from the staging area...
 [ENTRYPOINT] Sourcing installer registry...
-[ENTRYPOINT] Python image configuration settings initialization started.
+[ENTRYPOINT.environment] Configuring the environment pipeline...
+[ENTRYPOINT.environment] Environment pipeline completed.
 [ENTRYPOINT.python] Configuring Python (Gunicorn)
 [TEMPLATE] Processing template group: gunicorn-conf
 [TEMPLATE] Rendering sources for 'gunicorn-conf': /container/templates/python/gunicorn.conf.py
@@ -81,7 +82,7 @@
  - Exporting variable: NODE_WORKER_COMMAND="node -e 'console.log("WORKER-ARGV-OK HOME=", process.env.HOME === undefined ? "(unset)" : process.env.HOME); setInterval(function () {}, 1000);'"
  - Exporting variable: PHP_WORKER_COMMAND="php -r 'echo "WORKER-ARGV-OK HOME=", getenv("HOME") === false ? "(unset)" : getenv("HOME"), "\n"; while (true) { sleep(1); }'"
  - Not exporting variable: PROXY_GHOST_BASIC_AUTH (clear-text basic auth credentials — used only to generate the password files during boot; intentionally not exported to later RUN steps or exec shells)
- - Exporting variable: PYTHON_APP_MODULE="'server:app'"
+ - Exporting variable: PYTHON_APP_MODULE="server:app"
  - Exporting variable: PYTHON_SHA256="<NL-TEST-UPSTREAM>"
  - Exporting variable: PYTHON_VERSION="<NL-TEST-UPSTREAM>"
  - Exporting variable: PYTHON_WORKER_COMMAND="python -u -c 'import os, time; print("WORKER-ARGV-OK HOME=", os.environ.get("HOME", "(unset)")); [time.sleep(1) for _ in iter(int, 1)]'"

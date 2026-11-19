@@ -13,6 +13,13 @@
 #   - readiness is polled with bounded deadlines, never fixed sleeps;
 #   - curl runs INSIDE the container (docker exec): no host port mapping,
 #     no port juggling, identical answers on every machine.
+#
+# This file is loaded ONLY by bats (every expect.bats via `load`); the
+# declaration below mirrors tests/unit/helpers.bash: the helpers use the
+# bats ≥ 1.5 `run` flags API (`run --separate-stderr` for stderr
+# assertions); the pin (1.11.0) guarantees it — declaring the minimum here
+# silences the per-use BW02 warning for every expect.bats at once.
+bats_require_minimum_version 1.5.0
 
 # Resolve the suite's lib directory from this file's location, so the bats
 # process gets the shared logging/gating/parsing helpers.

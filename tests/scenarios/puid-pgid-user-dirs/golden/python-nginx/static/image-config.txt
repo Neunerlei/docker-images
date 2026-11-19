@@ -37,7 +37,7 @@ group = "www-data"
 # This variable will be provided by the entrypoint.
 # We can't use ${...} syntax here as this is a Python file, not a simple text template.
 # The entrypoint will need to render this dynamically.
-wsgi_app = "'server:app'"
+wsgi_app = "server:app"
 # ---- /usr/local/etc/php/conf.d ----
 (not present)
 # ---- /usr/local/etc/php-fpm.d ----

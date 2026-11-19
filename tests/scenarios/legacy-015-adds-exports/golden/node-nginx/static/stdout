@@ -1,0 +1,104 @@
+[ENTRYPOINT] Starting bootstrapping process...
+[ENTRYPOINT] Setting common environment variables...
+[ENTRYPOINT] Resetting work data from the staging area...
+[ENTRYPOINT] Sourcing installer registry...
+[ENTRYPOINT.environment] Configuring the environment pipeline...
+[LEGACY-015-ADDS] running
+[ENTRYPOINT] INFO: NODE_WEB_COMMAND is not set, but found /var/www/html/server.js. Setting NODE_WEB_COMMAND to 'node /var/www/html/server.js'
+[ENTRYPOINT] INFO: CONTAINER_MODE is 'web' and NODE_WEB_COMMAND is set to 'node /var/www/html/server.js'
+[ENTRYPOINT.environment] Environment pipeline completed.
+[ENTRYPOINT.nginx] Starting Nginx configuration process...
+[TEMPLATE] Processing template group: nginx-conf
+[TEMPLATE] Rendering sources for 'nginx-conf': /container/templates/nginx/nginx.conf
+[TEMPLATE] Processing template group: nginx-mime-types
+[TEMPLATE] Rendering sources for 'nginx-mime-types': /container/templates/nginx/mime.custom.types
+[TEMPLATE] Processing template group: nginx-snippets-root
+[TEMPLATE] Rendering sources for 'nginx-snippets-root': /container/templates/nginx/snippets/root.nginx.conf
+[TEMPLATE] Processing template group: nginx-snippets-resolver
+[TEMPLATE] Rendering sources for 'nginx-snippets-resolver': /container/templates/nginx/snippets/resolver.nginx.conf
+[TEMPLATE] Processing template group: nginx-custom-snippets
+[TEMPLATE] Rendering sources for 'nginx-custom-snippets': /container/custom/nginx
+[TEMPLATE] Processing template group: nginx-custom-snippets-global
+[TEMPLATE] Rendering sources for 'nginx-custom-snippets-global': /container/custom/nginx/global
+[TEMPLATE] Processing template group: nginx-custom-snippets-location
+[TEMPLATE] Rendering sources for 'nginx-custom-snippets-location': /container/custom/nginx/location
+[TEMPLATE] Processing template group: nginx-error-pages
+[ENTRYPOINT.nginx] Rendering custom Nginx error pages
+[TEMPLATE] Processing template group: nginx-snippets-errors
+[TEMPLATE] Rendering sources for 'nginx-snippets-errors': /container/templates/nginx/snippets/errors.nginx.conf
+[ENTRYPOINT.nginx] Configuring for plain HTTP.
+[TEMPLATE] Processing template group: nginx-snippets-global-default
+[ENTRYPOINT.supervisor] Configuring Supervisor...
+[TEMPLATE] Processing template group: supervisor-conf
+[TEMPLATE] Rendering sources for 'supervisor-conf': /container/templates/supervisor/supervisord.conf
+[TEMPLATE] Processing template group: supervisor-config
+[TEMPLATE] Rendering sources for 'supervisor-config': /container/templates/supervisor/conf.d
+[ENTRYPOINT.export-vars] Propagating known variables to default shell config
+ - Exporting variable: CONTAINER_BIN_DIR="/container/bin"
+ - Exporting variable: CONTAINER_BUILD_MODE_MARKER="/container/build-mode.marker"
+ - Exporting variable: CONTAINER_CUSTOM_DIR="/container/custom"
+ - Exporting variable: CONTAINER_CUSTOM_ENTRYPOINT_DIR="/container/custom/entrypoint"
+ - Exporting variable: CONTAINER_CUSTOM_ENV_DIR="/container/custom/env"
+ - Exporting variable: CONTAINER_CUSTOM_NGINX_DIR="/container/custom/nginx"
+ - Exporting variable: CONTAINER_CUSTOM_SSL_CERTS_DIR="/container/custom/certs"
+ - Exporting variable: CONTAINER_DIR="/container"
+ - Exporting variable: CONTAINER_ENTRYPOINT_DIR="/container/entrypoint"
+ - Exporting variable: CONTAINER_ENTRYPOINT_SCRIPT="/container/entrypoint/entrypoint.sh"
+ - Exporting variable: CONTAINER_INSTALLER_REGISTRY_SCRIPT="/container/installer-registry.sh"
+ - Exporting variable: CONTAINER_MODE="web"
+ - Exporting variable: CONTAINER_TEMPLATES_DIR="/container/templates"
+ - Exporting variable: CONTAINER_TEMPLATES_NGINX_DIR="/container/templates/nginx"
+ - Exporting variable: CONTAINER_TEMPLATES_NGINX_SNIPPETS_DIR="/container/templates/nginx/snippets"
+ - Exporting variable: CONTAINER_VARS_SCRIPT="/container/work/container-vars.sh"
+ - Exporting variable: CONTAINER_WORK_DATA_DIR="/container/work/data"
+ - Exporting variable: CONTAINER_WORK_DIR="/container/work"
+ - Exporting variable: CONTAINER_WORK_STAGING_DIR="/container/work-data-staging"
+ - Exporting variable: CONTAINER_WWW_DATA_HOME_DIR="/container/work/www-data-home"
+ - Exporting variable: DOCKER_PROJECT_HOST="localhost"
+ - Exporting variable: DOCKER_PROJECT_PATH="/"
+ - Exporting variable: DOCKER_PROJECT_PROTOCOL="http"
+ - Exporting variable: DOCKER_SERVICE_ABS_PATH="/"
+ - Exporting variable: DOCKER_SERVICE_PATH="/"
+ - Exporting variable: DOCKER_SERVICE_PROTOCOL="http"
+ - Exporting variable: ENVIRONMENT="production"
+ - Exporting variable: MAX_UPLOAD_SIZE="100M"
+ - Exporting variable: MAX_UPLOAD_SIZE_BYTES="104857600"
+ - Exporting variable: MY_LEGACY_EXTRA="added-by-override"
+ - Exporting variable: NGINX_BASIC_AUTH_DIR="**** [masked]"
+ - Exporting variable: NGINX_BASIC_AUTH_FILE="**** [masked]"
+ - Exporting variable: NGINX_CERT_PATH="/etc/ssl/certs/custom/cert.pem"
+ - Exporting variable: NGINX_CLIENT_MAX_BODY_SIZE="100M"
+ - Exporting variable: NGINX_CUSTOM_SNIPPETS_DIR="/etc/nginx/snippets/custom.d"
+ - Exporting variable: NGINX_CUSTOM_SNIPPETS_GLOBAL_DIR="/etc/nginx/snippets/global.d"
+ - Exporting variable: NGINX_CUSTOM_SNIPPETS_LOCATION_DIR="/etc/nginx/snippets/location.d"
+ - Exporting variable: NGINX_DIR="/etc/nginx"
+ - Exporting variable: NGINX_DOC_ROOT="/var/www/html/public"
+ - Exporting variable: NGINX_ERROR_ROOT="/var/www/errors"
+ - Exporting variable: NGINX_KEEPALIVE_TIMEOUT="125s"
+ - Exporting variable: NGINX_KEY_PATH="**** [masked]"
+ - Exporting variable: NGINX_PROXY_CONNECT_TIMEOUT="5s"
+ - Exporting variable: NGINX_PROXY_READ_TIMEOUT="60s"
+ - Exporting variable: NGINX_PROXY_SEND_TIMEOUT="60s"
+ - Exporting variable: NGINX_RESOLVER=<NL-TEST-RESOLVER>
+ - Exporting variable: NGINX_RESOLVER_TIMEOUT="5s"
+ - Exporting variable: NGINX_RESOLVER_VALID_TIMEOUT="30s"
+ - Exporting variable: NGINX_SERVE_ROOT="/var/www/html"
+ - Exporting variable: NGINX_SNIPPETS_DIR="/etc/nginx/snippets"
+ - Exporting variable: NGINX_TRY_FILES="$uri @nodeproxy"
+ - Exporting variable: NODE_ENV="production"
+ - Exporting variable: NODE_SERVICE_PORT="3000"
+ - Exporting variable: NODE_VERSION="<NL-TEST-UPSTREAM>"
+ - Exporting variable: NODE_WEB_COMMAND="node /var/www/html/server.js"
+ - Exporting variable: NODE_WORKER_PROCESS_COUNT="1"
+ - Exporting variable: NODE_WORKER_STOP_WAIT_SECS="10"
+ - Exporting variable: SSL_CERTS_DIR="/etc/ssl/certs"
+ - Exporting variable: SUPERVISOR_DIR="/etc/supervisor"
+ - Exporting variable: TZ="UTC"
+ - Exporting variable: YARN_VERSION="<NL-TEST-UPSTREAM>"
+[ENTRYPOINT.user-setup] User and group ID not set, skipping user configuration.
+[ENTRYPOINT.user-permissions] Setting ownership on application directories...
+[UTIL.user-owned-dir] Setting ownership of /run to user 'www-data'
+[UTIL.user-owned-dir] Setting ownership of /var/lib/nginx to user 'www-data'
+[UTIL.user-owned-dir] Setting ownership of /var/log/nginx to user 'www-data'
+[ENTRYPOINT.export-custom-vars] Checking for new or changed environment variables...
+[ENTRYPOINT.execute-command] Bootstrapping completed, starting command "/nl-test/probe.sh static "...

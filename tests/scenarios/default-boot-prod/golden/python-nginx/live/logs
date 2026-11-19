@@ -2,7 +2,8 @@
 [ENTRYPOINT] Setting common environment variables...
 [ENTRYPOINT] Resetting work data from the staging area...
 [ENTRYPOINT] Sourcing installer registry...
-[ENTRYPOINT] Python image configuration settings initialization started.
+[ENTRYPOINT.environment] Configuring the environment pipeline...
+[ENTRYPOINT.environment] Environment pipeline completed.
 [ENTRYPOINT.python] Configuring Python (Gunicorn)
 [TEMPLATE] Processing template group: gunicorn-conf
 [TEMPLATE] Rendering sources for 'gunicorn-conf': /container/templates/python/gunicorn.conf.py
@@ -97,7 +98,7 @@
  - Exporting variable: NGINX_SERVE_ROOT="/var/www/html"
  - Exporting variable: NGINX_SNIPPETS_DIR="/etc/nginx/snippets"
  - Exporting variable: NGINX_TRY_FILES="/static/$uri @pythonproxy"
- - Exporting variable: PYTHON_APP_MODULE="'server:app'"
+ - Exporting variable: PYTHON_APP_MODULE="server:app"
  - Exporting variable: PYTHON_SHA256="<NL-TEST-UPSTREAM>"
  - Exporting variable: PYTHON_VERSION="<NL-TEST-UPSTREAM>"
  - Exporting variable: PYTHON_WORKER_PROCESS_COUNT="1"

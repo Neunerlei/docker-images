@@ -1,0 +1,20 @@
+Processing files from /container/custom/env, matching '*.env'...
+Processing files from /container/custom/env, matching '*.env.sh'...
+Template directory '/container/custom/nginx' does not exist. Skipping.
+Template directory '/container/custom/nginx/global' does not exist. Skipping.
+Template directory '/container/custom/nginx/location' does not exist. Skipping.
+Processing templates from '/container/templates/supervisor/conf.d', matching '*.conf'...
+Processing files from /container/templates/supervisor/conf.d, matching '*.conf'...
+ - Rendering 'crash-on-fatal.eventlistener.conf' to '/container/work/data/supervisor-config'
+ - Rendering 'nginx.service.feat-nginx.conf' to '/container/work/data/supervisor-config'
+ - Rendering 'node.service.mode-web.conf' to '/container/work/data/supervisor-config'
+ - Skipping 'node.service.mode-worker.conf': condition group 'mode-worker' was not satisfied.
+Directory '/container/custom/entrypoint' does not exist. Skipping.
+<NL-TEST-TIMESTAMP> [error] <NL-TEST-PID>#<NL-TEST-CONNECTION>: *1 connect() failed (111: Connection refused) while connecting to upstream, client: 127.0.0.1, server: _, request: "GET / HTTP/1.1", upstream: "http://127.0.0.1:3000/", host: "127.0.0.1"
+<NL-TEST-TIMESTAMP> [warn] <NL-TEST-PID>#<NL-TEST-CONNECTION>: *1 upstream server temporarily disabled while connecting to upstream, client: 127.0.0.1, server: _, request: "GET / HTTP/1.1", upstream: "http://127.0.0.1:3000/", host: "127.0.0.1"
+<NL-TEST-TIMESTAMP> [error] <NL-TEST-PID>#<NL-TEST-CONNECTION>: *1 connect() failed (111: Connection refused) while connecting to upstream, client: 127.0.0.1, server: _, request: "GET / HTTP/1.1", upstream: "http://127.0.0.1:3000/", host: "127.0.0.1"
+<NL-TEST-TIMESTAMP> [warn] <NL-TEST-PID>#<NL-TEST-CONNECTION>: *1 upstream server temporarily disabled while connecting to upstream, client: 127.0.0.1, server: _, request: "GET / HTTP/1.1", upstream: "http://127.0.0.1:3000/", host: "127.0.0.1"
+<NL-TEST-TIMESTAMP> [error] <NL-TEST-PID>#<NL-TEST-CONNECTION>: *4 connect() failed (111: Connection refused) while connecting to upstream, client: 127.0.0.1, server: _, request: "GET / HTTP/1.1", upstream: "http://127.0.0.1:3000/", host: "127.0.0.1"
+<NL-TEST-TIMESTAMP> [warn] <NL-TEST-PID>#<NL-TEST-CONNECTION>: *4 upstream server temporarily disabled while connecting to upstream, client: 127.0.0.1, server: _, request: "GET / HTTP/1.1", upstream: "http://127.0.0.1:3000/", host: "127.0.0.1"
+<NL-TEST-TIMESTAMP> [error] <NL-TEST-PID>#<NL-TEST-CONNECTION>: *4 connect() failed (111: Connection refused) while connecting to upstream, client: 127.0.0.1, server: _, request: "GET / HTTP/1.1", upstream: "http://127.0.0.1:3000/", host: "127.0.0.1"
+<NL-TEST-TIMESTAMP> [warn] <NL-TEST-PID>#<NL-TEST-CONNECTION>: *4 upstream server temporarily disabled while connecting to upstream, client: 127.0.0.1, server: _, request: "GET / HTTP/1.1", upstream: "http://127.0.0.1:3000/", host: "127.0.0.1"

@@ -6,15 +6,22 @@ fi
 
 source "${entrypoint_dir}/util.d/find-environment.sh"
 source "${entrypoint_dir}/util.d/join-paths.sh"
+source "${entrypoint_dir}/util.d/default-var.sh"
+
+# The ENVIRONMENT normalization is the ONE user-input derivation that runs at
+# source time: step 005 (custom dir scaffolding) reads it before the
+# environment orchestrator (step.d/015-environment.sh) runs. derive_common_env
+# repeats it as its first line, so a value from a custom env file is
+# normalized too — a .env with ENVIRONMENT=dev really selects .dev. markers.
 export ENVIRONMENT="$(find_environment)"
 
-# Define routing settings
-export DOCKER_PROJECT_HOST="${DOCKER_PROJECT_HOST:-localhost}"
-export DOCKER_PROJECT_PROTOCOL="${DOCKER_PROJECT_PROTOCOL:-http}"
-export DOCKER_PROJECT_PATH="${DOCKER_PROJECT_PATH:-/}"
-export DOCKER_SERVICE_PROTOCOL="${DOCKER_SERVICE_PROTOCOL:-${DOCKER_PROJECT_PROTOCOL}}"
-export DOCKER_SERVICE_PATH="${DOCKER_SERVICE_PATH:-/}"
-export DOCKER_SERVICE_ABS_PATH="$(join_paths "${DOCKER_PROJECT_PATH:-/}" "${DOCKER_SERVICE_PATH}")"
+# This file is sourced by the entrypoint (before every step) AND by the
+# installer during the image build. At source time it must only export
+# CONSTANTS — expressions with no user input — and define functions. Every
+# value derived from a user-settable variable lives in derive_common_env()
+# below, which the environment orchestrator calls once per environment-file
+# pass (see step.d/015-environment.sh). The installer gets the constants and
+# never calls the function.
 
 # Define static, well-known directories inside the container
 export CONTAINER_DIR="/container"
@@ -64,8 +71,6 @@ export NGINX_BASIC_AUTH_DIR="${CONTAINER_WORK_DIR}/nginx-basic-auth"
 export NGINX_CUSTOM_SNIPPETS_DIR="${NGINX_SNIPPETS_DIR}/custom.d"
 export NGINX_CUSTOM_SNIPPETS_GLOBAL_DIR="${NGINX_SNIPPETS_DIR}/global.d"
 export NGINX_CUSTOM_SNIPPETS_LOCATION_DIR="${NGINX_SNIPPETS_DIR}/location.d"
-export NGINX_SERVE_ROOT="${NGINX_SERVE_ROOT:-"/var/www/html"}"
-export NGINX_DOC_ROOT="${NGINX_DOC_ROOT:-"/var/www/html/public"}"
 export NGINX_ERROR_ROOT="/var/www/errors"
 export SSL_CERTS_DIR="/etc/ssl/certs"
 export SUPERVISOR_DIR="/etc/supervisor"
@@ -87,19 +92,7 @@ parse_filesize_string_to_bytes() {
             ;;
     esac
 }
-export MAX_UPLOAD_SIZE="${MAX_UPLOAD_SIZE:-"100M"}"
-if ! MAX_UPLOAD_SIZE_BYTES="$(parse_filesize_string_to_bytes "${MAX_UPLOAD_SIZE}")" || [ -z "${MAX_UPLOAD_SIZE_BYTES}" ]; then
-    echo "[ENTRYPOINT] Warning: Failed to parse MAX_UPLOAD_SIZE '${MAX_UPLOAD_SIZE}'. Defaulting to 104857600 bytes (100M)." >&2
-    MAX_UPLOAD_SIZE_BYTES=104857600
-fi
-export MAX_UPLOAD_SIZE_BYTES
 
-# Define Nginx settings
-export NGINX_CLIENT_MAX_BODY_SIZE="${NGINX_CLIENT_MAX_BODY_SIZE:-${MAX_UPLOAD_SIZE}}"
-export NGINX_CERT_PATH="${NGINX_CERT_PATH:-"${SSL_CERTS_DIR}/custom/cert.pem"}"
-export NGINX_KEY_PATH="${NGINX_KEY_PATH:-"${SSL_CERTS_DIR}/custom/key.pem"}"
-
-# Define Nginx proxy timeouts
 calculate_keepalive_timeout() {
   local connect_timeout="${NGINX_PROXY_CONNECT_TIMEOUT:-5s}"
   local read_timeout="${NGINX_PROXY_READ_TIMEOUT:-60s}"
@@ -115,10 +108,6 @@ calculate_keepalive_timeout() {
 
   echo "${max_timeout}s"
 }
-export NGINX_PROXY_CONNECT_TIMEOUT="${NGINX_PROXY_CONNECT_TIMEOUT:-5s}"
-export NGINX_PROXY_READ_TIMEOUT="${NGINX_PROXY_READ_TIMEOUT:-60s}"
-export NGINX_PROXY_SEND_TIMEOUT="${NGINX_PROXY_SEND_TIMEOUT:-60s}"
-export NGINX_KEEPALIVE_TIMEOUT="${NGINX_KEEPALIVE_TIMEOUT:-$(calculate_keepalive_timeout)}"
 
 # Define the Nginx DNS resolvers. Nginx only consults them for dynamic upstream
 # names (a variable in proxy_pass, "server ... resolve", ...) which it resolves
@@ -150,9 +139,67 @@ detect_dns_resolvers() {
 
     printf '%s' "${found}"
 }
-export NGINX_RESOLVER="${NGINX_RESOLVER:-$(detect_dns_resolvers)}"
-# Fallback for containers without a readable resolv.conf: the embedded Docker
-# DNS, i.e. the previously hardcoded value
-export NGINX_RESOLVER="${NGINX_RESOLVER:-127.0.0.11}"
-export NGINX_RESOLVER_VALID_TIMEOUT="${NGINX_RESOLVER_VALID_TIMEOUT:-30s}"
-export NGINX_RESOLVER_TIMEOUT="${NGINX_RESOLVER_TIMEOUT:-5s}"
+
+# Derives every environment value that depends on user input.
+#
+# The environment orchestrator (step.d/015-environment.sh) calls this once
+# per pass: before the custom env files load (so the rest of the pipeline and
+# ${VAR} references inside the env files see sane values), after the static
+# *.env pass and after the dynamic *.env.sh pass — so values provided in
+# /container/custom/env/ reach these derivations instead of being computed
+# from the defaults forever.
+#
+# Inputs are defaulted BEFORE anything derived from them (routing block
+# before ABS_PATH, proxy timeouts before keepalive, upload size before the
+# nginx body size). Values computed unconditionally (MAX_UPLOAD_SIZE_BYTES,
+# DOCKER_SERVICE_ABS_PATH — both documented read-only) are simply recomputed
+# on every pass. Everything else goes through default_var, which recomputes
+# a default that is still in place and never touches a user-set value.
+derive_common_env() {
+    export ENVIRONMENT="$(find_environment)"
+
+    # Define routing settings
+    default_var DOCKER_PROJECT_HOST "localhost"
+    default_var DOCKER_PROJECT_PROTOCOL "http"
+    default_var DOCKER_PROJECT_PATH "/"
+    default_var DOCKER_SERVICE_PROTOCOL "${DOCKER_PROJECT_PROTOCOL}"
+    default_var DOCKER_SERVICE_PATH "/"
+    export DOCKER_SERVICE_ABS_PATH="$(join_paths "${DOCKER_PROJECT_PATH:-/}" "${DOCKER_SERVICE_PATH}")"
+
+    # Document roots (overridable, and consumed by the user-owned directories
+    # registry in step 070 — which runs after this, so a custom env file's
+    # serve root really gets its ownership fixed)
+    default_var NGINX_SERVE_ROOT "/var/www/html"
+    default_var NGINX_DOC_ROOT "/var/www/html/public"
+
+    # Calculate max upload size
+    default_var MAX_UPLOAD_SIZE "100M"
+    if ! MAX_UPLOAD_SIZE_BYTES="$(parse_filesize_string_to_bytes "${MAX_UPLOAD_SIZE}")" || [ -z "${MAX_UPLOAD_SIZE_BYTES}" ]; then
+        echo "[ENTRYPOINT] Warning: Failed to parse MAX_UPLOAD_SIZE '${MAX_UPLOAD_SIZE}'. Defaulting to 104857600 bytes (100M)." >&2
+        MAX_UPLOAD_SIZE_BYTES=104857600
+    fi
+    export MAX_UPLOAD_SIZE_BYTES
+
+    # Define Nginx settings
+    default_var NGINX_CLIENT_MAX_BODY_SIZE "${MAX_UPLOAD_SIZE}"
+    default_var NGINX_CERT_PATH "${SSL_CERTS_DIR}/custom/cert.pem"
+    default_var NGINX_KEY_PATH "${SSL_CERTS_DIR}/custom/key.pem"
+
+    # Define Nginx proxy timeouts
+    default_var NGINX_PROXY_CONNECT_TIMEOUT "5s"
+    default_var NGINX_PROXY_READ_TIMEOUT "60s"
+    default_var NGINX_PROXY_SEND_TIMEOUT "60s"
+    default_var NGINX_KEEPALIVE_TIMEOUT "$(calculate_keepalive_timeout)"
+
+    # Define the Nginx DNS resolvers (detected from /etc/resolv.conf, with
+    # the embedded Docker DNS as fallback for containers without a readable
+    # resolv.conf). Deliberately NOT two chained default_var calls: the
+    # second would see the value the first just recorded as "still the
+    # default" and clobber a successful detection with the fallback. The
+    # fallback is resolved BEFORE the one tracked default_var.
+    local detected_dns_resolvers
+    detected_dns_resolvers="$(detect_dns_resolvers)"
+    default_var NGINX_RESOLVER "${detected_dns_resolvers:-127.0.0.11}"
+    default_var NGINX_RESOLVER_VALID_TIMEOUT "30s"
+    default_var NGINX_RESOLVER_TIMEOUT "5s"
+}

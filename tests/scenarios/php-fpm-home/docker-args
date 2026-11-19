@@ -1,0 +1,4 @@
+# Mount the probe script into the document root (NGINX_DOC_ROOT default) so
+# nginx serves it through the php-fpm location (~ \.php$ in the rendered
+# root.nginx.conf).
+-v "${SCENARIO_DIR}/files/home-probe.php":/var/www/html/public/home-probe.php:ro

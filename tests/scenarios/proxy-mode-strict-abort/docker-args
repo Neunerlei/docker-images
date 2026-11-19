@@ -1,0 +1,5 @@
+# Mount the scenario's custom dir read-only into the single customization
+# mount point (docs/common.md, "The Custom Directory"). Contains
+# nginx/proxy/api-cors.conf (legacy name — aborts the strict-mode boot) and
+# nginx/proxy/api.cache.conf (current name — must not be flagged).
+-v "${SCENARIO_DIR}/files/custom":/container/custom:ro

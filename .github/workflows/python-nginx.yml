@@ -27,8 +27,9 @@ jobs:
       source-image-type: 'slim'
       source-image-os: 'trixie'
       tracked-versions: '4'
+      tracked-patch-versions: '5'
       deprecated: ''
-      version-precision: '2'
+      version-precision: '3'
       latest-tag: 'true'
     secrets:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}

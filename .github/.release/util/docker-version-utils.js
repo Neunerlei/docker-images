@@ -191,6 +191,35 @@ function parseVersionTags(tags, precision = 3, filter = '') {
 }
 
 /**
+ * Resolves a possibly partial version input against the available versions.
+ * An exact match wins (e.g. "3.13.8"), otherwise the newest version that starts with the
+ * given input as a version prefix is returned (e.g. "3.13" resolves to "3.13.8").
+ * @param {Map<string,string>|string[]} versions The available versions (map keys or a plain array)
+ * @param {string} requested The requested, possibly partial version
+ * @returns {string|undefined} The resolved version, or undefined if nothing matches
+ */
+function resolvePartialVersion(versions, requested) {
+    const available = Array.isArray(versions) ? versions : Array.from(versions.keys());
+    if (available.includes(requested)) {
+        return requested;
+    }
+    const prefix = `${requested}.`;
+    return sortVersionList(available.filter(version => version.startsWith(prefix)))[0];
+}
+
+/**
+ * Removes the last segment of a version string (e.g. "3.13.8" -> "3.13", "8.4" -> "8").
+ * Used to derive the "rolling" version a concrete version feeds into.
+ * @param {string} version
+ * @returns {string}
+ */
+function toRollingVersion(version) {
+    const segments = version.split('.');
+    segments.pop();
+    return segments.join('.');
+}
+
+/**
  * Builds the docker image string based on the given arguments
  * @param {{namespace: string, name: string}} args
  * @return {string} The fully qualified image name (e.g., 'library/nginx')
@@ -224,6 +253,8 @@ function buildTagFilterByArgs(args){
 module.exports = {
     getAllTags,
     parseVersionTags,
+    resolvePartialVersion,
+    toRollingVersion,
     sortVersionList,
     sortVersionListReverse,
     isVersionGte,

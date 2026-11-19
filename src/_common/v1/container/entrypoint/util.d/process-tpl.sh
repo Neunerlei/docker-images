@@ -34,7 +34,7 @@ function process_tpl() {
     # We now get a |-separated string of sources
     IFS=$'\t' read -r type _ sources_str extra <<<"$line"
 
-    local work_path="${CONTAINER_WORK_DIR}/${name}"
+    local work_path="${CONTAINER_WORK_DATA_DIR}/${name}"
 
     case $type in
     file | dir)

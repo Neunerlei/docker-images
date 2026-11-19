@@ -22,11 +22,13 @@ App code goes to `/var/www/html`. NGINX serves static files from `/var/www/html/
 
 Both installed. Both ALWAYS run as `www-data` — no permission worries from root shells. For global package installs or running as another user, call the unwrapped originals: `_npm`, `_pnpm`.
 
+`node` itself is env-wrapped like bash: `node script.js` and `docker exec … node` see entrypoint vars; `_node` is the original. Container values take precedence over inline overrides like `NODE_ENV=test node …` — see SKILL.md.
+
 ## Modes
 
 - **web** (default): NGINX (reverse proxy) + your Node server.
 - **worker**: set `NODE_WORKER_COMMAND` → NGINX off, Supervisor runs your command.
-- **build**: entrypoint in a Dockerfile `RUN` without a command.
+- **build**: `RUN init-build-env` in a Dockerfile.
 
 ## Variables (image-specific)
 
@@ -71,7 +73,7 @@ ARG DOCKER_PROJECT_HOST
 ENV DOCKER_PROJECT_HOST=${DOCKER_PROJECT_HOST}
 COPY --chown=www-data:www-data ./package*.json ./
 COPY --chown=www-data:www-data ./src ./src
-RUN /container/entrypoint/entrypoint.sh      # env now matches production
+RUN init-build-env      # env now matches production
 RUN npm ci && npm run build
 
 FROM neunerlei/node-nginx:latest

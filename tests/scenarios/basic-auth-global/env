@@ -1,0 +1,18 @@
+# Global basic auth configuration (see docs/nginx.md, "Basic Authentication").
+#
+# Format per credential: "username clear-password" (the FIRST space separates
+# the two, so passwords may contain spaces). NGINX_BASIC_AUTH is the first
+# user, NGINX_BASIC_AUTH_1..n add more users in numeric order.
+#
+# These are synthetic test values — the clear passwords end up UNMASKED in the
+# captured container-vars.sh snapshot (the snapshot intentionally holds real
+# values for later RUN steps), so only throwaway credentials may ever appear
+# here.
+NGINX_BASIC_AUTH=testuser test-password
+NGINX_BASIC_AUTH_1=seconduser other-password
+NGINX_BASIC_AUTH_REALM=NL Test Realm
+
+# A REGULAR (non-secret) variable: proves the entrypoint's pre-exec unset is
+# surgical — the registered credential names are removed, every other
+# variable still reaches a www-data exec shell (asserted in expect.bats).
+APP_ENV=nl-int-check

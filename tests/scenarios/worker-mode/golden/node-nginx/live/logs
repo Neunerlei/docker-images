@@ -1,0 +1,99 @@
+[ENTRYPOINT] Starting bootstrapping process...
+[ENTRYPOINT] Setting common environment variables...
+[ENTRYPOINT] Resetting work data from the staging area...
+[ENTRYPOINT] Sourcing installer registry...
+[ENTRYPOINT] Image configuration:
+[ENTRYPOINT.supervisor] Configuring Supervisor...
+[TEMPLATE] Processing template group: supervisor-conf
+[TEMPLATE] Rendering sources for 'supervisor-conf': /container/templates/supervisor/supervisord.conf
+[TEMPLATE] Processing template group: supervisor-config
+[TEMPLATE] Rendering sources for 'supervisor-config': /container/templates/supervisor/conf.d
+[ENTRYPOINT.export-vars] Propagating known variables to default shell config
+ - Exporting variable: CONTAINER_BIN_DIR="/container/bin"
+ - Exporting variable: CONTAINER_BUILD_MODE_MARKER="/container/build-mode.marker"
+ - Exporting variable: CONTAINER_CUSTOM_DIR="/container/custom"
+ - Exporting variable: CONTAINER_CUSTOM_ENTRYPOINT_DIR="/container/custom/entrypoint"
+ - Exporting variable: CONTAINER_CUSTOM_ENV_DIR="/container/custom/env"
+ - Exporting variable: CONTAINER_CUSTOM_NGINX_DIR="/container/custom/nginx"
+ - Exporting variable: CONTAINER_CUSTOM_SSL_CERTS_DIR="/container/custom/certs"
+ - Exporting variable: CONTAINER_DIR="/container"
+ - Exporting variable: CONTAINER_ENTRYPOINT_DIR="/container/entrypoint"
+ - Exporting variable: CONTAINER_ENTRYPOINT_SCRIPT="/container/entrypoint/entrypoint.sh"
+ - Exporting variable: CONTAINER_INSTALLER_REGISTRY_SCRIPT="/container/installer-registry.sh"
+ - Exporting variable: CONTAINER_MODE="worker"
+ - Exporting variable: CONTAINER_TEMPLATES_DIR="/container/templates"
+ - Exporting variable: CONTAINER_TEMPLATES_NGINX_DIR="/container/templates/nginx"
+ - Exporting variable: CONTAINER_TEMPLATES_NGINX_SNIPPETS_DIR="/container/templates/nginx/snippets"
+ - Exporting variable: CONTAINER_VARS_SCRIPT="/container/work/container-vars.sh"
+ - Exporting variable: CONTAINER_WORK_DATA_DIR="/container/work/data"
+ - Exporting variable: CONTAINER_WORK_DIR="/container/work"
+ - Exporting variable: CONTAINER_WORK_STAGING_DIR="/container/work-data-staging"
+ - Exporting variable: CONTAINER_WWW_DATA_HOME_DIR="/container/work/www-data-home"
+ - Exporting variable: DOCKER_PROJECT_HOST="localhost"
+ - Exporting variable: DOCKER_PROJECT_PATH="/"
+ - Exporting variable: DOCKER_PROJECT_PROTOCOL="http"
+ - Exporting variable: DOCKER_SERVICE_ABS_PATH="/"
+ - Exporting variable: DOCKER_SERVICE_PATH="/"
+ - Exporting variable: DOCKER_SERVICE_PROTOCOL="http"
+ - Exporting variable: ENVIRONMENT="production"
+ - Exporting variable: MAX_UPLOAD_SIZE="100M"
+ - Exporting variable: MAX_UPLOAD_SIZE_BYTES="104857600"
+ - Not exporting variable: NGINX_BASIC_AUTH (clear-text basic auth credentials — used only to generate the password files during boot; intentionally not exported to later RUN steps or exec shells)
+ - Not exporting variable: NGINX_BASIC_AUTH_1 (clear-text basic auth credentials — used only to generate the password files during boot; intentionally not exported to later RUN steps or exec shells)
+ - Exporting variable: NGINX_BASIC_AUTH_DIR="**** [masked]"
+ - Exporting variable: NGINX_BASIC_AUTH_REALM="**** [masked]"
+ - Exporting variable: NGINX_CERT_PATH="/etc/ssl/certs/custom/cert.pem"
+ - Exporting variable: NGINX_CLIENT_MAX_BODY_SIZE="100M"
+ - Exporting variable: NGINX_CUSTOM_SNIPPETS_DIR="/etc/nginx/snippets/custom.d"
+ - Exporting variable: NGINX_CUSTOM_SNIPPETS_GLOBAL_DIR="/etc/nginx/snippets/global.d"
+ - Exporting variable: NGINX_CUSTOM_SNIPPETS_LOCATION_DIR="/etc/nginx/snippets/location.d"
+ - Exporting variable: NGINX_DIR="/etc/nginx"
+ - Exporting variable: NGINX_DOC_ROOT="/var/www/html/public"
+ - Exporting variable: NGINX_ERROR_ROOT="/var/www/errors"
+ - Exporting variable: NGINX_KEEPALIVE_TIMEOUT="125s"
+ - Exporting variable: NGINX_KEY_PATH="**** [masked]"
+ - Exporting variable: NGINX_PROXY_CONNECT_TIMEOUT="5s"
+ - Exporting variable: NGINX_PROXY_READ_TIMEOUT="60s"
+ - Exporting variable: NGINX_PROXY_SEND_TIMEOUT="60s"
+ - Exporting variable: NGINX_RESOLVER=<NL-TEST-RESOLVER>
+ - Exporting variable: NGINX_RESOLVER_TIMEOUT="5s"
+ - Exporting variable: NGINX_RESOLVER_VALID_TIMEOUT="30s"
+ - Exporting variable: NGINX_SERVE_ROOT="/var/www/html"
+ - Exporting variable: NGINX_SNIPPETS_DIR="/etc/nginx/snippets"
+ - Exporting variable: NGINX_TRY_FILES="$uri @nodeproxy"
+ - Exporting variable: NODE_ENV="production"
+ - Exporting variable: NODE_SERVICE_PORT="3000"
+ - Exporting variable: NODE_VERSION="<NL-TEST-UPSTREAM>"
+ - Exporting variable: NODE_WORKER_COMMAND="node -e 'console.log("WORKER-ARGV-OK HOME=", process.env.HOME === undefined ? "(unset)" : process.env.HOME); setInterval(function () {}, 1000);'"
+ - Exporting variable: NODE_WORKER_PROCESS_COUNT="1"
+ - Exporting variable: NODE_WORKER_STOP_WAIT_SECS="10"
+ - Exporting variable: PHP_WORKER_COMMAND="php -r 'echo "WORKER-ARGV-OK HOME=", getenv("HOME") === false ? "(unset)" : getenv("HOME"), "\n"; while (true) { sleep(1); }'"
+ - Not exporting variable: PROXY_GHOST_BASIC_AUTH (clear-text basic auth credentials — used only to generate the password files during boot; intentionally not exported to later RUN steps or exec shells)
+ - Exporting variable: PYTHON_WORKER_COMMAND="python -u -c 'import os, time; print("WORKER-ARGV-OK HOME=", os.environ.get("HOME", "(unset)")); [time.sleep(1) for _ in iter(int, 1)]'"
+ - Exporting variable: SSL_CERTS_DIR="/etc/ssl/certs"
+ - Exporting variable: SUPERVISOR_DIR="/etc/supervisor"
+ - Exporting variable: TZ="UTC"
+ - Exporting variable: YARN_VERSION="<NL-TEST-UPSTREAM>"
+[ENTRYPOINT.user-setup] User and group ID not set, skipping user configuration.
+[ENTRYPOINT.user-permissions] Setting ownership on application directories...
+[UTIL.user-owned-dir] Setting ownership of /run to user 'www-data'
+[UTIL.user-owned-dir] Setting ownership of /var/lib/nginx to user 'www-data'
+[UTIL.user-owned-dir] Setting ownership of /var/log/nginx to user 'www-data'
+[ENTRYPOINT.export-custom-vars] Checking for new or changed environment variables...
+[ENTRYPOINT.export-custom-vars] Detected changes in environment variables, exporting new/changed variables:
+ - Not exporting variable: NGINX_BASIC_AUTH (clear-text basic auth credentials — used only to generate the password files during boot; intentionally not exported to later RUN steps or exec shells)
+ - Not exporting variable: NGINX_BASIC_AUTH_1 (clear-text basic auth credentials — used only to generate the password files during boot; intentionally not exported to later RUN steps or exec shells)
+ - Not exporting variable: PROXY_GHOST_BASIC_AUTH (clear-text basic auth credentials — used only to generate the password files during boot; intentionally not exported to later RUN steps or exec shells)
+[ENTRYPOINT.execute-command] Bootstrapping completed, starting command "supervisord -c /etc/supervisor/supervisord.conf "...
+<NL-TEST-TIMESTAMP> WARN For [program:app-worker], redirect_stderr=true but stderr_logfile has also been set to a filename, the filename has been ignored
+<NL-TEST-TIMESTAMP> INFO Included extra file "/etc/supervisor/conf.d/crash-on-fatal.eventlistener.conf" during parsing
+<NL-TEST-TIMESTAMP> INFO Included extra file "/etc/supervisor/conf.d/node.service.mode-worker.conf" during parsing
+<NL-TEST-TIMESTAMP> INFO Set uid to user 0 succeeded
+<NL-TEST-TIMESTAMP> INFO RPC interface 'supervisor' initialized
+<NL-TEST-TIMESTAMP> CRIT Server 'unix_http_server' running without any HTTP authentication checking
+<NL-TEST-TIMESTAMP> INFO supervisord started with pid <NL-TEST-PID>
+<NL-TEST-TIMESTAMP> INFO spawned: 'crash-on-fatal' with pid <NL-TEST-PID>
+<NL-TEST-TIMESTAMP> INFO spawned: 'app-worker_00' with pid <NL-TEST-PID>
+WORKER-ARGV-OK HOME= /container/work/www-data-home
+<NL-TEST-TIMESTAMP> INFO success: crash-on-fatal entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+<NL-TEST-TIMESTAMP> INFO success: app-worker_00 entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)

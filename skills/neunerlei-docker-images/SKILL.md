@@ -21,20 +21,22 @@ Tag lists: `https://docker.neunerlei.eu/neunerlei-<image>-tags.html` (e.g. `neun
 
 Read the matching reference for exact env vars, defaults, and image-specific dirs — they differ per image. Everything below applies to all images.
 
+Human-facing docs mirror this skill: `docs/common.md` (shared concepts) + `docs/<image>.md` (quick starts, complete ENV tables, per-image examples). When image behavior changes, update both the docs and this skill.
+
 ## Entrypoint model
 
-`/container/entrypoint/entrypoint.sh` is a dumb orchestrator: sources `util.d/`, runs `step.d/` scripts in numeric order, then `exec`s the command. Steps build on each other:
+`/container/entrypoint/entrypoint.sh` is a dumb orchestrator: sources `util.d/` and `legacy.d/` (deprecated compat layers, one file per migration guide), runs `step.d/` scripts in numeric order, then `exec`s the command. Steps build on each other:
 
 ```
 005-init-custom-on-dev   017-custom-env        040-supervisor      070-user-permissions
-010-fail-on-legacy-mounts 020-nginx           050-export-vars    080-custom (hooks)
-015-image-vars (image)   030-git               060-user-setup     090-export-custom-vars → 100-execute-command
+015-image-vars (image)   020-nginx            050-export-vars     080-custom (hooks)
+                        030-git               060-user-setup      090-export-custom-vars → 100-execute-command
 ```
 
 `CONTAINER_MODE` (read-only, exported for templates) is derived:
 - `<RUNTIME>_WORKER_COMMAND` set (e.g. `PHP_WORKER_COMMAND`) → `worker`: web server disabled, Supervisor runs your command.
-- Entrypoint invoked in a Dockerfile `RUN` without a command → `build` (see [Build mode](#build-mode-multi-stage-builds)).
-- Otherwise → `web` (nginx image: any `PROXY_*_CONTAINER` → `proxy`, else `static`).
+- `RUN init-build-env` in a Dockerfile → `build` (see [Build mode](#build-mode-multi-stage-builds)).
+- Otherwise → `web` (nginx image: any `PROXY_*_CONTAINER` → `proxy`, else `static` — the nginx image overrides this step and ignores the build mode).
 
 `mode-*` filename markers match against `CONTAINER_MODE`.
 
@@ -62,11 +64,16 @@ Dev-only: with `ENVIRONMENT=development` and `/container/custom` mounted, step 0
 | `NGINX_CLIENT_MAX_BODY_SIZE` | = `MAX_UPLOAD_SIZE` | Override only with a specific need. |
 | `NGINX_CERT_PATH` / `NGINX_KEY_PATH` | `/etc/ssl/certs/custom/{cert,key}.pem` | Cert paths when serving HTTPS directly. |
 | `NGINX_PROXY_CONNECT_TIMEOUT` | `5s` | Backend connect timeout (php-nginx: `fastcgi_connect_timeout`). |
-| `NGINX_PROXY_READ_TIMEOUT` | `60s` | Response read timeout (php-nginx: `fastcgi_send_timeout`). |
-| `NGINX_PROXY_SEND_TIMEOUT` | `60s` | Request send timeout (php-nginx: `fastcgi_read_timeout`). |
+| `NGINX_PROXY_READ_TIMEOUT` | `60s` | Response read timeout (php-nginx: `fastcgi_read_timeout`). |
+| `NGINX_PROXY_SEND_TIMEOUT` | `60s` | Request send timeout (php-nginx: `fastcgi_send_timeout`). |
 | `NGINX_KEEPALIVE_TIMEOUT` | (calculated) | Derived from the other timeouts if unset. |
+| `NGINX_RESOLVER` | auto-detected | DNS servers for dynamic upstream names (see [NGINX DNS resolution](#nginx-dns-resolution)); detected from `/etc/resolv.conf` each boot, fallback `127.0.0.11`. Space-separated list = multiple servers. |
+| `NGINX_RESOLVER_VALID_TIMEOUT` | `30s` | `valid=` cache TTL for resolved addresses. |
+| `NGINX_RESOLVER_TIMEOUT` | `5s` | DNS query timeout (`resolver_timeout`). |
 | `NGINX_TRY_FILES` | per image | Root-location routing; see references. |
-| `NGINX_BASIC_AUTH` | (disabled) | Basic auth for the whole server: `username clear-password`; extra users `NGINX_BASIC_AUTH_1..n`, realm `NGINX_BASIC_AUTH_REALM`. Per-proxy: `PROXY_<KEY>_BASIC_AUTH(_1..n/_REALM)` replaces it for that location. Configured inside step 020 (no separate step); passwords hashed with `openssl passwd -apr1`; malformed values abort boot. |
+| `NGINX_BASIC_AUTH` | (disabled) | Basic auth for the whole server: `username clear-password`; extra users `NGINX_BASIC_AUTH_1..n`, realm `NGINX_BASIC_AUTH_REALM`. Per-proxy: `PROXY_<KEY>_BASIC_AUTH(_1..n/_REALM)` replaces it for that location. Directives are generated as snippets (`/etc/nginx/snippets/basicAuth.nginx.conf` server-wide, `proxy.d/<key>.auth.conf` per service — always present, empty when disabled); passwords hashed with `openssl passwd -apr1`; malformed values abort boot, passwords over 256 chars are rejected (openssl would silently truncate). A custom snippet with an `auth_basic` directive at brace depth 0 (enabled or `off`) takes ownership and suppresses the generated directives — a directive nested inside a `location {}` does not. The credential variables are entrypoint-only: kept out of the `container-vars.sh` snapshot and unset before exec, so no process of the container command inherits them — `docker exec` sessions still see them because Docker injects the configured environment into exec sessions (that is what makes `docker exec <container> printenv NGINX_BASIC_AUTH` a valid troubleshooting probe). Full concept: `docs/common.md` → Basic Authentication. |
+| `USER_OWNED_DIRECTORIES` | (none) | Space-separated extra dirs to create/own as www-data at boot (volumes the app writes into). Image-level dirs are declared at build via the installer's `--user-owned-dir` flag. |
+| `CONTAINER_WWW_DATA_HOME_DIR` | `/container/work/www-data-home` | Read-only constant: writable home of every www-data process (supervisor `user=` programs need `environment=HOME="${CONTAINER_WWW_DATA_HOME_DIR}"`; gosu and php-fpm workers derive it from the passwd entry). Lives in the work dir → writable on read-only filesystems; not reset per boot. Legacy `/var/www` dotfiles are bridged in as symlinks with a deprecation warning. Don't bake build-time content into `$HOME` (tmpfs hides it; named volumes go stale) — use `PLAYWRIGHT_BROWSERS_PATH`/`COMPOSER_HOME`/etc. |
 
 Rule of thumb: use `MAX_UPLOAD_SIZE` and only override individual limits when values must differ.
 
@@ -85,9 +92,15 @@ Outer proxy routes on `SERVICE_PATH`; application code generates links with `SER
 - **Terminated at outer gateway (recommended):** `DOCKER_PROJECT_PROTOCOL=https` + `DOCKER_SERVICE_PROTOCOL=http` → container speaks plain HTTP internally but knows the public side is secure.
 - App code should trust `X-Forwarded-Proto`, not the internal listen port.
 
+## NGINX DNS resolution
+
+NGINX resolves dynamic upstream names — a variable in `proxy_pass` (`proxy_pass http://$backend;`), `server … resolve` — on every request via its `resolver` directive; it never consults `/etc/resolv.conf` for those. The entrypoint therefore detects the servers from `/etc/resolv.conf` on every boot, so one image works everywhere: Docker user-defined networks → embedded DNS `127.0.0.11`, Kubernetes → cluster DNS, Podman/host networking → runtime or host resolvers (fallback: `127.0.0.11`). Override with `NGINX_RESOLVER`.
+
+Kubernetes caveat: the resolver ignores `search`/`ndots` from `/etc/resolv.conf` — use FQDNs (`service.namespace.svc.cluster.local`) for variable-based upstreams; short names like `my-service` will not resolve.
+
 ## The /container/custom mount
 
-Single mount point for ALL customization, usually `./docker/custom:/container/custom`:
+Single mount point for ALL customization, usually `./docker/custom:/container/custom`. Read-only mounts (Kubernetes config maps) are fully supported — the entrypoint only reads from it, rendered copies land in the work dir, and it never chowns the mounted files:
 
 ```
 custom/
@@ -101,7 +114,23 @@ custom/
 └── <runtime>/      # image-specific (php/, php/fpm/ …) — see references
 ```
 
-Legacy mounts (`/etc/ssl/certs`, `/etc/container/templates/.../custom`) abort startup (step 010) with migration instructions. Migration guide: `docs/migration/migrate-to-centralized-container-dir.md`.
+Legacy mounts (`/etc/ssl/certs`, `/etc/container/templates/.../custom`) abort startup with migration instructions (legacy.d guard in `entrypoint.sh`). Migration guide: `docs/migration/2026-02-05-migrate-to-centralized-container-dir.md`.
+
+## Read-only filesystems
+
+`readOnlyRootFilesystem: true` (Kubernetes) and `docker run --read-only` are fully supported. Everything written at runtime goes to two places:
+
+1. `/container/work` — all rendered configuration. May start **empty** (tmpfs, `emptyDir`): the entrypoint seeds it on every boot from the image's pristine build state (`/container/work-data-staging`) and resets it on every restart, so stale config from a previous boot is discarded. Mount it writable.
+2. Runtime dirs as tmpfs: `/run`, `/tmp`, `/var/lib/nginx`, `/var/log/nginx`.
+
+`PUID`/`PGID` are **not supported** on a read-only root filesystem: the user remap rewrites `/etc/passwd`/`/etc/group`, which cannot be written there — the boot aborts cleanly before any `usermod`/`groupmod` runs (exit 1, named error in the log). Only `PUID=33`/`PGID=33` (already the built-in ids) boots, since it needs no write.
+
+```bash
+docker run --read-only \
+  --tmpfs /run --tmpfs /tmp --tmpfs /var/lib/nginx --tmpfs /var/log/nginx \
+  -v my-work:/container/work \
+  my-image
+```
 
 ## Filename markers (DSL)
 
@@ -118,11 +147,11 @@ Loading conditions live in filenames — behavior visible at a glance. Applies t
 | `https` | `DOCKER_SERVICE_PROTOCOL=https` | `03-websockets.https.conf` |
 | `feat-*` | Feature present in `feature_registry` (mostly internal) | `nginx.service.feat-nginx.conf` |
 
-`20-hsts.prod.https.conf` = production AND https. New markers: define `_file_marker_is_*()` (zero args = scalar, one arg = wildcard suffix) and register in `file_marker_condition_registry`.
+`20-hsts.prod.https.conf` = production AND https. New markers for the repo's own images are defined in `docs/contributing.md`.
 
 ## Templating
 
-Every config file — built-in templates in `/container/templates/` AND custom files in `/container/custom/` — is rendered with `${VAR}` substitution from exported env (bash parameter expansion, no external engine). Add `[[DEBUG_VARS]]` anywhere in a file → entrypoint prints all substitutable vars and exits. Not available in entrypoint hooks (use `printenv | sort` there).
+Every config file — built-in templates in `/container/templates/` AND custom files in `/container/custom/` — is rendered with `${VAR}` substitution from exported env (bash parameter expansion, no external engine). Add `[[DEBUG_VARS]]` on its own line anywhere in a file → entrypoint prints all substitutable vars and exits. Not available in entrypoint hooks (use `printenv | sort` there).
 
 Note: `get_all_vars()` filters out bash internals, system vars, and anything starting lowercase or `_` — name template vars UPPERCASE.
 
@@ -174,18 +203,20 @@ environment:
 
 ## Bash wrapper (env in `docker exec`)
 
-Entrypoint-exported vars are normally invisible to `docker exec` sessions. Build moves `/bin/bash` → `/bin/_bash` and installs a wrapper that sources `/container/work/container-vars.sh` first (`/bin/sh` symlinks to it too). Result: `docker exec my-container bash` sees `DOCKER_SERVICE_ABS_PATH` etc. Other shells (zsh) must source that file in their rc. Runtime CLIs are wrapped the same way (php, python/pip — see references); prefix `_` accesses originals.
+Entrypoint-exported vars are normally invisible to `docker exec` sessions. Build moves `/bin/bash` → `/bin/_bash` and installs a wrapper that sources `/container/work/container-vars.sh` first (`/bin/sh` symlinks to it too). Result: `docker exec my-container bash` sees `DOCKER_SERVICE_ABS_PATH` etc. Other shells (zsh) must source that file in their rc. Runtime CLIs are env-wrapped the same way (`php`; `python`/`pip`; `node` — see references); prefix `_` accesses originals.
+
+Container values take precedence over inline overrides: the wrapper exports every var unconditionally, so `NODE_ENV=test node --test` or `docker exec -e APP_ENV=testing … php artisan test` run with the container's values. For a one-off override invoke the original binary (`NODE_ENV=test _node --test`); for a permanent change set the var where the container gets its env (compose `environment:` or `custom/env/`).
 
 ## Build mode (multi-stage builds)
 
-`RUN /container/entrypoint/entrypoint.sh` with NO command in a Dockerfile → `CONTAINER_MODE=build`: full env setup, services skipped, final `exec` skipped. Later `RUN` commands see the exact variables production will have — same paths, same derived values.
+`RUN init-build-env` in a Dockerfile → `CONTAINER_MODE=build`: full env setup, services skipped, final `exec` skipped, plus the build mode marker `/container/build-mode.marker`. **Builder stages only** — booting an image containing the marker aborts with `exit 1` before anything runs, because the boot would reset the build-time work data and discard later build-step changes (expected behavior for `init-build-env` images). Builder stages that must stay bootable (CI test stages) use `RUN init-build-env --allow-boot`: no marker, bootable AND consistent — later-`RUN` work-data writes survive boots (staging sync-back via `util.d/sync-work-data.sh`). Invoking the entrypoint directly with NO command is the deprecated legacy path (until 2027-11-12: same behavior as `--allow-boot` plus a deprecation warning — see migration notes; internals in `docs/contributing.md`).
 
 ```dockerfile
 FROM neunerlei/php-nginx:latest AS builder
 ARG DOCKER_PROJECT_PROTOCOL
 ENV DOCKER_PROJECT_PROTOCOL=${DOCKER_PROJECT_PROTOCOL}
 COPY --chown=www-data:www-data ./src ./src
-RUN /container/entrypoint/entrypoint.sh        # set up environment
+RUN init-build-env                             # set up environment
 RUN composer install --no-dev --optimize-autoloader
 RUN ./vendor/bin/phpunit
 
@@ -193,55 +224,39 @@ FROM neunerlei/php-nginx:latest
 COPY --from=builder /var/www/html ./
 ```
 
+Later `RUN` steps see the exact variables production will have: shell-form `RUN` via the bash wrapper (`/bin/sh` sources `container-vars.sh`), exec-form only via env-wrapped binaries — run build commands in a **separate `RUN`** (chaining in the same line leaves the outer shell without the variables). It's a **snapshot**: it wins over `ENV` lines declared after the build-mode run — declare `ENV` before `init-build-env`, and re-run after a change only via the exec form `RUN ["init-build-env"]` (the shell form goes through the wrapper and would keep the old snapshot values). Builder images pushed to a registry contain the derived variables (incl. `custom/env` computations) — no build-time secrets.
+
 Hooks can target the build phase only: `01-migrations.mode-build.sh`.
 
 ## Utility commands
 
 Anything in `$CONTAINER_BIN_DIR` (`/container/bin`, prepended to `PATH`) is callable as a shell command — works on read-only filesystems, no Dockerfile changes. kebab-case names, no extension. Ships `reload-supervisor`, `supervisor-crash-on-fatal`; images add their own (see references).
 
+## Migration notes (behavior changes)
+
+Breaking or behavior-changing releases are documented in `docs/migration/`, one file per change, prefixed with the release date (`YYYY-MM-DD-…`). Check them when a container behaves differently after a rebuild, since rolling tags pick up changes without an opt-in.
+
+- **2026-11-12 — exact command arguments** (`docs/migration/2026-11-12-exact-command-arguments.md`):
+  - Commands keep their exact argument boundaries (`sh -c '…'` works). Passing a command as a **single string** (`command: ["npm run dev"]`, K8s `args: ["php artisan queue:work"]`) still runs but logs a deprecation warning and will fail in a future release. Use separate arguments. `$entrypoint_command` is now an array.
+- **2026-11-12 — www-data home directory** (`docs/migration/2026-11-12-www-data-home-directory.md`):
+  - The www-data home moved from `/var/www` to `/container/work/www-data-home`. Dotfiles in `/var/www` (`.npmrc`, `.ssh`, `.gitconfig`, …) are bridged in as symlinks with a deprecation warning. The npm and composer caches moved with the home. Don't bake build-time content into `$HOME`. Dev containers now really add `/var/www/html` to git's `safe.directory` (the step never ran before).
+- **2026-11-12 — build mode marker + variables for later `RUN` steps** (`docs/migration/2026-11-12-build-mode-marker-and-variables.md`):
+  - New `init-build-env` command is the supported way to run build mode; it writes `/container/build-mode.marker`, and images containing it refuse to boot (the new work-data model would otherwise silently discard build-time changes). CI test stages use `init-build-env --allow-boot` (bootable, no marker, later-`RUN` work-data writes survive boots via staging sync-back). Legacy no-command invocation (`RUN entrypoint.sh`) keeps working as a deprecated compatibility layer until **2027-11-12** — identical to `--allow-boot` plus a deprecation warning.
+  - **Fixed:** later `RUN` steps in a builder stage receive the container variables again (a regression had deleted `container-vars.sh` at the end of a build-mode run).
+- **2026-11-16 — proxy snippet include pattern** (`docs/migration/2026-11-16-proxy-snippet-include-pattern.md`):
+  - Per-service proxy snippets (nginx image, `nginx/proxy/`) must be named `<key>.<name>.conf` — a dot after the service key; a file named exactly `<key>.conf` still works. The old `<key>*.conf` pattern globbed across the key boundary, so keys sharing a prefix (`api`, `api_v2`) included each other's snippets. Files the old pattern still matched (`api-cors.conf`, `apicache.conf`) are not included anymore; a compatibility layer warns for each at boot until **2027-11-16**.
+- **2026-11-12 — gunicorn stop timeout (python-nginx)** (no separate guide — feature documentation lives in `docs/python-nginx.md`):
+  - New `GUNICORN_TIMEOUT`/`GUNICORN_GRACEFUL_TIMEOUT`/`GUNICORN_MAX_REQUESTS(_JITTER)` knobs (opt-in, defaults match gunicorn's own). Supervisor now waits `GUNICORN_GRACEFUL_TIMEOUT + 10` (default 40s) for gunicorn to stop instead of 10s — a behavior change on rolling rebuilds, configurable via `GUNICORN_STOP_WAIT_SECS`. Raise `NGINX_PROXY_READ_TIMEOUT` together with `GUNICORN_TIMEOUT`.
+- **2026-02-05 — centralized container dir** (`docs/migration/2026-02-05-migrate-to-centralized-container-dir.md`): all custom mounts go to `/container/custom`. Legacy mount paths abort startup (legacy.d guard).
+
 ---
 
-# Working in the docker-images repo
+# Working in this repo
 
-## Two layers
+The skill documents how to *use* the images. Repo-internal information stays out of the skill and lives in the human-facing docs:
 
-- `src/_common/v1/` — shared engine: `installer.sh` + `container/{bin,entrypoint,templates}` copied verbatim into every image. Sacred: change only for features genuinely reusable in ALL images.
-- `src/<image>/<version>/` — image-specific: `container/entrypoint/step.d/` (e.g. `015-image-vars.sh`), `container/templates/`, `src/` (default app files like `index.php`), `Dockerfile`.
+- Architecture and extension guides — the two-layer model (`src/_common/v1/` + image layers), installer/template registries, Dockerfile patterns, the automated build engine, adding a new base image: `docs/contributing.md`.
+- The three-tier test suite (unit, golden, integration) — tiers, flags (`--only-image`, `--image <name>=<ref>`, `--label`, `--no-cache`), scenario anatomy, CI wiring: `docs/test.md`.
 
-Image templates with the same relative path override common ones (e.g. `templates/nginx/snippets/root.nginx.conf`).
+Image behavior is mirrored between this skill and `docs/common.md` + `docs/<image>.md`; when image behavior changes, update both. Behavior changes across releases are listed under [Migration notes](#migration-notes-behavior-changes) above.
 
-Env var layering (order matters): framework defaults (`common-env.sh` — must stay dependency-free, runs before every step and in `installer.sh`) → image defaults (`015-image-vars.sh`) → project vars (`custom/env/`, step 017) → shell wrapper.
-
-Registries (declared in `entrypoint.sh`, images append):
-- `file_marker_condition_registry` — marker name → condition function
-- `feature_registry` — space-separated string; gates whole chunks of step.d logic (`nginx`, `supervisor`); matched by `feat-*` markers
-- `user_owned_directories_registry` — dirs chowned to www-data when PUID/PGID change; created if missing
-
-## Dockerfile pattern
-
-```dockerfile
-ARG SOURCE_IMAGE
-FROM ${SOURCE_IMAGE}
-ENV INSTALLER_EXTRA_DEPENDENCIES="..."        # extra apt packages
-RUN --mount=type=bind,from=common,source=v1,target=/tmp/installer \
-    bash /tmp/installer/installer.sh \
-        --tpl nginx-custom-snippets \
-        --source-dir /container/custom/nginx \
-        --target-dir /etc/nginx/snippets/custom.d
-# --tpl names the snippet mechanism; --source-dir where user snippets land;
-# --target-dir where they are rendered to. --remove-dependency drops packages.
-COPY container /container
-COPY src /var/www/html
-```
-
-Build from the `src/` directory so relative paths resolve: `docker build --build-context common=../../_common -f <image>/<ver>/Dockerfile -t my-tag .`
-
-Naming: steps `NNN-descriptive-name.sh` (leave 5–10 gaps for insertions), marker functions `_file_marker_is_*` / `_file_marker_has_*`, templates carry their conditions in-filename. Keep installer layers before `COPY` for cache hits — `_common` changes invalidate the bind-mount layers.
-
-## Automated builds
-
-`.github/workflows/<image>.yml` is config only; the engine lives in `.github/.release/`:
-
-1. **discover** — paginated Docker Hub tag fetch for the base image, semver filtering, version matrix; cascading source selection: `1.29.1` falls back `1.29.1` → `1.29` → `1.28` → … until a source dir exists (new patch/minor versions build without changes).
-2. **build-and-attest** — parallel matrix, multi-platform (`linux/amd64`, `linux/arm64`) via the `SOURCE_IMAGE` build arg; pushes SLSA build-provenance attestations.
-3. **publish-tag-list** — generates the tag-overview HTML pages deployed to GitHub Pages (the `docker.neunerlei.eu` links above).

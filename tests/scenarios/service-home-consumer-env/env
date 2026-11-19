@@ -1,0 +1,10 @@
+# The consumer pattern under test: a Dockerfile ENV HOME or compose
+# environment entry pointing at a custom home (HAWKI-RAG uses /home/rawki,
+# the file-converter /tmp — synthetic value here). Synthetic path, nothing
+# is created at that location by the scenario.
+HOME=/home/nl-test-consumer
+
+# Serve the mounted WSGI HOME probe instead of the default server:app, so
+# gunicorn ITSELF reports its HOME (see scenario.conf; python-nginx only —
+# the variable is inert on the other images).
+PYTHON_APP_MODULE=wsgi-home-probe:app

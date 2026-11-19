@@ -1,0 +1,14 @@
+[ENTRYPOINT] Warning: bridging legacy '/var/www/.npmrc' into the www-data home. Deprecated — move it to '/container/work/www-data-home'.
+Migration guide: https://github.com/Neunerlei/docker-images/blob/main/docs/migration/2026-11-12-www-data-home-directory.md
+[ENTRYPOINT] Warning: bridging legacy '/var/www/.ssh' into the www-data home. Deprecated — move it to '/container/work/www-data-home'.
+Migration guide: https://github.com/Neunerlei/docker-images/blob/main/docs/migration/2026-11-12-www-data-home-directory.md
+Directory '/container/custom/env' does not exist. Skipping.
+Directory '/container/custom/env' does not exist. Skipping.
+Template directory '/container/custom/nginx' does not exist. Skipping.
+Template directory '/container/custom/nginx/global' does not exist. Skipping.
+Template directory '/container/custom/nginx/location' does not exist. Skipping.
+Processing templates from '/container/templates/supervisor/conf.d', matching '*.conf'...
+Processing files from /container/templates/supervisor/conf.d, matching '*.conf'...
+ - Rendering 'crash-on-fatal.eventlistener.conf' to '/container/work/data/supervisor-config'
+ - Rendering 'nginx.service.feat-nginx.conf' to '/container/work/data/supervisor-config'
+Directory '/container/custom/entrypoint' does not exist. Skipping.

@@ -1,0 +1,20 @@
+[ENTRYPOINT] Error: this image ran 'init-build-env' (build mode) during its build.
+
+Build mode is only meant for builder stages of a multi-stage build — an image like this
+must not be booted: the boot would reset the build-time work data and silently discard
+changes made by later build steps.
+
+Fix: run your build in a builder stage and copy the artifacts into a fresh final stage:
+
+    FROM neunerlei/php-nginx:latest AS builder
+    RUN init-build-env
+    RUN <your build commands>
+
+    FROM neunerlei/php-nginx:latest
+    COPY --from=builder /var/www/html ./
+
+If you really need to boot such an image (e.g. to run tests in a CI builder stage),
+build it with 'init-build-env --allow-boot' instead.
+
+Documentation: https://github.com/Neunerlei/docker-images/blob/main/docs/common.md#build-mode
+Migration guide: https://github.com/Neunerlei/docker-images/blob/main/docs/migration/2026-11-12-build-mode-marker-and-variables.md

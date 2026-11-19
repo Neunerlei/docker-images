@@ -1,0 +1,4 @@
+# Mount the legacy dotfiles into /var/www, the pre-branch www-data home.
+# Docker creates the missing .ssh parent directory for the second mount.
+-v "${SCENARIO_DIR}/files/dotfiles/.npmrc":/var/www/.npmrc:ro
+-v "${SCENARIO_DIR}/files/dotfiles/ssh-config":/var/www/.ssh/config:ro

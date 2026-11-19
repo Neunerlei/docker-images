@@ -1,0 +1,10 @@
+# Synthetic host-matching ids: deliberately NOT 33 (the default), so the
+# usermod/groupmod path actually runs. 10000/10001 are unused inside the
+# image — no "already in use" warning path is exercised here, the plain
+# remap is.
+PUID=10000
+PGID=10001
+
+# A directory for mounted application data (the documented use case): missing
+# in the image, created + chowned to www-data by step 070.
+USER_OWNED_DIRECTORIES=/data

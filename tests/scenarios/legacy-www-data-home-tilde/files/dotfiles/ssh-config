@@ -1,0 +1,3 @@
+Host nlw-test-host
+    HostName nlw.test.invalid
+    User testuser

@@ -12,6 +12,16 @@ export GUNICORN_WORKERS="${GUNICORN_WORKERS:-4}"
 export GUNICORN_WORKER_CLASS="${GUNICORN_WORKER_CLASS:-sync}"
 export GUNICORN_LOG_LEVEL="${GUNICORN_LOG_LEVEL:-info}"
 
+# Gunicorn longevity settings (defaults match gunicorn's own, so nothing
+# changes unless a consumer opts in). Validation and the stopwaitsecs
+# derivation happen in step 018 — after the custom environment files
+# (step 017) were loaded, so values from /container/custom/env/*.env are
+# validated and honored too.
+export GUNICORN_TIMEOUT="${GUNICORN_TIMEOUT:-30}"
+export GUNICORN_GRACEFUL_TIMEOUT="${GUNICORN_GRACEFUL_TIMEOUT:-30}"
+export GUNICORN_MAX_REQUESTS="${GUNICORN_MAX_REQUESTS:-0}"
+export GUNICORN_MAX_REQUESTS_JITTER="${GUNICORN_MAX_REQUESTS_JITTER:-0}"
+
 # Define the path to the Gunicorn socket
 export GUNICORN_SOCKET="/run/gunicorn.sock"
 

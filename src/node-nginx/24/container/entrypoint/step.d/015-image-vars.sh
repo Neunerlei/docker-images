@@ -47,8 +47,3 @@ elif [ "${CONTAINER_MODE}" = "web" ]; then
         echo "[ENTRYPOINT] INFO: CONTAINER_MODE is 'web' and NODE_WEB_COMMAND is set to '${NODE_WEB_COMMAND}'"
     fi
 fi
-
-user_owned_directories_registry+=(
-    "/var/www/.npm"
-    "/usr/local/lib/node_modules"
-)

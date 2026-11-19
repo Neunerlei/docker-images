@@ -11,6 +11,7 @@ A collection of Docker images; optimized for production use with common extensio
 - **[php-nginx](docs/php-nginx.md)**: PHP with NGINX included (from PHP 8.5 onwards, and PHP 8.4 as legacy)
 - **[php (deprecated)](docs/php.md)**: PHP-FPM only (without NGINX) (legacy, deprecated since PHP 8.4)
 - **[python-nginx](docs/python-nginx.md)**: Python in a box with NGINX as reverse proxy
+- **[common](docs/common.md)**: Concepts shared by all images (entrypoint, modes, customization, read-only/Kubernetes)
 
 ## Skill for AI Coding Agents
 
@@ -70,7 +71,7 @@ If a new version introduces a **breaking change**, you simply need to:
 ## Local Build Process
 
 For development and testing, you can also build the images locally using the `bin/build.sh` script to build images.
-It utilizes the same logic as the automated build system (see: [.github/.release/local-build.js](.github/.release/local-build.js)), reading the pipeline configuration and finding the correct source directories. For local development, however, you need to provide the exact version and type to build.
+It utilizes the same logic as the automated build system (see: [.github/.release/local-build.js](.github/.release/local-build.js)), reading the pipeline configuration and finding the correct source directories.
 
 ```bash
 ./bin/build.sh php 8.4 fpm-debian
@@ -78,14 +79,10 @@ It utilizes the same logic as the automated build system (see: [.github/.release
 
 Parameters:
 - `IMAGE_NAME`: e.g., `php`
-- `VERSION`: e.g., `8.4`
+- `VERSION`: e.g., `8.4` — the version of the **source** image. It can be partial (e.g. `3.13`), in which case it is resolved to the newest matching version (e.g. `3.13.8`)
 - `TYPE`: e.g., `fpm-debian` (the type is optional)
 
-To build and push:
-
-```bash
-./bin/build.sh php 8.5 fpm-debian 
-```
+The local build applies the same tags the CI pipeline would publish (the concrete version, e.g. `3.13.8`, the rolling version tag, e.g. `3.13`, and `latest` where applicable) — but it never pushes them.
 
 ## Contributing
 

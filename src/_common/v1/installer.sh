@@ -56,13 +56,14 @@ set -e
 #     variables are available when the binary is invoked — even from
 #     "docker exec" sessions that bypass the entrypoint.
 #
-#     The original binary is moved to PATH_orig, and a shell wrapper is
+#     The original binary is moved to a "_"-prefixed sibling path (e.g.
+#     /usr/local/bin/php -> /usr/local/bin/_php), and a shell wrapper is
 #     generated at the original PATH. The wrapper sources the variable
 #     file written by the entrypoint (/container/work/container-vars.sh)
 #     before exec-ing the original binary.
 #
 #     /bin/bash is wrapped by default. Its wrapper uses a special shebang
-#     (#!/bin/bash_orig) to avoid infinite recursion. /bin/sh is symlinked
+#     (#!/bin/_bash) to avoid infinite recursion. /bin/sh is symlinked
 #     to the wrapped /bin/bash.
 #
 #     Example:
@@ -90,6 +91,21 @@ set -e
 #     Example:
 #       --exec-after-dependencies "python3 -m venv /opt/venv"
 #       --exec-after-dependencies "chown -R www-data:www-data /opt/venv"
+#
+#
+# --user-owned-dir DIR
+#
+#     Declares a directory that must exist and be owned by the www-data user,
+#     so processes running as www-data can work inside it. The installer
+#     creates missing directories and takes care of the ownership at BUILD
+#     time (required for the container to boot on read-only filesystems,
+#     where the runtime ownership step cannot write), and registers the
+#     directory for the runtime user-permissions step, which keeps the
+#     ownership correct on every boot. May be specified multiple times.
+#
+#     Example:
+#       --user-owned-dir "/opt/venv"
+#       --user-owned-dir "/usr/local/lib/node_modules"
 #
 #
 # --tpl NAME [SUB-FLAGS...]
@@ -159,6 +175,24 @@ declare entrypoint_dir="${current_dir}/container/entrypoint"
 # Load the common environment variables
 source "${entrypoint_dir}/common-env.sh"
 
+# Shared ownership utility (also used by the user-permissions step at runtime)
+source "${entrypoint_dir}/util.d/user-owned-dir.sh"
+
+# -----------------------------------------------------------------
+# Work data staging setup
+# -----------------------------------------------------------------
+# During the build, the work data directory is a symlink to the staging area,
+# so everything written into it — by this installer, by later build steps, or
+# by child images extending one of ours — is captured as the pristine build
+# state. The entrypoint resets the real work data from the staging area on
+# every boot (see entrypoint.sh).
+echo "[INSTALLER] Preparing work data staging area"
+rm -rf "${CONTAINER_WORK_STAGING_DIR}" "${CONTAINER_WORK_DATA_DIR}"
+mkdir -p "${CONTAINER_WORK_DIR}" "${CONTAINER_WORK_STAGING_DIR}"
+# The staging area is a sibling of the work directory, so the relative link
+# target has to go one level up from the link's location inside the work dir
+ln -s "../$(basename "${CONTAINER_WORK_STAGING_DIR}")" "${CONTAINER_WORK_DATA_DIR}"
+
 # A list of dependencies to install using apt
 declare dependencies_to_install=()
 
@@ -168,6 +202,9 @@ declare -A scripts_wrap_www_data=()
 
 # Array to collect commands to run after dependencies are installed ---
 declare -a commands_to_exec_after_deps=()
+
+# Directories that must exist and be owned by the www-data user
+declare -a user_owned_directories=()
 
 # These flags will be prepended to the command-line arguments
 # to ensure that certain default templates are always registered.
@@ -204,6 +241,8 @@ declare -a default_flags=(
     "--tpl" "nginx-snippets-resolver"
     "--source" "${CONTAINER_TEMPLATES_NGINX_SNIPPETS_DIR}/resolver.nginx.conf"
     "--target" "${NGINX_SNIPPETS_DIR}/resolver.nginx.conf"
+    "--tpl" "nginx-snippets-basic-auth"
+    "--target" "${NGINX_SNIPPETS_DIR}/basicAuth.nginx.conf"
     "--tpl" "nginx-snippets-global-default"
     "--target" "${NGINX_SNIPPETS_DIR}/default.nginx.conf"
     "--tpl" "nginx-custom-snippets"
@@ -343,13 +382,15 @@ while [[ "$#" -gt 0 ]]; do
         # --- Create dummy work entry and symlink ---
         # The work directory entry serves as the symlink target. Subsequent build
         # steps (e.g., installing PHP extensions) may write files into the target
-        # path, which now resolves through the symlink into CONTAINER_WORK_DIR.
-        # The clean-state snapshot is taken on first boot by the entrypoint, so
-        # all files written during the build are captured correctly.
-        work_path="${CONTAINER_WORK_DIR}/${tpl_name}"
+        # path, which now resolves through the symlink into CONTAINER_WORK_DIR —
+        # and from there into the pristine staging area (work is a symlink to it
+        # during the build), so all files written during the build are captured.
+        work_path="${CONTAINER_WORK_DATA_DIR}/${tpl_name}"
         if [[ "$tpl_type" == "file" || "$tpl_type" == "cb_file" ]]; then
             echo "[INSTALLER] Creating dummy file at work path: ${work_path}"
-            mkdir -p "$(dirname "$work_path")"
+            # The work data directory is a symlink during the build — [ -d ] follows
+            # it, while "mkdir -p" would fail on the link itself
+            [ -d "$(dirname "$work_path")" ] || mkdir -p "$(dirname "$work_path")"
             touch "$work_path"
         else
             echo "[INSTALLER] Creating dummy directory at work path: ${work_path}"
@@ -399,6 +440,16 @@ while [[ "$#" -gt 0 ]]; do
         ;;
     --exec-after-dependencies)
         commands_to_exec_after_deps+=("$2")
+        shift 2
+        ;;
+    --user-owned-dir)
+        if [[ -z "$2" ]]; then
+            echo "[INSTALLER] Error: --user-owned-dir flag requires a non-empty directory path." >&2
+            exit 1
+        fi
+        if [[ ! " ${user_owned_directories[*]} " =~ " $2 " ]]; then
+            user_owned_directories+=("$2")
+        fi
         shift 2
         ;;
     *)
@@ -456,6 +507,12 @@ REGISTRY_HEADER
             done
         fi
     done
+
+    echo ""
+    echo "# --- 3. Extend user_owned_directories_registry ---"
+    for user_owned_dir in "${user_owned_directories[@]}"; do
+        printf 'user_owned_directories_registry+=(%q)\n' "$user_owned_dir"
+    done
 } >> "$CONTAINER_INSTALLER_REGISTRY_SCRIPT"
 
 echo "[INSTALLER] Installer registry script generated successfully."
@@ -468,6 +525,30 @@ echo "[INSTALLER] Copying common container files"
 
 cp -R "${current_dir}/container/." "${CONTAINER_DIR}/"
 chmod +x "${CONTAINER_ENTRYPOINT_SCRIPT}"
+# Make the utility commands executable at build time already, so they keep working
+# when the container runs on a read-only filesystem (the user-permissions step only
+# chmods files that are not executable yet, which would fail there)
+if [ -d "${CONTAINER_BIN_DIR}" ]; then
+    chmod +x "${CONTAINER_BIN_DIR}/"*
+fi
+# Unify the ownership of the container directory: files created by this installer run
+# are root-owned, while the image-specific files are copied as www-data. Doing this at
+# build time keeps the runtime ownership step a no-op, which is required for the
+# container to boot on read-only filesystems. The staging area is handled explicitly,
+# because a recursive chown does not descend through the work directory symlink.
+# Unify the ownership of the container directory: files created by this installer run
+# are root-owned, while the image-specific files are copied as www-data. Doing this at
+# build time keeps the runtime ownership step a no-op, which is required for the
+# container to boot on read-only filesystems. The staging area is handled explicitly,
+# because a recursive chown does not descend through the work data symlink.
+ensure_user_owned_dir "${CONTAINER_DIR}"
+ensure_user_owned_dir "${CONTAINER_WORK_STAGING_DIR}"
+# The www-data home lives in the work directory: create and own it at build
+# time already, so the runtime user-permissions step stays a no-op on normal
+# boots (required for read-only filesystems). On read-only deployments a
+# writable mount at /container/work shadows it, and the entrypoint re-creates
+# it on every boot.
+ensure_user_owned_dir "${CONTAINER_WWW_DATA_HOME_DIR}"
 
 # -----------------------------------------------------------------
 # Ensure home permissions for www-data
@@ -486,6 +567,13 @@ if [ ! -d "/var/www/html" ]; then
     mkdir -p "/var/www/html"
 fi
 chown -R www-data:www-data "/var/www/html"
+# Point the www-data user at its runtime home in the work directory (created
+# above, and re-created by the entrypoint on every boot). This keeps gosu and
+# every getpwuid-based tool (~ expansion in git/ssh, docker exec --user) in
+# sync with the HOME the supervisor programs receive via their environment=.
+# NEVER use -m here: there is nothing to move, and -m would relocate the
+# whole /var/www application tree into the work directory.
+usermod -d "${CONTAINER_WWW_DATA_HOME_DIR}" www-data
 
 # -----------------------------------------------------------------
 # Install common dependencies
@@ -530,6 +618,18 @@ if [[ ${#commands_to_exec_after_deps[@]} -gt 0 ]]; then
             echo "[INSTALLER] Error: Command failed: '${cmd}'" >&2
             exit 1
         fi
+    done
+fi
+
+# -----------------------------------------------------------------
+# User owned directories
+# -----------------------------------------------------------------
+# Applied after the post-dependency commands, so commands like a venv or npm
+# installation can create their directories first.
+if [[ ${#user_owned_directories[@]} -gt 0 ]]; then
+    echo "[INSTALLER] Ensuring user owned directories..."
+    for user_owned_dir in "${user_owned_directories[@]}"; do
+        ensure_user_owned_dir "$user_owned_dir"
     done
 fi
 

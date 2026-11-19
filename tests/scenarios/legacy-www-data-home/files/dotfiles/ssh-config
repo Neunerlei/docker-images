@@ -1,0 +1,4 @@
+# Synthetic SSH config for the legacy-home bridge scenario.
+Host nlw-test-host
+    HostName nlw.test.invalid
+    User testuser

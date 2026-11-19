@@ -1,0 +1,4 @@
+# Same mounts as legacy-www-data-home — this scenario exists to read the very
+# same files through ~ as www-data.
+-v "${SCENARIO_DIR}/files/dotfiles/.npmrc":/var/www/.npmrc:ro
+-v "${SCENARIO_DIR}/files/dotfiles/ssh-config":/var/www/.ssh/config:ro

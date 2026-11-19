@@ -27,7 +27,29 @@ export CONTAINER_INSTALLER_REGISTRY_SCRIPT="${CONTAINER_DIR}/installer-registry.
 export CONTAINER_ENTRYPOINT_DIR="${CONTAINER_DIR}/entrypoint"
 export CONTAINER_ENTRYPOINT_SCRIPT="${CONTAINER_ENTRYPOINT_DIR}/entrypoint.sh"
 export CONTAINER_WORK_DIR="${CONTAINER_DIR}/work"
-export CONTAINER_WORK_CLEAN_DIR="${CONTAINER_WORK_DIR}/.clean-state"
+# All template/entrypoint work data lives in this sub-directory of the work directory
+export CONTAINER_WORK_DATA_DIR="${CONTAINER_WORK_DIR}/data"
+# The home directory of the www-data service user. It deliberately lives in the
+# work directory: that is the one location guaranteed to be writable on every
+# deployment — including read-only filesystems, where /container/work is the
+# documented writable mount. Unlike work/data it is NOT reset on boot, so
+# caches and dotfiles survive container restarts. Read-only constant: the path
+# is baked into the image at build time (passwd entry, supervisor configs),
+# so overriding it at runtime would strand that baked state.
+export CONTAINER_WWW_DATA_HOME_DIR="${CONTAINER_WORK_DIR}/www-data-home"
+# Pristine build-time state of the work data. During the image build, work/data
+# is a symlink to this directory, so everything written "into the work data" —
+# by the installer, later build steps or child images — lands here. Every boot
+# resets the real work data from it (see entrypoint.sh). Lives OUTSIDE the work
+# directory so that a mount over the work directory can not shadow it.
+export CONTAINER_WORK_STAGING_DIR="${CONTAINER_DIR}/work-data-staging"
+# Marker file written by every build-mode run (see entrypoint.sh). Like the
+# staging area it lives in the image layer — deliberately NOT inside the work
+# directory: a work-dir mount (tmpfs, emptyDir, named volume) would hide a
+# marker placed there, and everything in work/data is deleted by the boot
+# reset anyway. Its presence at boot means the image ran build mode during
+# its build and must not be booted as a final image.
+export CONTAINER_BUILD_MODE_MARKER="${CONTAINER_DIR}/build-mode.marker"
 export CONTAINER_VARS_SCRIPT="${CONTAINER_WORK_DIR}/container-vars.sh"
 export CONTAINER_CUSTOM_DIR="${CONTAINER_DIR}/custom"
 export CONTAINER_CUSTOM_ENV_DIR="${CONTAINER_CUSTOM_DIR}/env"
@@ -36,7 +58,9 @@ export CONTAINER_CUSTOM_SSL_CERTS_DIR="${CONTAINER_CUSTOM_DIR}/certs"
 export CONTAINER_CUSTOM_NGINX_DIR="${CONTAINER_CUSTOM_DIR}/nginx"
 export NGINX_DIR="/etc/nginx"
 export NGINX_SNIPPETS_DIR="${NGINX_DIR}/snippets"
-export NGINX_BASIC_AUTH_DIR="${NGINX_DIR}/basic-auth"
+# Basic auth password files are generated at runtime, so they must live in the
+# work directory — the only guaranteed-writable location on a read-only filesystem
+export NGINX_BASIC_AUTH_DIR="${CONTAINER_WORK_DIR}/nginx-basic-auth"
 export NGINX_CUSTOM_SNIPPETS_DIR="${NGINX_SNIPPETS_DIR}/custom.d"
 export NGINX_CUSTOM_SNIPPETS_GLOBAL_DIR="${NGINX_SNIPPETS_DIR}/global.d"
 export NGINX_CUSTOM_SNIPPETS_LOCATION_DIR="${NGINX_SNIPPETS_DIR}/location.d"
@@ -95,3 +119,40 @@ export NGINX_PROXY_CONNECT_TIMEOUT="${NGINX_PROXY_CONNECT_TIMEOUT:-5s}"
 export NGINX_PROXY_READ_TIMEOUT="${NGINX_PROXY_READ_TIMEOUT:-60s}"
 export NGINX_PROXY_SEND_TIMEOUT="${NGINX_PROXY_SEND_TIMEOUT:-60s}"
 export NGINX_KEEPALIVE_TIMEOUT="${NGINX_KEEPALIVE_TIMEOUT:-$(calculate_keepalive_timeout)}"
+
+# Define the Nginx DNS resolvers. Nginx only consults them for dynamic upstream
+# names (a variable in proxy_pass, "server ... resolve", ...) which it resolves
+# on every request — for those it never reads /etc/resolv.conf on its own.
+# The servers are therefore detected from /etc/resolv.conf on every boot, so
+# the same image works everywhere: Docker's embedded DNS (127.0.0.11) on
+# user-defined networks, the cluster DNS in Kubernetes, Podman's runtime DNS,
+# the host resolvers with host networking, ...
+detect_dns_resolvers() {
+    local key nameserver found=""
+
+    # Without a readable resolv.conf we return nothing and let the caller
+    # fall back to the Docker default below
+    [ -r /etc/resolv.conf ] || return 0
+
+    # The "|| [ -n ... ]" keeps the LAST line when /etc/resolv.conf lacks a
+    # trailing newline: plain "read" loses it (read reports EOF failure after
+    # the data was already assigned), silently dropping the final nameserver
+    # and falling back to the Docker default instead
+    while read -r key nameserver _ || [ -n "${key}" ]; do
+        [[ "${key}" == "nameserver" ]] || continue
+        [ -n "${nameserver}" ] || continue
+        # Scoped IPv6 addresses (fe80::1%eth0) are not valid Nginx resolvers
+        case "${nameserver}" in *%*) continue ;; esac
+        # Nginx expects IPv6 resolver addresses in square brackets
+        case "${nameserver}" in *:*) nameserver="[${nameserver}]" ;; esac
+        found="${found}${found:+ }${nameserver}"
+    done < /etc/resolv.conf
+
+    printf '%s' "${found}"
+}
+export NGINX_RESOLVER="${NGINX_RESOLVER:-$(detect_dns_resolvers)}"
+# Fallback for containers without a readable resolv.conf: the embedded Docker
+# DNS, i.e. the previously hardcoded value
+export NGINX_RESOLVER="${NGINX_RESOLVER:-127.0.0.11}"
+export NGINX_RESOLVER_VALID_TIMEOUT="${NGINX_RESOLVER_VALID_TIMEOUT:-30s}"
+export NGINX_RESOLVER_TIMEOUT="${NGINX_RESOLVER_TIMEOUT:-5s}"

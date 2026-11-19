@@ -1,0 +1,10 @@
+# The documented read-only set (docs/common.md "Running on a Read-Only
+# Filesystem", Docker example): root filesystem read-only, runtime directories
+# as tmpfs, and the work directory as the one writable mount (anonymous tmpfs
+# starts empty — the documented tmpfs/emptyDir case the boot must seed).
+--read-only
+--tmpfs /run
+--tmpfs /tmp
+--tmpfs /var/lib/nginx
+--tmpfs /var/log/nginx
+--tmpfs /container/work

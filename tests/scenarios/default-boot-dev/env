@@ -1,0 +1,7 @@
+# ENVIRONMENT=development is the only knob for the default-boot scenario:
+# the entrypoint scaffolds the /container/custom skeleton in development
+# (step 005), which the ownership/find sections of the capture observe.
+#
+# docker --env-file takes values verbatim (no shell quoting), so the value
+# below is exactly "development".
+ENVIRONMENT=development

@@ -24,6 +24,32 @@ if [ "${target_uid}" == "${current_uid}" ] && [ "${target_gid}" == "${current_gi
   return;
 fi
 
+# The remap below needs a writable /etc: groupmod and usermod rewrite
+# /etc/group and /etc/passwd and create lock files (/etc/group.lock, ...) next
+# to them. On a read-only root filesystem (docker --read-only, Kubernetes
+# readOnlyRootFilesystem) both would die with a raw "groupmod: cannot lock
+# /etc/group" (exit 10) — and silently continuing would boot the container with
+# the default uid/gid 33, so every user-owned file would get the wrong
+# ownership. Aborting here is deliberate.
+#
+# The check is a "-w" test on the /etc DIRECTORY, not on the files: the lock
+# files are created in /etc, so directory writability is what usermod/groupmod
+# actually need. It is honest even though this runs as root: bash's "-w" uses
+# access(2)-style checks that honour the read-only mount (verified: FALSE for
+# root on a read-only rootfs, TRUE on a writable one), while the permission
+# bits of the files themselves are meaningless for root. The existing
+# _path_is_on_read_only_mount helper answers a different question (mount flags,
+# for best-effort warnings) — here the honest question is "can the remap
+# write", and the -w test answers exactly that.
+#
+# Deliberately placed AFTER the "already set to target values" skip above:
+# PUID/PGID requesting the default 33/33 needs no write at all, so such boots
+# keep working on read-only roots (the documented read-only support).
+if [ ! -w "/etc" ]; then
+  echo "[ENTRYPOINT.user-setup] Error: PUID/PGID are not supported with a read-only root filesystem (cannot update /etc/passwd and /etc/group). Aborting." >&2
+  exit 1
+fi
+
 echo "[ENTRYPOINT.user-setup] Current www-data UID/GID is ${current_uid}/${current_gid}. Target is ${target_uid}/${target_gid}."
 
 # Change the group ID first

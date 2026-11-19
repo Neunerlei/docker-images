@@ -1,0 +1,6 @@
+# Legacy mounts v1 (docs/migration/2026-02-05-migrate-to-centralized-
+# container-dir.md): both must be detected; the abort message lists them.
+# Replacing /etc/ssl/certs hides the image's CA bundle — irrelevant here, the
+# boot aborts before any network use.
+-v "${SCENARIO_DIR}/files/etc-ssl-certs":/etc/ssl/certs:ro
+-v "${SCENARIO_DIR}/files/usr-bin-container-custom":/usr/bin/container/custom:ro

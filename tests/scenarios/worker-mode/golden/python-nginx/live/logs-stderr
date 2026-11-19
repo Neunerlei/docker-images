@@ -1,0 +1,9 @@
+Directory '/container/custom/env' does not exist. Skipping.
+Directory '/container/custom/env' does not exist. Skipping.
+Processing templates from '/container/templates/supervisor/conf.d', matching '*.conf'...
+Processing files from /container/templates/supervisor/conf.d, matching '*.conf'...
+ - Rendering 'crash-on-fatal.eventlistener.conf' to '/container/work/data/supervisor-config'
+ - Skipping 'gunicorn.service.mode-web.conf': condition group 'mode-web' was not satisfied.
+ - Skipping 'nginx.service.feat-nginx.conf': condition group 'feat-nginx' was not satisfied.
+ - Rendering 'python.service.mode-worker.conf' to '/container/work/data/supervisor-config'
+Directory '/container/custom/entrypoint' does not exist. Skipping.
